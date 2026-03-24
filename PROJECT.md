@@ -20,7 +20,45 @@
 
 ### SSH 접속 방법
 
-#### 방법 1: ~/.ssh/config 등록 (권장 — 재사용 가능)
+> **주의**: 비밀번호에 `!`가 포함되어 있어 echo/printf 일반 방식으로 파일 작성 시 `\!`로 이스케이프됨.
+> 반드시 **hex escape** 방식으로 비밀번호 파일을 생성해야 함.
+> 또한 `sshpass -p` 직접 방식은 실패하므로 반드시 **`-f` 파일 방식** 사용.
+
+#### 1단계: 비밀번호 파일 생성 (hex escape 필수)
+
+```bash
+# ! 문자가 포함된 비밀번호 — hex escape로 정확히 기록
+printf '\x6c\x65\x64\x67\x65\x31\x32\x33\x21' > ~/.ssh/know_pass
+chmod 600 ~/.ssh/know_pass
+
+# 검증: 8바이트 (ledge123!) 확인
+wc -c ~/.ssh/know_pass  # → 9
+cat ~/.ssh/know_pass     # → ledge123!
+```
+
+#### 2단계: 접속 테스트
+
+```bash
+# 접속 테스트 (password 인증 강제 — 필수 옵션)
+sshpass -f ~/.ssh/know_pass ssh \
+  -o PreferredAuthentications=password \
+  -o PubkeyAuthentication=no \
+  -o StrictHostKeyChecking=no \
+  know@133.186.132.245 "echo 접속성공"
+```
+
+#### 3단계: 파일 전송 (scp)
+
+```bash
+# 파일/디렉토리 전송
+sshpass -f ~/.ssh/know_pass scp \
+  -o PreferredAuthentications=password \
+  -o PubkeyAuthentication=no \
+  -o StrictHostKeyChecking=no \
+  -r ./know-ops know@133.186.132.245:/home/know/apps/
+```
+
+#### ~/.ssh/config 등록 (선택 — 반복 접속 시 편리)
 
 ```bash
 # ~/.ssh/config 에 아래 내용 추가
@@ -28,43 +66,36 @@ Host know-server
     HostName 133.186.132.245
     User know
     Port 22
-    # 키 인증 사용 시:
-    # IdentityFile ~/.ssh/know_rsa
+    PreferredAuthentications password
+    PubkeyAuthentication no
 
-# 접속
-ssh know-server
-
-# 비밀번호 인증 강제 (키 없을 때)
-ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no know-server
+# 접속 (sshpass + config 조합)
+sshpass -f ~/.ssh/know_pass ssh know-server
 ```
 
-#### 방법 2: sshpass 비밀번호 자동입력
-
-```bash
-# 비밀번호를 파일에 저장 (보안 권장)
-echo 'ledge123!' > ~/.ssh/know_pass
-chmod 600 ~/.ssh/know_pass
-sshpass -f ~/.ssh/know_pass ssh know@133.186.132.245
-
-# 명령 직접 실행
-sshpass -f ~/.ssh/know_pass ssh know@133.186.132.245 "echo 접속성공"
-
-# 파일 전송 (scp)
-sshpass -f ~/.ssh/know_pass scp -r ./know-ops know@133.186.132.245:/home/know/apps/
-```
-
-#### 방법 3: SSH 키 등록 (최종 권장)
+#### SSH 키 등록 (최종 권장 — 비밀번호 입력 불필요)
 
 ```bash
 # 키 생성 (없는 경우)
 ssh-keygen -t rsa -b 4096 -f ~/.ssh/know_rsa -N ""
 
 # 서버에 공개키 등록 (비밀번호 1회 필요)
-sshpass -f ~/.ssh/know_pass ssh-copy-id -i ~/.ssh/know_rsa.pub know@133.186.132.245
+sshpass -f ~/.ssh/know_pass ssh-copy-id \
+  -o PreferredAuthentications=password \
+  -o PubkeyAuthentication=no \
+  -i ~/.ssh/know_rsa.pub know@133.186.132.245
 
 # 이후 비밀번호 없이 접속
 ssh -i ~/.ssh/know_rsa know@133.186.132.245
 ```
+
+### 서버 환경 정보
+
+| 항목 | 값 |
+|------|-----|
+| OS | CentOS 7 (kernel 3.10.0-1160.71.1.el7.x86_64) |
+| python3/pip3 | **미설치** (설치 필요) |
+| SSH 인증 | password 인증 지원 확인됨 |
 
 ---
 
