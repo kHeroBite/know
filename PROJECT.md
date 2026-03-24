@@ -104,16 +104,19 @@ ssh -i ~/.ssh/know_rsa know@133.186.132.245
 ```
 /home/know/
 ├── apps/
-│   ├── jiana_admin_server/
-│   │   └── base_1.5/
+│   ├── know-ops/                     ← Python CLI 패키지
+│   │   └── base/                     ← 기본 리소스 (구 jiana_admin_server/base_1.5)
 │   │       ├── lib/
 │   │       │   ├── jiana1.5.jar      ← 형태소분석 엔진 (JDK 1.7 필수)
 │   │       │   └── dqdic-1.0.3.jar
 │   │       ├── dic/                  ← 도메인별 사전 디렉토리
+│   │       ├── pop_log/              ← 인기 검색어 로그 (TSV/CSV)
+│   │       ├── fail_log/             ← 실패 검색어 로그 (TSV/CSV)
+│   │       ├── work/                 ← 작업 출력 디렉토리
 │   │       ├── build.xml             ← ant 빌드 파일
 │   │       └── spam_kwd.pat          ← 스팸 패턴 파일
+│   ├── jiana_admin_server/           ← 기존 경로 (호환용)
 │   ├── bin/                          ← 유틸리티 쉘스크립트
-│   └── know-ops/                     ← Python CLI 패키지 (신규)
 └── tomcat6/                          ← WAS (JSP 관리도구)
 ```
 
@@ -159,6 +162,10 @@ EOF
 ### 사용법
 
 ```bash
+# 키워드 추출 (인기/실패 검색어 → 통합 키워드)
+know extract --모드 rank --n 150000
+know extract --모드 count --n 3
+
 # 검색로그 정제
 know refine query_log.txt --도메인 site1
 
@@ -170,6 +177,9 @@ know synonym site1.pair --도메인 site1
 
 # 사전 빌드
 know build --도메인 site1
+
+# 전체 파이프라인 (extract → refine → analyze → synonym → build)
+know pipeline input.txt --도메인 site1
 ```
 
 ---

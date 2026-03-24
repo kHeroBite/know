@@ -61,13 +61,53 @@ def 빌드(도메인: str, 대상: str):
     click.echo(f"✅ 빌드 완료: {결과}")
 
 
+@메인.command("extract")
+@click.option("--모드", "모드", default="rank",
+              type=click.Choice(["rank", "count"]),
+              help="rank: 상위 N등, count: N회 이상")
+@click.option("--n", "n값", default=150000, type=int,
+              help="등수(rank) 또는 최소횟수(count)")
+@click.option("--출력", type=click.Path(path_type=Path),
+              help="출력 파일 경로 (기본: base/work/keywords.txt)")
+def 추출(모드: str, n값: int, 출력: Path | None):
+    """인기/실패 검색어 추출 + 스팸정제 (pop_log + fail_log -> 통합 키워드)."""
+    from know.pipeline.추출.키워드추출기 import 키워드추출기
+    from know.core.config import 기본설정
+    추출기 = 키워드추출기()
+    결과파일 = 추출기.추출(
+        기본설정.pop_log_경로,
+        기본설정.fail_log_경로,
+        출력 or 기본설정.work_경로 / "keywords.txt",
+        모드=모드,
+        n=n값,
+    )
+    click.echo(f"✅ 추출 완료: {결과파일}")
+
+
 @메인.command("pipeline")
 @click.argument("입력파일", type=click.Path(exists=True, path_type=Path))
 @click.option("--도메인", default="default", help="도메인명")
 @click.option("--단계", default="all",
-              type=click.Choice(["all", "refine", "analyze", "synonym", "build"]),
+              type=click.Choice(["all", "extract", "refine", "analyze", "synonym", "build"]),
               help="실행할 파이프라인 단계")
 def 파이프라인(입력파일: Path, 도메인: str, 단계: str):
-    """전체 파이프라인 실행 (refine → analyze → synonym → build)."""
+    """전체 파이프라인 실행 (extract → refine → analyze → synonym → build)."""
     click.echo(f"🚀 파이프라인 시작 — 도메인: {도메인}, 단계: {단계}")
-    click.echo("(상세 구현은 Phase 2에서 추가 예정)")
+
+    단계_순서 = ["extract", "refine", "analyze", "synonym", "build"]
+    실행_단계들 = 단계_순서 if 단계 == "all" else [단계]
+
+    for 현재단계 in 실행_단계들:
+        click.echo(f"▶ {현재단계} 단계 실행 중...")
+        if 현재단계 == "extract":
+            from know.pipeline.추출.키워드추출기 import 키워드추출기
+            from know.core.config import 기본설정
+            추출기 = 키워드추출기()
+            추출기.추출(
+                기본설정.pop_log_경로,
+                기본설정.fail_log_경로,
+                기본설정.work_경로 / "keywords.txt",
+            )
+            click.echo(f"  ✅ {현재단계} 완료")
+        else:
+            click.echo(f"  (상세 구현은 Phase 2에서 추가 예정)")

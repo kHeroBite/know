@@ -40,11 +40,7 @@ class 검색로그정제기:
             for 줄 in f:
                 줄 = 줄.strip()
                 if 줄 and not 줄.startswith("#"):
-                    try:
-                        패턴목록.append(re.compile(줄, re.IGNORECASE))
-                    except re.error:
-                        # 정규식 오류 시 리터럴 패턴으로 처리
-                        패턴목록.append(re.compile(re.escape(줄), re.IGNORECASE))
+                    패턴목록.append(re.compile(re.escape(줄), re.IGNORECASE))
         return 패턴목록
 
     def _스팸여부(self, 질의어: str) -> bool:
@@ -115,3 +111,15 @@ class 검색로그정제기:
                 f.write(f"{질의어}\t{빈도}\n")
 
         return 출력파일
+
+    def 키워드_정제(self, 키워드_목록: list[str]) -> list[str]:
+        """키워드 목록에서 스팸/특수문자/숫자/단자 제거 후 반환."""
+        결과 = []
+        for 키워드 in 키워드_목록:
+            키워드 = 키워드.strip()
+            if self._기본필터(키워드):
+                continue
+            if self._스팸여부(키워드):
+                continue
+            결과.append(키워드)
+        return 결과

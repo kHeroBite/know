@@ -12,12 +12,12 @@ class 설정:
     # ── JAR/JDK 경로 ──────────────────────────────────────────
     jiana_jar경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/jiana_admin_server/base_1.5/lib/jiana1.5.jar"
+            "/home/know/apps/know-ops/base/lib/jiana1.5.jar"
         )
     )
     dqdic_jar경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/jiana_admin_server/base_1.5/lib/dqdic-1.0.3.jar"
+            "/home/know/apps/know-ops/base/lib/dqdic-1.0.3.jar"
         )
     )
     jdk7_경로: Path = field(
@@ -26,16 +26,16 @@ class 설정:
 
     # ── 기본 경로 ─────────────────────────────────────────────
     base_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/jiana_admin_server/base_1.5")
+        default_factory=lambda: Path("/home/know/apps/know-ops/base")
     )
     사전_루트경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/jiana_admin_server/base_1.5/dic")
+        default_factory=lambda: Path("/home/know/apps/know-ops/base/dic")
     )
 
     # ── 스팸/패턴 파일 ────────────────────────────────────────
     스팸패턴경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/jiana_admin_server/base_1.5/spam_kwd.pat"
+            "/home/know/apps/know-ops/base/spam_kwd.pat"
         )
     )
 
@@ -53,8 +53,19 @@ class 설정:
     ant_경로: Path = field(default_factory=lambda: Path("/usr/bin/ant"))
     build_xml경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/jiana_admin_server/base_1.5/build.xml"
+            "/home/know/apps/know-ops/base/build.xml"
         )
+    )
+
+    # ── 추출 작업 경로 ──────────────────────────────────────────
+    pop_log_경로: Path = field(
+        default_factory=lambda: Path("/home/know/apps/know-ops/base/pop_log")
+    )
+    fail_log_경로: Path = field(
+        default_factory=lambda: Path("/home/know/apps/know-ops/base/fail_log")
+    )
+    work_경로: Path = field(
+        default_factory=lambda: Path("/home/know/apps/know-ops/base/work")
     )
 
     # ── 스크립트 경로 ──────────────────────────────────────────

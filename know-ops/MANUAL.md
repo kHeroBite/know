@@ -12,10 +12,10 @@
 
 ### 주요 특징
 
-- **통합 CLI**: `know refine`, `know analyze`, `know synonym`, `know build`, `know pipeline` 5개 서브커맨드
+- **통합 CLI**: `know extract`, `know refine`, `know analyze`, `know synonym`, `know build`, `know pipeline` 6개 서브커맨드
 - **Python 3.8+ 호환**: CentOS 7 서버의 miniconda 환경에서 동작
 - **한국어 인터페이스**: 모든 옵션과 출력 메시지가 한국어
-- **파이프라인 자동화**: `know pipeline` 한 번으로 정제 → 분석 → 유사어 → 빌드 전체 실행
+- **파이프라인 자동화**: `know pipeline` 한 번으로 추출 → 정제 → 분석 → 유사어 → 빌드 전체 실행
 
 ---
 
@@ -136,7 +136,46 @@ sshpass -f ~/.ssh/know_pass ssh \
 
 ## 4. 명령어 레퍼런스
 
-### 4-1. `know refine` — 질의로그 스팸 정제
+### 4-1. `know extract` — 인기/실패 검색어 추출
+
+기존 pop_log/fail_log 수동 처리 과정을 대체합니다. 인기 검색어 및 실패 검색어 로그 파일을 읽어 키워드를 추출·합산·필터링합니다.
+
+```bash
+# 기본 (상위 150,000개)
+know extract
+
+# 등수 기준 상위 N개
+know extract --모드 rank --n 50000
+
+# 검색횟수 N회 이상
+know extract --모드 count --n 100
+
+# 출력 경로 지정
+know extract --출력 /path/to/output.txt
+```
+
+**처리 흐름**:
+1. `/home/know/apps/know-ops/base/pop_log/` 내 파일 전체 읽기
+2. `/home/know/apps/know-ops/base/fail_log/` 내 파일 전체 읽기
+3. 포맷 자동 감지 (TSV/CSV, EUC-KR/UTF-8 자동 변환)
+4. 키워드별 카운트 합산 후 필터링
+5. 스팸 정제 적용
+6. `/home/know/apps/know-ops/base/work/keywords.txt` 저장 (기본)
+
+**지원 파일 포맷**:
+
+| 포맷 | 예시 파일명 | 구조 |
+|------|------------|------|
+| TSV | POPULAR.txt, FAIL.txt | `KEYWORDS\tSUMMED` |
+| CSV | popularKeyword.*.UTF-8 | `순위,검색어,변동폭,횟수,점유율` |
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--모드` | `rank` | `rank`=등수기준, `count`=횟수기준 |
+| `--n` | `150000` | rank: 상위 N개 / count: 최소 N회 |
+| `--출력` | `base/work/keywords.txt` | 결과 파일 경로 |
+
+### 4-2. `know refine` — 질의로그 스팸 정제
 
 기존 `refine_log_spam.sh`를 대체합니다. 검색 질의 로그에서 스팸/노이즈 키워드를 필터링합니다.
 
@@ -157,7 +196,7 @@ know refine 입력파일.log --도메인 site1 --출력 정제결과.log
 | `--도메인` | `default` | 도메인명 (예: site1, site2) |
 | `--출력` | 자동 생성 | 출력 파일 경로 (미지정 시 자동 명명) |
 
-### 4-2. `know analyze` — 형태소 분석
+### 4-3. `know analyze` — 형태소 분석
 
 기존 `cotton_test.sh`를 대체합니다. Jiana 형태소 분석기를 호출하여 질의를 분석합니다.
 
@@ -175,7 +214,7 @@ know analyze 입력파일.txt --도메인 site1 --출력 분석결과.txt
 | `--도메인` | `default` | 도메인명 |
 | `--출력` | 자동 생성 | 출력 파일 경로 |
 
-### 4-3. `know synonym` — 유사어 페어 관리
+### 4-4. `know synonym` — 유사어 페어 관리
 
 기존 `makepair.pl` + `keymake.pl` + `pair2list.pl` + `fdiff.pl` 4개 Perl 스크립트를 통합 대체합니다. 유사어 페어 생성, 키 매핑, 리스트 변환, 차이 비교를 한 번에 수행합니다.
 
@@ -193,7 +232,7 @@ know synonym pair_파일.txt --도메인 site1 --출력 ./결과/
 | `--도메인` | `default` | 도메인명 |
 | `--출력` | 자동 생성 | 출력 디렉토리 경로 |
 
-### 4-4. `know build` — 사전 빌드
+### 4-5. `know build` — 사전 빌드
 
 기존 `jiana_dic_add.sh` + `ant dic`을 대체합니다. Jiana 사전을 빌드합니다.
 
@@ -213,15 +252,16 @@ know build --대상 all
 | `--도메인` | `default` | 도메인명 |
 | `--대상` | `dic` | 빌드 대상 (`dic`: 사전만, `all`: 전체) |
 
-### 4-5. `know pipeline` — 전체 파이프라인
+### 4-6. `know pipeline` — 전체 파이프라인
 
-모든 단계를 순차적으로 실행합니다: **refine → analyze → synonym → build**
+모든 단계를 순차적으로 실행합니다: **extract → refine → analyze → synonym → build**
 
 ```bash
 # 전체 파이프라인 실행
 know pipeline 입력파일.log --도메인 site1
 
 # 특정 단계만 실행
+know pipeline 입력파일.log --단계 extract
 know pipeline 입력파일.log --단계 refine
 know pipeline 입력파일.log --단계 analyze
 know pipeline 입력파일.log --단계 synonym
@@ -232,9 +272,9 @@ know pipeline 입력파일.log --단계 build
 |------|--------|------|
 | `입력파일` (필수) | — | 파이프라인 입력 파일 |
 | `--도메인` | `default` | 도메인명 |
-| `--단계` | `all` | 실행 단계 (`all`, `refine`, `analyze`, `synonym`, `build`) |
+| `--단계` | `all` | 실행 단계 (`all`, `extract`, `refine`, `analyze`, `synonym`, `build`) |
 
-### 4-6. `know --version` — 버전 확인
+### 4-7. `know --version` — 버전 확인
 
 ```bash
 know --version
@@ -247,6 +287,7 @@ know --version
 
 | 기존 스크립트 | know-ops 명령어 | 설명 |
 |---------------|-----------------|------|
+| pop_log/fail_log 수동 처리 | `know extract` | 인기/실패 검색어 추출 |
 | `refine_log_spam.sh` | `know refine` | 질의로그 스팸 정제 |
 | `cotton_test.sh` | `know analyze` | 형태소 분석 (Jiana) |
 | `makepair.pl` | `know synonym` | 유사어 페어 생성 |
@@ -267,17 +308,25 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `jiana_jar경로` | `/home/know/apps/jiana_admin_server/base_1.5/lib/jiana1.5.jar` | Jiana 형태소 분석기 JAR |
-| `dqdic_jar경로` | `/home/know/apps/jiana_admin_server/base_1.5/lib/dqdic-1.0.3.jar` | DQDic 사전 JAR |
+| `jiana_jar경로` | `/home/know/apps/know-ops/base/lib/jiana1.5.jar` | Jiana 형태소 분석기 JAR |
+| `dqdic_jar경로` | `/home/know/apps/know-ops/base/lib/dqdic-1.0.3.jar` | DQDic 사전 JAR |
 | `jdk7_경로` | `/usr/lib/jvm/java-1.7.0-openjdk-amd64` | JDK 7 설치 경로 |
 
 ### 기본 경로
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `base_경로` | `/home/know/apps/jiana_admin_server/base_1.5` | Jiana 기본 경로 |
-| `사전_루트경로` | `/home/know/apps/jiana_admin_server/base_1.5/dic` | 사전 루트 디렉토리 |
-| `스팸패턴경로` | `/home/know/apps/jiana_admin_server/base_1.5/spam_kwd.pat` | 스팸 키워드 패턴 파일 |
+| `base_경로` | `/home/know/apps/know-ops/base` | Jiana 기본 경로 |
+| `사전_루트경로` | `/home/know/apps/know-ops/base/dic` | 사전 루트 디렉토리 |
+| `스팸패턴경로` | `/home/know/apps/know-ops/base/spam_kwd.pat` | 스팸 키워드 패턴 파일 |
+
+### 검색어 추출 경로
+
+| 설정 | 기본값 | 설명 |
+|------|--------|------|
+| `pop_log_경로` | `/home/know/apps/know-ops/base/pop_log` | 인기 검색어 로그 디렉토리 |
+| `fail_log_경로` | `/home/know/apps/know-ops/base/fail_log` | 실패 검색어 로그 디렉토리 |
+| `work_경로` | `/home/know/apps/know-ops/base/work` | 작업 디렉토리 (추출 결과 저장) |
 
 ### 형태소 분석 설정
 
@@ -291,7 +340,7 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
 | `ant_경로` | `/usr/bin/ant` | Apache Ant 실행 경로 |
-| `build_xml경로` | `/home/know/apps/jiana_admin_server/base_1.5/build.xml` | Ant 빌드 파일 |
+| `build_xml경로` | `/home/know/apps/know-ops/base/build.xml` | Ant 빌드 파일 |
 | `bin_경로` | `/home/know/apps/bin` | 스크립트 디렉토리 |
 
 ### 도메인별 사전 경로
@@ -299,7 +348,7 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 도메인명을 지정하면 `사전_루트경로/{도메인}` 하위에서 사전 파일을 관리합니다.
 
 ```
-/home/know/apps/jiana_admin_server/base_1.5/dic/
+/home/know/apps/know-ops/base/dic/
 ├── default/      ← --도메인 default
 ├── site1/        ← --도메인 site1
 └── site2/        ← --도메인 site2
@@ -325,6 +374,9 @@ know-ops/
         │   └── config.py   ← 전역 설정
         └── pipeline/
             ├── __init__.py
+            ├── 추출/
+            │   ├── __init__.py
+            │   └── 검색어추출기.py    ← know extract
             ├── 정제/
             │   ├── __init__.py
             │   └── 검색로그정제기.py    ← know refine
@@ -400,7 +452,7 @@ sshpass -f ~/.ssh/know_pass ssh -o PreferredAuthentications=password \
 
 ```bash
 # 서버에서 JAR 경로 확인
-ls -la /home/know/apps/jiana_admin_server/base_1.5/lib/
+ls -la /home/know/apps/know-ops/base/lib/
 
 # config.py의 기본 경로와 실제 경로가 다르면
 # 환경변수 또는 설정 파일로 오버라이드 (향후 지원 예정)
