@@ -94,7 +94,7 @@ ssh -i ~/.ssh/know_rsa know@133.186.132.245
 | 항목 | 값 |
 |------|-----|
 | OS | CentOS 7 (kernel 3.10.0-1160.71.1.el7.x86_64) |
-| python3/pip3 | **미설치** (설치 필요) |
+| python3/pip3 | Python 3.8.16 + pip 설치됨 |
 | SSH 인증 | password 인증 지원 확인됨 |
 
 ---
@@ -178,7 +178,7 @@ know build --도메인 site1
 
 | 구분 | 현행 (AS-IS) | 목표 (TO-BE) |
 |------|-------------|-------------|
-| 언어 | Java/JSP + Bash/Perl | Python 3.11+ |
+| 언어 | Java/JSP + Bash/Perl | Python 3.8+ (서버) / 3.11+ (개발) |
 | 프레임워크 | Tomcat 6 + jQuery | FastAPI + React/Vue |
 | 파이프라인 | 수동 쉘스크립트 | Celery + Redis |
 | DB | MariaDB 5.5 | MariaDB (유지) |
@@ -188,6 +188,6 @@ know build --도메인 site1
 
 ## Phase 계획
 
-- **Phase 1** ✅ 완료: Python CLI 패키지 (know-ops) 신규 생성
+- **Phase 1** ✅ 완료: Python CLI 패키지 (know-ops) 신규 생성 + 서버 설치 완료 (Python 3.8 호환)
 - **Phase 2** 예정: FastAPI 백엔드 API + 웹 UI
 - **Phase 3** 예정: Celery 자동화 파이프라인 + 전사 배포

@@ -1,4 +1,6 @@
 """검색로그 정제기 — refine_log_spam.sh 파이썬 대체."""
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from collections import Counter

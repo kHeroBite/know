@@ -3,6 +3,8 @@
 jiana1.5.jar의 CottonTest 클래스를 JDK 7로 실행하는 subprocess 래퍼.
 SSH 서버에서 직접 실행하거나 로컬 환경에서 JAR 접근 시 사용.
 """
+from __future__ import annotations
+
 import subprocess
 import tempfile
 from pathlib import Path

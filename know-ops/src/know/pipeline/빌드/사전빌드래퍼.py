@@ -4,6 +4,8 @@
     - jiana_dic_add.sh: 사전 파일 준비 + ant dic 빌드 트리거
     - ant dic: build.xml 기반 사전 컴파일
 """
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 

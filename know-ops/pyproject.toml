@@ -1,13 +1,13 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "know-ops"
 version = "0.1.0"
 description = "지식팀 Ops 자동화 CLI 도구"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.8"
 dependencies = [
     "click>=8.1",
     "pydantic-settings>=2.0",
@@ -19,5 +19,5 @@ dependencies = [
 [project.scripts]
 know = "know.cli:메인"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/know"]
+[tool.setuptools.packages.find]
+where = ["src"]

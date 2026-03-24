@@ -6,6 +6,8 @@
     - pair2list.pl: 페어 → 리스트 변환
     - fdiff.pl: 파일 diff 생성
 """
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from typing import NamedTuple
