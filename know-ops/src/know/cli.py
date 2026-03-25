@@ -53,24 +53,23 @@ def 분석(입력파일: Path | None, 도메인: str, 출력: Path | None):
 
 
 @메인.command("synonym")
-@click.argument("입력파일", required=False, type=click.Path(path_type=Path))
-@click.option("--도메인", default="default", help="도메인명")
-@click.option("--출력", type=click.Path(path_type=Path), help="출력 파일 경로 (기본: work/synonym.txt)")
-def 유사어(입력파일: Path | None, 도메인: str, 출력: Path | None):
-    """유사어 그룹 병합 + synonym.txt 생성 (makepair.pl + keymake.pl + fdiff.pl 대체).
+@click.argument("입력", required=False, type=click.Path(path_type=Path))
+@click.option("--출력", type=click.Path(path_type=Path), help="출력 파일 경로 (기본: txt_resrc/synonym.UTF-8)")
+def 유사어(입력: Path | None, 출력: Path | None):
+    """유사어 사전 생성 (makepair.pl + keymake.pl 대체).
 
-    입력: 공백 구분 동의어 그룹 파일 (기본: base/work/analyzed.txt)
-    출력: 쉼표 구분 synonym.txt (synonym.UTF-8 형식)
+    입력: *.pair 디렉토리 또는 단일 .pair 파일 (기본: base/txt_resrc/)
+    출력: key,syn1,syn2,... 형식 synonym.UTF-8 (기본: base/txt_resrc/synonym.UTF-8)
     """
     from know.core.config import 기본설정
     from know.pipeline.유사어.페어관리기 import 페어관리기
 
-    실제입력파일 = 입력파일 or (기본설정.work_경로 / "analyzed.txt")
-    if not 실제입력파일.exists():
-        raise click.ClickException(f"입력파일 없음: {실제입력파일}")
+    실제입력 = 입력 or 기본설정.txt_resrc_경로
+    if not Path(실제입력).exists():
+        raise click.ClickException(f"입력 경로 없음: {실제입력}")
 
     관리기 = 페어관리기()
-    결과파일 = 관리기.페어처리(실제입력파일, 도메인, 출력)
+    결과파일 = 관리기.페어처리(Path(실제입력), 출력)
     click.echo(f"✅ 유사어 처리 완료: {결과파일}")
 
 

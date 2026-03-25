@@ -43,7 +43,7 @@ class 페어관리기:
         반환: [["WORD1", "WORD2", ...], ...]  # 대문자 변환 적용
         """
         결과 = []
-        with 입력파일.open(encoding="utf-8", errors="ignore") as f:
+        with 입력파일.open(encoding="utf-8-sig", errors="ignore") as f:
             for 줄 in f:
                 줄 = _대문자변환(줄.strip())
                 if not 줄 or 줄.startswith("#"):
@@ -301,39 +301,57 @@ class 페어관리기:
 
     def 페어처리(
         self,
-        입력파일: Path,
-        도메인: str = "default",
+        입력: Path,
         출력파일: Path | None = None,
     ) -> Path:
-        """메인 처리: 공백 구분 그룹 파일 -> synonym.txt (쉼표 구분, synonym.UTF-8 형식).
+        """메인 처리: *.pair 디렉토리(또는 단일 파일) -> synonym.UTF-8 (keymake.pl 형식).
 
-        처리 순서:
-            1. 그룹 로딩 (대문자 변환)
-            2. 그룹 병합 (makepair.pl)
-            3. synonym.txt 출력 (쉼표 구분)
+        원본 perl 흐름 재현:
+            makepair.pl: 공백 그룹 전이적 병합
+            keymake.pl: 각 키에 대해 key,syn1,syn2,... 한 줄 출력
 
         Args:
-            입력파일: 공백 구분 동의어 그룹 파일 (kor_kor.pair 형식)
-            도메인: 도메인명
-            출력파일: 출력 경로 (기본: work/synonym.txt)
+            입력: 디렉토리(*.pair 전체) 또는 단일 .pair 파일
+            출력파일: 출력 경로 (기본: txt_resrc/synonym.UTF-8)
 
         Returns:
-            synonym.txt 파일 경로
+            synonym.UTF-8 파일 경로
         """
         if 출력파일 is None:
-            출력파일 = self.설정값.work_경로 / "synonym.txt"
+            출력파일 = self.설정값.txt_resrc_경로 / "synonym.UTF-8"
 
-        # 1. 그룹 로딩 (대문자 변환)
-        그룹목록 = self.그룹로딩(입력파일)
+        # 1. pair 파일 목록 결정
+        if 입력.is_dir():
+            pair파일들 = sorted(입력.glob("*.pair"))
+            if not pair파일들:
+                raise FileNotFoundError(f"*.pair 파일 없음: {입력}")
+        else:
+            pair파일들 = [입력]
 
-        # 2. 그룹 병합 (makepair.pl)
-        병합그룹 = self.그룹병합(그룹목록)
+        # 2. 모든 pair 파일에서 그룹 로딩 후 통합
+        전체그룹 = []
+        for 파일 in pair파일들:
+            전체그룹.extend(self.그룹로딩(파일))
 
-        # 3. synonym.txt 출력 (쉼표 구분 — synonym.UTF-8 형식)
+        # 3. 그룹 병합 (makepair.pl)
+        병합그룹 = self.그룹병합(전체그룹)
+
+        # 4. keymake.pl 형식 출력: 각 키에 대해 key,syn1,syn2,... 한 줄
+        #    키가 2개 이상인 그룹만 출력, 줄은 키 알파벳 순 정렬
+        줄목록 = []
+        for 그룹 in 병합그룹:
+            if len(그룹) < 2:
+                continue
+            그룹_정렬 = sorted(그룹)
+            for 키 in 그룹_정렬:
+                나머지 = sorted([w for w in 그룹_정렬 if w != 키])
+                줄목록.append(키 + "," + ",".join(나머지))
+
+        줄목록.sort()
+
         with 출력파일.open("w", encoding="utf-8") as f:
-            for 그룹 in 병합그룹:
-                if len(그룹) >= 2:  # 동의어 없는 단독 단어 제외
-                    f.write(",".join(그룹) + "\n")
+            for 줄 in 줄목록:
+                f.write(줄 + "\n")
 
         return 출력파일
 

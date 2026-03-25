@@ -21,7 +21,7 @@ class 설정:
         )
     )
     jdk7_경로: Path = field(
-        default_factory=lambda: Path("/usr/lib/jvm/java-1.7.0-openjdk-amd64")
+        default_factory=lambda: Path("/usr/lib/jvm/java-1.7.0-openjdk")
     )
 
     # ── 기본 경로 ─────────────────────────────────────────────
@@ -38,16 +38,16 @@ class 설정:
             "/home/know/apps/know-ops/base/spam_kwd.pat"
         )
     )
+    상품코드패턴경로: Path = field(
+        default_factory=lambda: Path(
+            "/home/know/apps/know-ops/base/prodcode_pat.cmd"
+        )
+    )
 
     # ── 형태소 분석 설정 ──────────────────────────────────────
-    # TODO: SSH 접속 후 정확한 메인클래스명 확인 필요 (cotton_test.sh 참조)
-    분석_메인클래스: str = "com.diquest.jiana.test.CottonTest"
-    분석_java옵션: list = field(
-        default_factory=lambda: [
-            "-Xmx512m",
-            "-Dfile.encoding=UTF-8",
-        ]
-    )
+    # cotton_test.sh: java -cp ... test.LiteTest $JIANA_HOME use $1 $2
+    분석_메인클래스: str = "test.LiteTest"
+    분석_java옵션: list = field(default_factory=list)  # cotton_test.sh에 JVM 옵션 없음
 
     # ── Ant 빌드 설정 ─────────────────────────────────────────
     ant_경로: Path = field(default_factory=lambda: Path("/usr/bin/ant"))
@@ -66,6 +66,9 @@ class 설정:
     )
     work_경로: Path = field(
         default_factory=lambda: Path("/home/know/apps/know-ops/base/work")
+    )
+    txt_resrc_경로: Path = field(
+        default_factory=lambda: Path("/home/know/apps/know-ops/base/txt_resrc")
     )
 
     # ── 스크립트 경로 ──────────────────────────────────────────
