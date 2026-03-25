@@ -15,6 +15,10 @@ export default function Layout() {
     { key: '/dictionary', label: '사전 관리' },
     { key: '/category', label: '카테고리 관리' },
     { key: '/statistics', label: '통계' },
+    { type: 'divider' as const },
+    { key: '/pipeline', label: '파이프라인' },
+    { key: '/knowledge', label: '지식작업' },
+    { key: '/build-history', label: '빌드 이력' },
   ]
 
   return (

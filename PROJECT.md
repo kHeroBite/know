@@ -200,7 +200,7 @@ know pipeline input.txt --도메인 site1
 
 - **Phase 1** ✅ 완료: Python CLI 패키지 (know-ops) 신규 생성 + 서버 설치 완료 (Python 3.8 호환)
 - **Phase 2** ✅ 완료: FastAPI :18000 서버 + React SPA 관리 UI 구현 (JWT 인증, 도메인/사전/카테고리/통계 CRUD, systemd 유닛)
-- **Phase 3** 예정: Celery 자동화 파이프라인 + 전사 배포
+- **Phase 3** ✅ 완료: Celery 자동화 파이프라인 구현 + 프론트엔드 통합 (Redis 미설치 → 동기 fallback 운영)
 
 ---
 
@@ -226,8 +226,29 @@ know-api/
 │   ├── category_service.py, statistics_service.py
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
+├── migrations/                # DB 마이그레이션 SQL
+│   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
+├── pipeline/                  # Celery 태스크 모듈
+│   ├── tasks.py               # Celery 태스크 정의
+│   ├── refine.py              # 검색로그 정제 태스크
+│   ├── morpheme.py            # 형태소분석 태스크
+│   └── build_wrapper.py       # 사전빌드 래퍼 태스크
+├── scripts/
+│   └── install_redis.sh       # Redis 설치 스크립트
+├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
-    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계 페이지
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력 페이지
+    ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
     ├── src/stores/authStore.ts # JWT 상태 관리
+    ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
 ```
+
+### Phase 3 신규 API 엔드포인트
+
+| 경로 | 설명 |
+|------|------|
+| /api/pipeline/* | 파이프라인 이력 조회/실행 |
+| /api/knowledge/* | 지식작업 워크플로우 |
+| /api/build/* | 빌드 이력 조회/실행 |
+| /api/realtime/* | 실시간 로그 스트리밍 (SSE) |

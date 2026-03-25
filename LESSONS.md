@@ -25,6 +25,27 @@
 **재발방지**: 팀 재spawn 전 반드시 TeamDelete로 기존 팀 정리 후 TeamCreate 실행.
 **Level**: 1
 
+### L-004: 메인 세션 직접 파일 수정(L-171) 11회 반복 (2026-03-26)
+
+**현상**: Phase 3 구현 중 메인 세션에서 직접 Edit/Write 시도가 11회 hook에 차단됨.
+**원인**: DEV/TEST 파이프라인 상태에서는 메인 직접 수정이 금지됨을 인지하지 못하고 반복 시도.
+**재발방지**: 파이프라인 상태(DEV/TEST) 진입 시 반드시 에이전트 spawn 후 파일 수정 위임. hook이 차단하면 즉시 에이전트 경유로 전환.
+**Level**: 3 (hook 이미 물리 차단 중 — LESSONS.md 인지 강화)
+
+### L-005: MariaDB 5.5에서 DATETIME DEFAULT CURRENT_TIMESTAMP 불가 (2026-03-26)
+
+**현상**: Phase 3 마이그레이션 SQL에서 DATETIME DEFAULT CURRENT_TIMESTAMP 구문 오류.
+**원인**: MariaDB 5.5에서는 DATETIME 타입에 DEFAULT CURRENT_TIMESTAMP 지원 안 됨 — TIMESTAMP 타입만 가능.
+**재발방지**: MariaDB 5.5 대상 마이그레이션 작성 시 날짜 컬럼은 TIMESTAMP 사용, DATETIME 사용 시 DEFAULT 없이 application-level에서 설정.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-006: CentOS 7 + sudo 없는 환경에서 Redis 설치 불가 (2026-03-26)
+
+**현상**: CentOS 7 서버에서 sudo 없이 Redis 설치 시도 실패 — Celery 동기 fallback으로 대체.
+**원인**: CentOS 7 기본 yum repos에 Redis 패키지 없음 + know 계정에 sudo 권한 없음.
+**재발방지**: CentOS 7 sudo 없는 환경 Redis 필요 시 서버 관리자에게 사전 요청 또는 소스 빌드. 기능은 동기 fallback으로 먼저 구현 후 Redis 추가.
+**Level**: 1
+
 ---
 
 ## 반영 추적 테이블
@@ -33,3 +54,5 @@
 |---------|-----------|-----------|-----------|--------|------|
 | L-001 | kdone 소멸 패턴 | MEMORY | MEMORY.md | 2026-03-25 | ✅ |
 | L-002 | 증거 파일 책임 분리 | MEMORY | MEMORY.md | 2026-03-25 | ✅ |
+| L-004 | 메인 직접 수정 11회 반복 | LESSONS (hook 이미 차단) | LESSONS.md | 2026-03-26 | ✅ |
+| L-005 | MariaDB 5.5 DATETIME 제약 | MEMORY | MEMORY.md | 2026-03-26 | ⬜ |

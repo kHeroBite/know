@@ -10,6 +10,11 @@ from api.domain import 라우터 as 도메인라우터
 from api.dictionary import 라우터 as 사전라우터
 from api.category import 라우터 as 카테고리라우터
 from api.statistics import 라우터 as 통계라우터
+from api.pipeline import 라우터 as 파이프라인라우터
+from api.knowledge import 라우터 as 지식작업라우터
+from api.build import 라우터 as 빌드라우터
+from api.realtime import 라우터 as 실시간라우터
+
 
 앱 = FastAPI(
     title="know-api",
@@ -31,6 +36,12 @@ from api.statistics import 라우터 as 통계라우터
 앱.include_router(사전라우터)
 앱.include_router(카테고리라우터)
 앱.include_router(통계라우터)
+앱.include_router(파이프라인라우터)
+앱.include_router(지식작업라우터)
+앱.include_router(빌드라우터)
+# WebSocket 라우터는 prefix 없이 등록 (/ws/... 경로 유지)
+앱.include_router(실시간라우터)
+
 
 
 @앱.get("/api/health")

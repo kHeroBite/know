@@ -1,5 +1,40 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 — Phase 3 완전 통합 파이프라인 구현 (커밋: TBD)
+
+### 수정 내용
+
+**백엔드 신규 파일:**
+- know-api/models/pipeline.py (PipelineHistory, BuildHistory 등 5개 ORM)
+- know-api/core/celery.py (Celery 앱 설정 + 동기 fallback)
+- know-api/migrations/001_phase3_tables.sql (Phase 3 테이블 마이그레이션)
+- know-api/pipeline/tasks.py, refine.py, morpheme.py, build_wrapper.py (파이프라인 태스크)
+- know-api/api/pipeline.py, knowledge.py, build.py, realtime.py (신규 라우터 4개)
+- know-api/services/pipeline_service.py, knowledge_service.py, build_service.py
+- know-api/scripts/install_redis.sh, know-api/know_celery.service
+
+**백엔드 수정:**
+- know-api/main.py: 신규 라우터 4개 등록 (/api/pipeline, /api/knowledge, /api/build, /api/realtime)
+- know-api/requirements.txt: celery, redis, aiofiles, openpyxl 추가
+
+**프론트엔드 신규:**
+- frontend/src/pages/Pipeline.tsx (파이프라인 대시보드)
+- frontend/src/pages/Knowledge.tsx (지식작업 워크플로우)
+- frontend/src/pages/BuildHistory.tsx (빌드 이력)
+- frontend/src/api/pipeline.ts
+- frontend/src/stores/pipelineStore.ts
+
+**프론트엔드 수정:**
+- frontend/src/App.tsx: 라우트 3개 추가 (/pipeline, /knowledge, /build-history)
+- frontend/src/components/Layout.tsx: 메뉴 3개 추가
+
+### 주요 이슈 및 해결
+- MariaDB 5.5: DATETIME DEFAULT CURRENT_TIMESTAMP 불가 → TIMESTAMP 사용으로 해결
+- CentOS 7 sudo 없음: Redis systemctl 설치 불가 → Celery 동기 fallback으로 서비스 운영
+- ktest에서 core/database.py Base import 누락 패치 → kDev 단계 Base import 확인 필요
+
+---
+
 ## 2026-03-26 — SQLAlchemy 예외처리 추가 (커밋: c4bc22b)
 
 ### 수정 내용

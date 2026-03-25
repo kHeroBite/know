@@ -6,6 +6,9 @@ import DomainList from './pages/DomainList'
 import DictionaryManage from './pages/DictionaryManage'
 import CategoryManage from './pages/CategoryManage'
 import Statistics from './pages/Statistics'
+import Pipeline from './pages/Pipeline'
+import Knowledge from './pages/Knowledge'
+import BuildHistory from './pages/BuildHistory'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token)
@@ -22,6 +25,9 @@ export default function App() {
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="category" element={<CategoryManage />} />
         <Route path="statistics" element={<Statistics />} />
+        <Route path="pipeline" element={<Pipeline />} />
+        <Route path="knowledge" element={<Knowledge />} />
+        <Route path="build-history" element={<BuildHistory />} />
       </Route>
     </Routes>
   )
