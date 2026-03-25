@@ -155,12 +155,12 @@ know extract --출력 /path/to/output.txt
 ```
 
 **처리 흐름**:
-1. `/home/know/apps/know-ops/base/pop_log/` 내 파일 전체 읽기
-2. `/home/know/apps/know-ops/base/fail_log/` 내 파일 전체 읽기
+1. `/home/know/apps/know-ops/workspace/pop_log/` 내 파일 전체 읽기
+2. `/home/know/apps/know-ops/workspace/fail_log/` 내 파일 전체 읽기
 3. 포맷 자동 감지 (TSV/CSV, EUC-KR/UTF-8 자동 변환)
 4. 키워드별 카운트 합산 후 필터링
 5. 스팸 정제 적용
-6. `/home/know/apps/know-ops/base/work/keywords.txt` 저장 (기본)
+6. `/home/know/apps/know-ops/workspace/work/keywords.txt` 저장 (기본)
 
 **지원 파일 포맷**:
 
@@ -179,6 +179,12 @@ know extract --출력 /path/to/output.txt
 
 기존 `refine_log_spam.sh`를 대체합니다. 검색 질의 로그에서 스팸/노이즈 키워드를 필터링합니다.
 
+- 괄호 분리: `원문(부가어)` 형태를 `원문`, `부가어`로 분리
+- 공백 제거: 질의어 내 공백 제거
+- 소문자→대문자 정규화
+- 상품코드성 키워드 제거 (기본 정규식 + `prodcode_pat.cmd` 추가 패턴)
+- 스팸 키워드 제거 (`spam_kwd.pat`, 기본은 리터럴/정규식은 `re:` 접두어)
+
 ```bash
 # 기본 사용
 know refine 입력파일.log
@@ -194,7 +200,7 @@ know refine 입력파일.log --도메인 site1 --출력 정제결과.log
 |------|--------|------|
 | `입력파일` (필수) | — | 정제할 질의 로그 파일 경로 |
 | `--도메인` | `default` | 도메인명 (예: site1, site2) |
-| `--출력` | 자동 생성 | 출력 파일 경로 (미지정 시 자동 명명) |
+| `--출력` | 자동 생성 | 출력 파일 경로 (`keywords.txt` 입력 시 기본 `refine.txt`) |
 
 ### 4-3. `know analyze` — 형태소 분석
 
@@ -256,6 +262,8 @@ know build --대상 all
 
 모든 단계를 순차적으로 실행합니다: **extract → refine → analyze → synonym → build**
 
+`--단계 all` 실행 시 `refine` 입력은 `extract` 산출물인 `base/work/keywords.txt`, 출력은 `base/work/refine.txt`를 사용합니다.
+
 ```bash
 # 전체 파이프라인 실행
 know pipeline 입력파일.log --도메인 site1
@@ -308,25 +316,25 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `jiana_jar경로` | `/home/know/apps/know-ops/base/lib/jiana1.5.jar` | Jiana 형태소 분석기 JAR |
-| `dqdic_jar경로` | `/home/know/apps/know-ops/base/lib/dqdic-1.0.3.jar` | DQDic 사전 JAR |
+| `jiana_jar경로` | `/home/know/apps/know-ops/workspace/lib/jiana1.5.jar` | Jiana 형태소 분석기 JAR |
+| `dqdic_jar경로` | `/home/know/apps/know-ops/workspace/lib/dqdic-1.0.3.jar` | DQDic 사전 JAR |
 | `jdk7_경로` | `/usr/lib/jvm/java-1.7.0-openjdk-amd64` | JDK 7 설치 경로 |
 
 ### 기본 경로
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `base_경로` | `/home/know/apps/know-ops/base` | Jiana 기본 경로 |
-| `사전_루트경로` | `/home/know/apps/know-ops/base/dic` | 사전 루트 디렉토리 |
-| `스팸패턴경로` | `/home/know/apps/know-ops/base/spam_kwd.pat` | 스팸 키워드 패턴 파일 |
+| `base_경로` | `/home/know/apps/know-ops/workspace` | Jiana 기본 경로 |
+| `사전_루트경로` | `/home/know/apps/know-ops/workspace/dic` | 사전 루트 디렉토리 |
+| `스팸패턴경로` | `/home/know/apps/know-ops/workspace/spam_kwd.pat` | 스팸 키워드 패턴 파일 |
 
 ### 검색어 추출 경로
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `pop_log_경로` | `/home/know/apps/know-ops/base/pop_log` | 인기 검색어 로그 디렉토리 |
-| `fail_log_경로` | `/home/know/apps/know-ops/base/fail_log` | 실패 검색어 로그 디렉토리 |
-| `work_경로` | `/home/know/apps/know-ops/base/work` | 작업 디렉토리 (추출 결과 저장) |
+| `pop_log_경로` | `/home/know/apps/know-ops/workspace/pop_log` | 인기 검색어 로그 디렉토리 |
+| `fail_log_경로` | `/home/know/apps/know-ops/workspace/fail_log` | 실패 검색어 로그 디렉토리 |
+| `work_경로` | `/home/know/apps/know-ops/workspace/work` | 작업 디렉토리 (추출 결과 저장) |
 
 ### 형태소 분석 설정
 
@@ -340,7 +348,7 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
 | `ant_경로` | `/usr/bin/ant` | Apache Ant 실행 경로 |
-| `build_xml경로` | `/home/know/apps/know-ops/base/build.xml` | Ant 빌드 파일 |
+| `build_xml경로` | `/home/know/apps/know-ops/workspace/build.xml` | Ant 빌드 파일 |
 | `bin_경로` | `/home/know/apps/bin` | 스크립트 디렉토리 |
 
 ### 도메인별 사전 경로
@@ -348,7 +356,7 @@ know-ops의 기본 설정값은 `src/know/core/config.py`에 정의되어 있습
 도메인명을 지정하면 `사전_루트경로/{도메인}` 하위에서 사전 파일을 관리합니다.
 
 ```
-/home/know/apps/know-ops/base/dic/
+/home/know/apps/know-ops/workspace/dic/
 ├── default/      ← --도메인 default
 ├── site1/        ← --도메인 site1
 └── site2/        ← --도메인 site2
@@ -452,7 +460,7 @@ sshpass -f ~/.ssh/know_pass ssh -o PreferredAuthentications=password \
 
 ```bash
 # 서버에서 JAR 경로 확인
-ls -la /home/know/apps/know-ops/base/lib/
+ls -la /home/know/apps/know-ops/workspace/lib/
 
 # config.py의 기본 경로와 실제 경로가 다르면
 # 환경변수 또는 설정 파일로 오버라이드 (향후 지원 예정)

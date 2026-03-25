@@ -58,8 +58,8 @@ def 분석(입력파일: Path | None, 도메인: str, 출력: Path | None):
 def 유사어(입력: Path | None, 출력: Path | None):
     """유사어 사전 생성 (makepair.pl + keymake.pl 대체).
 
-    입력: *.pair 디렉토리 또는 단일 .pair 파일 (기본: base/txt_resrc/)
-    출력: key,syn1,syn2,... 형식 synonym.UTF-8 (기본: base/txt_resrc/synonym.UTF-8)
+    입력: *.pair 디렉토리 또는 단일 .pair 파일 (기본: workspace/txt_resrc/)
+    출력: key,syn1,syn2,... 형식 synonym.UTF-8 (기본: workspace/txt_resrc/synonym.UTF-8)
     """
     from know.core.config import 기본설정
     from know.pipeline.유사어.페어관리기 import 페어관리기
@@ -80,7 +80,7 @@ def 유사어(입력: Path | None, 출력: Path | None):
 def 빌드(대상: str):
     """사전 빌드 (ant dic 실행).
 
-    ant를 base/ 디렉토리에서 실행하여 txt_resrc/ → data/*.dcd 컴파일.
+    ant를 workspace/ 디렉토리에서 실행하여 txt_resrc/ → data/*.dcd 컴파일.
     """
     from know.pipeline.빌드.사전빌드래퍼 import 사전빌드래퍼
     래퍼 = 사전빌드래퍼()
@@ -95,7 +95,7 @@ def 빌드(대상: str):
 @click.option("--n", "n값", default=150000, type=int,
               help="등수(rank) 또는 최소횟수(count)")
 @click.option("--출력", type=click.Path(path_type=Path),
-              help="출력 파일 경로 (기본: base/work/keywords.txt)")
+              help="출력 파일 경로 (기본: workspace/work/keywords.txt)")
 def 추출(모드: str, n값: int, 출력: Path | None):
     """인기/실패 검색어 추출 + 스팸정제 (pop_log + fail_log -> 통합 키워드)."""
     from know.pipeline.추출.키워드추출기 import 키워드추출기

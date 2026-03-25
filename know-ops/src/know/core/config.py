@@ -12,12 +12,12 @@ class 설정:
     # ── JAR/JDK 경로 ──────────────────────────────────────────
     jiana_jar경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/know-ops/base/lib/jiana1.5.jar"
+            "/home/know/apps/know-ops/workspace/lib/jiana1.5.jar"
         )
     )
     dqdic_jar경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/know-ops/base/lib/dqdic-1.0.3.jar"
+            "/home/know/apps/know-ops/workspace/lib/dqdic-1.0.3.jar"
         )
     )
     jdk7_경로: Path = field(
@@ -26,21 +26,21 @@ class 설정:
 
     # ── 기본 경로 ─────────────────────────────────────────────
     base_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace")
     )
     사전_루트경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base/dic")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace/dic")
     )
 
     # ── 스팸/패턴 파일 ────────────────────────────────────────
     스팸패턴경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/know-ops/base/spam_kwd.pat"
+            "/home/know/apps/know-ops/workspace/spam_kwd.pat"
         )
     )
     상품코드패턴경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/know-ops/base/prodcode_pat.cmd"
+            "/home/know/apps/know-ops/workspace/prodcode_pat.cmd"
         )
     )
 
@@ -53,22 +53,22 @@ class 설정:
     ant_경로: Path = field(default_factory=lambda: Path("/usr/bin/ant"))
     build_xml경로: Path = field(
         default_factory=lambda: Path(
-            "/home/know/apps/know-ops/base/build.xml"
+            "/home/know/apps/know-ops/workspace/build.xml"
         )
     )
 
     # ── 추출 작업 경로 ──────────────────────────────────────────
     pop_log_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base/pop_log")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace/pop_log")
     )
     fail_log_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base/fail_log")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace/fail_log")
     )
     work_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base/work")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace/work")
     )
     txt_resrc_경로: Path = field(
-        default_factory=lambda: Path("/home/know/apps/know-ops/base/txt_resrc")
+        default_factory=lambda: Path("/home/know/apps/know-ops/workspace/txt_resrc")
     )
 
     # ── 스크립트 경로 ──────────────────────────────────────────
