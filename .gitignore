@@ -25,3 +25,9 @@ know-api/frontend/node_modules/
 # know-api/frontend/dist는 FastAPI 정적 서빙용 — gitignore 예외
 !know-api/frontend/dist/
 !know-api/frontend/dist/**
+
+# 로컬 개발 도구
+.claude/
+.mcp.json
+.playwright-cli/
+.playwright/
