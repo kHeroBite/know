@@ -34,7 +34,7 @@ export default function BuildHistory() {
     set이력로딩(true)
     try {
       const res = await 빌드API.이력조회(domain)
-      set이력(res.data)
+      set이력(res.data?.items || [])
     } catch {
       message.error('이력 조회 실패')
     } finally {

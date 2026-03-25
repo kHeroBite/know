@@ -49,7 +49,7 @@ export default function Pipeline() {
   const 이력조회 = async () => {
     try {
       const res = await 파이프라인API.이력조회()
-      set이력(res.data)
+      set이력(res.data?.items || [])
     } catch { /* 무시 */ }
   }
 
@@ -179,21 +179,18 @@ export default function Pipeline() {
       {/* 단계 표시 */}
       {currentPipelineId && (
         <Card title={`파이프라인 #${currentPipelineId} 진행 상태`}>
-          <Steps current={stages.findIndex(s => s.status === 'running' || s.status === 'waiting_approval')}>
-            {stages.map(s => (
-              <Steps.Step
-                key={s.name}
-                title={s.label}
-                icon={단계아이콘[s.status]}
-                status={
-                  s.status === 'completed' ? 'finish'
-                  : s.status === 'running' ? 'process'
-                  : s.status === 'failed' ? 'error'
-                  : 'wait'
-                }
-              />
-            ))}
-          </Steps>
+          <Steps
+            current={stages.findIndex(s => s.status === 'running' || s.status === 'waiting_approval')}
+            items={stages.map(s => ({
+              key: s.name,
+              title: s.label,
+              icon: 단계아이콘[s.status],
+              status: s.status === 'completed' ? 'finish'
+                : s.status === 'running' ? 'process'
+                : s.status === 'failed' ? 'error'
+                : 'wait',
+            }))}
+          />
 
           <Divider />
 

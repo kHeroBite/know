@@ -34,7 +34,7 @@ export default function Knowledge() {
   const 작업목록조회 = async () => {
     try {
       const res = await 지식작업API.작업목록()
-      set작업목록(res.data)
+      set작업목록(res.data?.items || [])
     } catch { /* 무시 */ }
   }
 
