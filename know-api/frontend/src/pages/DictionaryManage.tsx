@@ -35,7 +35,8 @@ export default function DictionaryManage() {
     if (!선택도메인) return
     set로딩(true)
     try {
-      const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${활성탭}`)
+      const 경로 = 활성탭 === 'thesaurus' ? `${활성탭}/list` : 활성탭
+      const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${경로}`)
       set데이터(res.data?.items || [])
     } catch {
       message.error('데이터 조회 실패')
