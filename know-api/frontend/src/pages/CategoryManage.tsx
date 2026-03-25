@@ -17,8 +17,8 @@ export default function CategoryManage() {
 
   useEffect(() => {
     클라이언트.get('/domains').then(res => {
-      set도메인목록(res.data)
-      if (res.data.length > 0) set선택도메인(res.data[0].site)
+      set도메인목록(res.data?.items || [])
+      if (res.data?.items?.length > 0) set선택도메인(res.data.items[0].site)
     }).catch(() => message.error('도메인 목록 조회 실패'))
   }, [])
 
@@ -30,7 +30,7 @@ export default function CategoryManage() {
     set로딩(true)
     try {
       const res = await 클라이언트.get(`/categories/${선택도메인}`)
-      set목록(res.data)
+      set목록(res.data?.items || [])
     } catch {
       message.error('카테고리 목록 조회 실패')
     } finally {

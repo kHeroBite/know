@@ -22,8 +22,8 @@ export default function DictionaryManage() {
 
   useEffect(() => {
     클라이언트.get('/domains').then(res => {
-      set도메인목록(res.data)
-      if (res.data.length > 0) set선택도메인(res.data[0].site)
+      set도메인목록(res.data?.items || [])
+      if (res.data?.items?.length > 0) set선택도메인(res.data.items[0].site)
     }).catch(() => message.error('도메인 목록 조회 실패'))
   }, [])
 
@@ -36,7 +36,7 @@ export default function DictionaryManage() {
     set로딩(true)
     try {
       const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${활성탭}`)
-      set데이터(res.data)
+      set데이터(res.data?.items || [])
     } catch {
       message.error('데이터 조회 실패')
     } finally {

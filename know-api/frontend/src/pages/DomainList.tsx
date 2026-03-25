@@ -28,7 +28,7 @@ export default function DomainList() {
     set로딩(true)
     try {
       const res = await 클라이언트.get('/domains')
-      set목록(res.data)
+      set목록(res.data?.items || [])
     } catch {
       message.error('도메인 목록 조회 실패')
     } finally {
