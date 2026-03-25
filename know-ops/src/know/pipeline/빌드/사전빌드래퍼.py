@@ -13,7 +13,12 @@ from pathlib import Path
 class 사전빌드래퍼:
     """사전 빌드 래퍼.
 
-    jiana_dic_add.sh + ant dic를 Python subprocess로 대체.
+    ant dic를 Python subprocess로 실행.
+    build.xml은 base_경로/build.xml, 실행 위치는 base_경로.
+
+    build.xml dic 타깃 처리 순서:
+        makeTag → makeDCD → makeCnDCD → bigPrefer → clearTemp → core
+    산출물: base_경로/data/*.dcd (형태소 분석기 바이너리 사전)
     """
 
     def __init__(self, 설정값=None):
@@ -22,16 +27,12 @@ class 사전빌드래퍼:
 
     def ant빌드(
         self,
-        도메인: str = "default",
         대상: str = "dic",
-        작업디렉토리: Path | None = None,
     ) -> subprocess.CompletedProcess:
         """ant 빌드 실행.
 
         Args:
-            도메인: 도메인명
             대상: ant 빌드 대상 (dic/all/clean)
-            작업디렉토리: ant 실행 디렉토리 (None이면 base_경로)
 
         Returns:
             subprocess.CompletedProcess
@@ -40,8 +41,6 @@ class 사전빌드래퍼:
             FileNotFoundError: ant 또는 build.xml 없음
             RuntimeError: 빌드 실패
         """
-        작업dir = 작업디렉토리 or self.설정값.base_경로
-
         if not self.설정값.ant_경로.exists():
             raise FileNotFoundError(f"ant 없음: {self.설정값.ant_경로}")
         if not self.설정값.build_xml경로.exists():
@@ -50,18 +49,17 @@ class 사전빌드래퍼:
         명령 = [
             str(self.설정값.ant_경로),
             "-f", str(self.설정값.build_xml경로),
-            f"-Ddomain={도메인}",
             대상,
         ]
 
         결과 = subprocess.run(
             명령,
-            cwd=str(작업dir),
+            cwd=str(self.설정값.base_경로),
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=600,  # 10분 타임아웃
+            timeout=1800,  # 30분 타임아웃 (대용량 사전 빌드)
         )
 
         if 결과.returncode != 0:
@@ -75,40 +73,29 @@ class 사전빌드래퍼:
 
     def 빌드(
         self,
-        도메인: str = "default",
         대상: str = "dic",
     ) -> dict[str, str]:
-        """사전 빌드 전체 실행.
+        """사전 빌드 실행.
 
-        jiana_dic_add.sh 기능 통합:
-        1. 사전 디렉토리 준비
-        2. ant dic 빌드 실행
+        ant dic를 base_경로에서 실행.
+        산출물: base_경로/data/*.dcd
 
         Returns:
-            결과 딕셔너리 {상태, 메시지, 로그}
+            결과 딕셔너리 {상태, 대상, 로그}
         """
-        사전경로 = self.설정값.사전경로(도메인)
-
-        # 사전 디렉토리 없으면 생성
-        if not 사전경로.exists():
-            사전경로.mkdir(parents=True, exist_ok=True)
-
-        # ant 빌드 실행
-        완료결과 = self.ant빌드(도메인, 대상)
+        완료결과 = self.ant빌드(대상)
 
         return {
             "상태": "성공",
-            "도메인": 도메인,
             "대상": 대상,
             "로그": 완료결과.stdout[-2000:],
         }
 
-    def dry_run(self, 도메인: str = "default", 대상: str = "dic") -> str:
+    def dry_run(self, 대상: str = "dic") -> str:
         """실제 실행 없이 ant 명령만 반환 (디버깅용)."""
         명령 = [
             str(self.설정값.ant_경로),
             "-f", str(self.설정값.build_xml경로),
-            f"-Ddomain={도메인}",
             대상,
         ]
         return " ".join(명령)

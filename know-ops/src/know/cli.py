@@ -74,14 +74,18 @@ def 유사어(입력: Path | None, 출력: Path | None):
 
 
 @메인.command("build")
-@click.option("--도메인", default="default", help="도메인명")
-@click.option("--대상", default="dic", help="빌드 대상 (dic/all)")
-def 빌드(도메인: str, 대상: str):
-    """사전 빌드 (jiana_dic_add.sh + ant dic 대체)."""
+@click.option("--대상", default="dic",
+              type=click.Choice(["dic", "all", "clean"]),
+              help="빌드 대상 (dic: 사전만, all: 전체, clean: 정리)")
+def 빌드(대상: str):
+    """사전 빌드 (ant dic 실행).
+
+    ant를 base/ 디렉토리에서 실행하여 txt_resrc/ → data/*.dcd 컴파일.
+    """
     from know.pipeline.빌드.사전빌드래퍼 import 사전빌드래퍼
     래퍼 = 사전빌드래퍼()
-    결과 = 래퍼.빌드(도메인, 대상)
-    click.echo(f"✅ 빌드 완료: {결과}")
+    결과 = 래퍼.빌드(대상)
+    click.echo(f"✅ 빌드 완료: {결과['대상']} — {결과['상태']}")
 
 
 @메인.command("extract")
