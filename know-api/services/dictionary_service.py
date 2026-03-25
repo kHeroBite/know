@@ -4,6 +4,7 @@ from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, insert, update, delete, func, MetaData
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
 from models.dictionary import 사이트명검증, 사전테이블가져오기
 
@@ -61,9 +62,12 @@ def 사전목록조회(
         cnt_stmt = cnt_stmt.where(*where_clause)
         lst_stmt = lst_stmt.where(*where_clause)
 
-    total = db.execute(cnt_stmt).scalar() or 0
-    rows = db.execute(lst_stmt).mappings().all()
-    items = [{"word": r["_WORD"], "memo": r.get("_MEMO")} for r in rows]
+    try:
+        total = db.execute(cnt_stmt).scalar() or 0
+        rows = db.execute(lst_stmt).mappings().all()
+        items = [{"word": r["_WORD"], "memo": r.get("_MEMO")} for r in rows]
+    except (OperationalError, ProgrammingError):
+        return {"items": [], "total": 0, "page": page, "size": size}
     return {"items": items, "total": total, "page": page, "size": size}
 
 
@@ -155,9 +159,12 @@ def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50)
     사이트명검증(site)
     tbl = _사전테이블(db, site, "thesaurus")
     offset = (page - 1) * size
-    total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
-    rows = db.execute(select(tbl).offset(offset).limit(size)).mappings().all()
-    items = [{"head_word": r["_HEAD_WORD"], "tail_word": r["_TAIL_WORD"], "memo": r.get("_MEMO")} for r in rows]
+    try:
+        total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
+        rows = db.execute(select(tbl).offset(offset).limit(size)).mappings().all()
+        items = [{"head_word": r["_HEAD_WORD"], "tail_word": r["_TAIL_WORD"], "memo": r.get("_MEMO")} for r in rows]
+    except (OperationalError, ProgrammingError):
+        return {"items": [], "total": 0, "page": page, "size": size}
     return {"items": items, "total": total, "page": page, "size": size}
 
 

@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, insert, update, delete, func, MetaData
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
 from models.dictionary import 사이트명검증, 사전테이블가져오기
 
@@ -18,9 +19,12 @@ def 카테고리목록조회(db: Session, site: str, page: int = 1, size: int = 
     사이트명검증(site)
     tbl = _카테고리테이블(db, site)
     offset = (page - 1) * size
-    total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
-    rows = db.execute(select(tbl).offset(offset).limit(size)).mappings().all()
-    items = [{"word": r["_WORD"], "display_category": r["_DISPLAY_CATEGORY"]} for r in rows]
+    try:
+        total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
+        rows = db.execute(select(tbl).offset(offset).limit(size)).mappings().all()
+        items = [{"word": r["_WORD"], "display_category": r["_DISPLAY_CATEGORY"]} for r in rows]
+    except (OperationalError, ProgrammingError):
+        return {"items": [], "total": 0, "page": page, "size": size}
     return {"items": items, "total": total, "page": page, "size": size}
 
 
