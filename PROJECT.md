@@ -219,7 +219,8 @@ know-api/
 ├── models/                    # DB 모델 (SQLAlchemy ORM)
 │   ├── account.py, domain.py, dictionary.py
 ├── schemas/                   # Pydantic 요청/응답 스키마
-│   ├── auth.py, common.py, domain.py, dictionary.py, category.py
+│   ├── auth.py                # LoginResponse: token, user_id, name, auth 반환
+│   ├── common.py, domain.py, dictionary.py, category.py
 ├── services/                  # 비즈니스 로직
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
