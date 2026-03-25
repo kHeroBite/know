@@ -199,5 +199,34 @@ know pipeline input.txt --도메인 site1
 ## Phase 계획
 
 - **Phase 1** ✅ 완료: Python CLI 패키지 (know-ops) 신규 생성 + 서버 설치 완료 (Python 3.8 호환)
-- **Phase 2** 예정: FastAPI 백엔드 API + 웹 UI
+- **Phase 2** ✅ 완료: FastAPI :18000 서버 + React SPA 관리 UI 구현 (JWT 인증, 도메인/사전/카테고리/통계 CRUD, systemd 유닛)
 - **Phase 3** 예정: Celery 자동화 파이프라인 + 전사 배포
+
+---
+
+## know-api 디렉토리 구조 (Phase 2 신규)
+
+```
+know-api/
+├── main.py                    # FastAPI 앱 진입점 (:18000)
+├── requirements.txt           # 의존성 (fastapi, uvicorn, PyJWT, bcrypt 등)
+├── know_api.service           # systemd 유닛 파일
+├── .env.example               # 환경변수 템플릿 (JWT_SECRET 등)
+├── core/                      # 설정/DB/보안
+│   ├── config.py              # 환경변수 로딩 (pydantic BaseSettings)
+│   ├── database.py            # MariaDB 커넥션풀
+│   └── security.py            # JWT 발급/검증 + bcrypt 인증
+├── models/                    # DB 모델 (SQLAlchemy ORM)
+│   ├── account.py, domain.py, dictionary.py
+├── schemas/                   # Pydantic 요청/응답 스키마
+│   ├── auth.py, common.py, domain.py, dictionary.py, category.py
+├── services/                  # 비즈니스 로직
+│   ├── auth_service.py, domain_service.py, dictionary_service.py
+│   ├── category_service.py, statistics_service.py
+├── api/                       # FastAPI 라우터
+│   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
+└── frontend/                  # React SPA (Ant Design 5)
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계 페이지
+    ├── src/stores/authStore.ts # JWT 상태 관리
+    └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
+```

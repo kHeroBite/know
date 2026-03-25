@@ -16,3 +16,12 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# know-api 민감/생성 파일
+know-api/.env
+know-api/venv/
+know-api/frontend/node_modules/
+
+# know-api/frontend/dist는 FastAPI 정적 서빙용 — gitignore 예외
+!know-api/frontend/dist/
+!know-api/frontend/dist/**

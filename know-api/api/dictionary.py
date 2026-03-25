@@ -1,0 +1,176 @@
+from __future__ import annotations
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.orm import Session
+from core.database import DB세션
+from api.auth import 현재사용자가져오기
+from schemas.dictionary import (
+    사전항목생성,
+    사전항목수정,
+    사전항목응답,
+    유의어항목생성,
+    유의어항목수정,
+    유의어항목응답,
+    일괄항목,
+    유의어일괄항목,
+)
+from schemas.common import 페이지응답, 성공응답
+from services.dictionary_service import (
+    사전목록조회,
+    사전항목추가,
+    사전항목수정 as 서비스사전항목수정,
+    사전항목삭제,
+    일괄항목추가,
+    유의어목록조회,
+    유의어추가,
+    유의어수정,
+    유의어삭제,
+    유의어일괄추가,
+)
+
+라우터 = APIRouter(prefix="/api/dictionaries", tags=["사전"])
+
+# ─── UDIC / CNDIC ─────────────────────────────────────────────────
+
+
+@라우터.get("/{domain}/{type}", response_model=페이지응답[사전항목응답])
+def 사전목록(
+    domain: str,
+    type: str,
+    page: int = 1,
+    size: int = 50,
+    search: Optional[str] = Query(default=None),
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 목록 조회 (udic/cndic)."""
+    결과 = 사전목록조회(db, domain, type, page=page, size=size, search=search)
+    return 페이지응답[사전항목응답](
+        items=[사전항목응답(**item) for item in 결과["items"]],
+        total=결과["total"],
+        page=결과["page"],
+        size=결과["size"],
+    )
+
+
+@라우터.post("/{domain}/{type}", response_model=사전항목응답, status_code=status.HTTP_201_CREATED)
+def 사전항목등록(
+    domain: str,
+    type: str,
+    요청: 사전항목생성,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 추가 (udic/cndic)."""
+    결과 = 사전항목추가(db, domain, type, 요청.word, 요청.memo, user_id=current.get("user_id"))
+    return 사전항목응답(**결과)
+
+
+@라우터.put("/{domain}/{type}/{word}", response_model=사전항목응답)
+def 사전항목변경(
+    domain: str,
+    type: str,
+    word: str,
+    요청: 사전항목수정,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 수정 (udic/cndic)."""
+    결과 = 서비스사전항목수정(db, domain, type, word, 요청.memo)
+    return 사전항목응답(**결과)
+
+
+@라우터.delete("/{domain}/{type}/{word}", response_model=성공응답)
+def 사전항목제거(
+    domain: str,
+    type: str,
+    word: str,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 삭제 (udic/cndic)."""
+    사전항목삭제(db, domain, type, word)
+    return 성공응답(message=f"삭제 완료: {word}")
+
+
+@라우터.post("/{domain}/{type}/bulk", response_model=성공응답)
+def 사전일괄등록(
+    domain: str,
+    type: str,
+    items: List[일괄항목],
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 일괄 등록 (udic/cndic)."""
+    결과 = 일괄항목추가(db, domain, type, [i.dict() for i in items], user_id=current.get("user_id"))
+    return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
+
+
+# ─── THESAURUS ─────────────────────────────────────────────────────
+
+
+@라우터.get("/{domain}/thesaurus/list", response_model=페이지응답[유의어항목응답])
+def 유의어목록(
+    domain: str,
+    page: int = 1,
+    size: int = 50,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """유의어 목록 조회."""
+    결과 = 유의어목록조회(db, domain, page=page, size=size)
+    return 페이지응답[유의어항목응답](
+        items=[유의어항목응답(**item) for item in 결과["items"]],
+        total=결과["total"],
+        page=결과["page"],
+        size=결과["size"],
+    )
+
+
+@라우터.post("/{domain}/thesaurus", response_model=유의어항목응답, status_code=status.HTTP_201_CREATED)
+def 유의어등록(
+    domain: str,
+    요청: 유의어항목생성,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """유의어 추가."""
+    결과 = 유의어추가(db, domain, 요청.head_word, 요청.tail_word, 요청.memo, user_id=current.get("user_id"))
+    return 유의어항목응답(**결과)
+
+
+@라우터.put("/{domain}/thesaurus/{head_word}", response_model=유의어항목응답)
+def 유의어변경(
+    domain: str,
+    head_word: str,
+    요청: 유의어항목수정,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """유의어 수정."""
+    결과 = 유의어수정(db, domain, head_word, 요청.tail_word, 요청.memo)
+    return 유의어항목응답(**결과)
+
+
+@라우터.delete("/{domain}/thesaurus/{head_word}", response_model=성공응답)
+def 유의어제거(
+    domain: str,
+    head_word: str,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """유의어 삭제."""
+    유의어삭제(db, domain, head_word)
+    return 성공응답(message=f"유의어 삭제 완료: {head_word}")
+
+
+@라우터.post("/{domain}/thesaurus/bulk", response_model=성공응답)
+def 유의어일괄등록(
+    domain: str,
+    items: List[유의어일괄항목],
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """유의어 일괄 등록."""
+    결과 = 유의어일괄추가(db, domain, [i.dict() for i in items], user_id=current.get("user_id"))
+    return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
