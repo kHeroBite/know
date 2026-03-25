@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
@@ -86,9 +86,11 @@ def 사전항목제거(
     type: str,
     word: str,
     db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 삭제 (udic/cndic)."""
+    if current.get("auth") not in ("W", "A"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
     사전항목삭제(db, domain, type, word)
     return 성공응답(message=f"삭제 완료: {word}")
 
@@ -102,7 +104,7 @@ def 사전일괄등록(
     current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 일괄 등록 (udic/cndic)."""
-    결과 = 일괄항목추가(db, domain, type, [i.dict() for i in items], user_id=current.get("user_id"))
+    결과 = 일괄항목추가(db, domain, type, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
 
 
@@ -157,9 +159,11 @@ def 유의어제거(
     domain: str,
     head_word: str,
     db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 삭제."""
+    if current.get("auth") not in ("W", "A"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
     유의어삭제(db, domain, head_word)
     return 성공응답(message=f"유의어 삭제 완료: {head_word}")
 
@@ -172,5 +176,5 @@ def 유의어일괄등록(
     current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 일괄 등록."""
-    결과 = 유의어일괄추가(db, domain, [i.dict() for i in items], user_id=current.get("user_id"))
+    결과 = 유의어일괄추가(db, domain, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")

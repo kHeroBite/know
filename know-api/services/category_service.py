@@ -33,6 +33,8 @@ def 카테고리추가(
 ) -> dict:
     """카테고리 항목 추가 (_WORD PK 기준)."""
     사이트명검증(site)
+    word = word.strip()
+    display_category = display_category.strip()
     tbl = _카테고리테이블(db, site)
 
     # 중복 확인 (_WORD PK)
@@ -58,6 +60,7 @@ def 카테고리수정(
 ) -> dict:
     """카테고리 항목 수정 (display_category 변경)."""
     사이트명검증(site)
+    new_display_category = new_display_category.strip()
     tbl = _카테고리테이블(db, site)
 
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
@@ -97,8 +100,8 @@ def 카테고리일괄추가(
     성공 = 0
     건너뜀 = 0
     for item in items:
-        word = item.get("word", "")
-        display_category = item.get("display_category", "")
+        word = item.get("word", "").strip()
+        display_category = item.get("display_category", "").strip()
         if not word or not display_category:
             건너뜀 += 1
             continue

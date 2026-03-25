@@ -11,6 +11,9 @@ class 로그인요청(BaseModel):
 class 토큰응답(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user_id: str
+    name: Optional[str] = None
+    auth: str
 
 
 class 사용자정보(BaseModel):

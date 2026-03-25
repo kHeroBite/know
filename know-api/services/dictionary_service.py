@@ -9,7 +9,7 @@ from models.dictionary import 사이트명검증, 사전테이블가져오기
 
 
 # 사전 타입 허용 목록
-_허용사전타입 = {"udic", "cndic", "thesaurus"}
+_허용사전타입 = {"udic", "cndic"}
 
 
 def 단어정규화(word: str) -> str:

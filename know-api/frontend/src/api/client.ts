@@ -16,6 +16,7 @@ const 클라이언트 = axios.create({
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('access_token')
+      localStorage.removeItem('auth-storage')
       window.location.href = '/login'
     }
     return Promise.reject(err)

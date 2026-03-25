@@ -30,7 +30,12 @@ def 로그인(요청: 로그인요청, db: Session = Depends(DB세션)):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호 오류")
     token = 액세스토큰생성({"sub": user["user_id"]})
-    return 토큰응답(access_token=token)
+    return 토큰응답(
+        access_token=token,
+        user_id=user["user_id"],
+        name=user.get("name"),
+        auth=user.get("auth", "N"),
+    )
 
 
 @라우터.post("/logout")

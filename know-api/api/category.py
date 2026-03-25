@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import List
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
@@ -65,9 +65,11 @@ def 카테고리항목제거(
     domain: str,
     word: str,
     db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ):
     """카테고리 항목 삭제."""
+    if current.get("auth") not in ("A", "W"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
     카테고리삭제(db, domain, word)
     return 성공응답(message=f"카테고리 삭제 완료: {word}")
 
@@ -80,5 +82,5 @@ def 카테고리일괄등록(
     current: dict = Depends(현재사용자가져오기),
 ):
     """카테고리 항목 일괄 등록."""
-    결과 = 카테고리일괄추가(db, domain, [i.dict() for i in items], user_id=current.get("user_id"))
+    결과 = 카테고리일괄추가(db, domain, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
