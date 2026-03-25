@@ -58,25 +58,24 @@ class 형태소분석래퍼:
         if 출력파일 is None:
             출력파일 = 입력파일.parent / f"{입력파일.stem}_analyzed{입력파일.suffix}"
 
-        사전경로 = self.설정값.사전경로(도메인)
-
-        # java 명령 구성 (cotton_test.sh 참조)
+        # java 명령 구성
+        # cotton_test.sh: java -cp ... test.LiteTest $JIANA_HOME use $1 $2
+        # $JIANA_HOME = base_경로/, use = 고정, $1 = 입력파일, $2 = 출력파일(절대경로)
         명령 = [
             str(self.설정값.java_실행파일),
             *self.설정값.분석_java옵션,
             "-cp", self.설정값.classpath,
             self.설정값.분석_메인클래스,
-            str(입력파일),
-            str(사전경로),
+            str(self.설정값.base_경로) + "/",  # JIANA_HOME
+            "use",
+            str(입력파일.resolve()),
+            str(출력파일.resolve()),
         ]
 
-        # subprocess 실행
+        # subprocess 실행 (출력은 stdout이 아닌 출력파일에 직접 기록됨)
         결과 = subprocess.run(
             명령,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=300,  # 5분 타임아웃
         )
 
@@ -86,8 +85,8 @@ class 형태소분석래퍼:
                 f"stderr: {결과.stderr[:500]}"
             )
 
-        # 결과 저장
-        출력파일.write_text(결과.stdout, encoding="utf-8")
+        if not 출력파일.exists():
+            raise RuntimeError(f"분석 결과 파일 생성 실패: {출력파일}")
 
         return 출력파일
 
@@ -102,23 +101,27 @@ class 형태소분석래퍼:
             f.write(텍스트)
             임시입력 = Path(f.name)
 
+        결과파일 = None
         try:
             결과파일 = self.분석(임시입력, 도메인)
             return 결과파일.read_text(encoding="utf-8")
         finally:
             임시입력.unlink(missing_ok=True)
-            if 결과파일.exists():
+            if 결과파일 and 결과파일.exists():
                 결과파일.unlink(missing_ok=True)
 
-    def dry_run(self, 입력파일: Path, 도메인: str = "default") -> str:
+    def dry_run(self, 입력파일: Path, 출력파일: Path | None = None) -> str:
         """실제 실행 없이 java 명령만 반환 (디버깅용)."""
-        사전경로 = self.설정값.사전경로(도메인)
+        if 출력파일 is None:
+            출력파일 = 입력파일.parent / f"{입력파일.stem}_analyzed{입력파일.suffix}"
         명령 = [
             str(self.설정값.java_실행파일),
             *self.설정값.분석_java옵션,
             "-cp", self.설정값.classpath,
             self.설정값.분석_메인클래스,
-            str(입력파일),
-            str(사전경로),
+            str(self.설정값.base_경로) + "/",
+            "use",
+            str(입력파일.resolve()),
+            str(출력파일.resolve()),
         ]
         return " ".join(명령)
