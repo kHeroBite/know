@@ -5,20 +5,40 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-SCRIPTS_DIR = "/home/know/apps/bin/works_know"
-JIANA_DIR = "/home/know/jiana1.5.12"
 KNOW_OPS_SRC = "/home/know/apps/know-ops/src"
+WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
 
 PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
-    1: {"name": "정제",       "type": "shell", "script": f"{SCRIPTS_DIR}/refine_log.sh"},
-    2: {"name": "형태소분석", "type": "shell", "script": f"{JIANA_DIR}/cotton_test.sh"},
-    3: {"name": "결과변환",   "type": "python"},
+    1: {"name": "정제",       "type": "python", "func": "refine"},
+    2: {"name": "형태소분석", "type": "python", "func": "analyze"},
+    3: {"name": "결과변환",   "type": "python", "func": "convert"},
 }
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_know_ops_path() -> None:
+    if KNOW_OPS_SRC not in sys.path:
+        sys.path.insert(0, KNOW_OPS_SRC)
+
+
+def _make_설정(workspace_dir: str):
+    """workspace 경로 기반 know-ops 설정 생성"""
+    _ensure_know_ops_path()
+    from know.core.config import 설정
+    base = Path(workspace_dir)
+    return 설정(
+        base_경로=base,
+        jiana_jar경로=base / "lib" / "jiana1.5.jar",
+        dqdic_jar경로=base / "lib" / "dqdic-1.0.3.jar",
+        스팸패턴경로=base / "spam_kwd.pat",
+        상품코드패턴경로=base / "prodcode_pat.cmd",
+    )
+
 
 def _publish_phase1(run_id: str, step_num: int, step_name: str, percent: int, message: str, status: str) -> None:
     """Redis pub/sub 발행 — tasks.py _publish 독립 구현"""
@@ -43,37 +63,49 @@ def _publish_phase1(run_id: str, step_num: int, step_name: str, percent: int, me
     except Exception as e:
         logger.error(f"Redis 발행 실패: {e}")
 
-async def _run_shell(run_id: str, step_num: int, step: dict, file_path: str, domain: str) -> None:
-    """shell 스크립트 실행 + stdout 스트리밍"""
-    cmd = [step["script"], file_path, domain]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
-    assert proc.stdout is not None
-    async for line in proc.stdout:
-        decoded = line.decode("utf-8", errors="replace").rstrip()
-        _publish_phase1(run_id, step_num, step["name"], 50, decoded, "running")
-    await proc.wait()
-    if proc.returncode != 0:
-        raise RuntimeError(f"단계 {step_num}({step['name']}) 실패 (exit={proc.returncode})")
 
-def _sync_convert(domain: str, file_path: str) -> str:
-    """동기 Python 변환 — know-ops 형태소결과변환기 호출"""
-    if KNOW_OPS_SRC not in sys.path:
-        sys.path.insert(0, KNOW_OPS_SRC)
-    from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
-    converter = 형태소결과변환기()
-    result = converter.변환(domain, file_path)
+def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
+    """동기 정제 — 검색로그정제기 호출"""
+    _ensure_know_ops_path()
+    from know.pipeline.정제.검색로그정제기 import 검색로그정제기
+    설정값 = _make_설정(workspace_dir)
+    정제기 = 검색로그정제기(설정값=설정값)
+    result = 정제기.정제(Path(file_path), domain)
     return str(result)
 
 
-async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str) -> None:
+def _sync_analyze(file_path: str, domain: str, workspace_dir: str) -> str:
+    """동기 형태소분석 — 형태소분석래퍼 호출"""
+    _ensure_know_ops_path()
+    from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼
+    설정값 = _make_설정(workspace_dir)
+    래퍼 = 형태소분석래퍼(설정값=설정값)
+    result = 래퍼.분석(Path(file_path), domain)
+    return str(result)
+
+
+def _sync_convert(file_path: str) -> str:
+    """동기 변환 — 형태소결과변환기 호출"""
+    _ensure_know_ops_path()
+    from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
+    변환기 = 형태소결과변환기()
+    result = 변환기.변환(Path(file_path))
+    return str(result)
+
+
+async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str) -> None:
     """python 단계 — run_in_executor로 비동기 처리"""
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _sync_convert, domain, file_path)
-    _publish_phase1(run_id, step_num, step["name"], 100, f"변환 완료: {result}", "running")
+    func = step.get("func", "convert")
+    if func == "refine":
+        result = await loop.run_in_executor(None, _sync_refine, file_path, domain, workspace_dir)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"정제 완료: {result}", "running")
+    elif func == "analyze":
+        result = await loop.run_in_executor(None, _sync_analyze, file_path, domain, workspace_dir)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"분석 완료: {result}", "running")
+    else:
+        result = await loop.run_in_executor(None, _sync_convert, file_path)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"변환 완료: {result}", "running")
 
 
 def _sync_register(domain: str, file_path: str) -> int:
@@ -106,14 +138,18 @@ def _sync_register(domain: str, file_path: str) -> int:
     finally:
         db.close()
 
+
 async def _run_register(run_id: str, step_num: int, step: dict, domain: str, file_path: str) -> None:
     """등록 단계 — run_in_executor로 동기 DB 작업 실행"""
     loop = asyncio.get_event_loop()
     count = await loop.run_in_executor(None, _sync_register, domain, file_path)
     _publish_phase1(run_id, step_num, step["name"], 100, f"등록 완료: {count}건", "running")
 
-async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int) -> None:
+
+async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A") -> None:
     """Phase 1 전체 파이프라인 실행 — 단계별 순차 실행"""
+    workspace_dir = f"{WORKSPACE_BASE}/{workspace}"
+
     for step_num in range(start_step, end_step + 1):
         step = PHASE1_STEPS.get(step_num)
         if step is None:
@@ -125,10 +161,8 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
 
         _publish_phase1(run_id, step_num, step["name"], 0, "시작", "running")
         try:
-            if step["type"] == "shell":
-                await _run_shell(run_id, step_num, step, file_path, domain)
-            elif step["type"] == "python":
-                await _run_python(run_id, step_num, step, domain, file_path)
+            if step["type"] == "python":
+                await _run_python(run_id, step_num, step, domain, file_path, workspace_dir)
             elif step["type"] == "db":
                 await _run_register(run_id, step_num, step, domain, file_path)
             _publish_phase1(run_id, step_num, step["name"], 100, "완료", "completed")

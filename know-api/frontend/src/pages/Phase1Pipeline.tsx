@@ -5,11 +5,12 @@ import ControlPanel from '../components/phase1/ControlPanel'
 import LogPanel from '../components/phase1/LogPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
 import { phase1API } from '../api/phase1'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title } = Typography
 
 function usePhase1State() {
-  const [stepRange, setStepRange] = useState<[number, number]>([0, 3])
+  const [stepRange, setStepRange] = useState<[number, number]>([1, 3])
   const [runId, setRunId] = useState<string | null>(null)
 
   return {
@@ -21,6 +22,7 @@ function usePhase1State() {
 export default function Phase1Pipeline() {
   const state = usePhase1State()
   const ws = usePhase1WebSocket(state.runId)
+  const { selectedWorkspace } = useWorkspaceStore()
 
   const 실행핸들러 = async (params: {
     category: string
@@ -28,7 +30,7 @@ export default function Phase1Pipeline() {
     end_step: number
   }) => {
     try {
-      const { data } = await phase1API.실행(params)
+      const { data } = await phase1API.실행({ ...params, workspace: selectedWorkspace ?? '' })
       state.setRunId(data.run_id)
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')

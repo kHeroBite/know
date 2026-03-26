@@ -32,6 +32,7 @@ class Phase1실행요청(BaseModel):
     filename: Optional[str] = None
     start_step: int = 0
     end_step: int = 4
+    workspace: Optional[str] = None
 
 @라우터.get("/preprocess/files/{folder}")
 async def 파일목록(folder: str):

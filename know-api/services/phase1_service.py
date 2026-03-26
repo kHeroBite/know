@@ -105,9 +105,10 @@ class Phase1서비스:
 
         try:
             await loop.run_in_executor(None, _update_status, "running", -1, None)
-            file_path = os.path.join(BUILD_DIR, 요청.category, 요청.filename)
+            base_dir = os.path.join(BUILD_DIR, 요청.workspace) if 요청.workspace else BUILD_DIR
+            file_path = os.path.join(base_dir, 요청.category, 요청.filename)
             from phase1.executor import phase1_실행
-            await phase1_실행(run_id, 요청.domain, file_path, 요청.start_step, 요청.end_step)
+            await phase1_실행(run_id, 요청.domain, file_path, 요청.start_step, 요청.end_step, 요청.workspace)
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
             await loop.run_in_executor(None, _update_status, "failed", -1, str(e))

@@ -4,6 +4,7 @@ interface RunParams {
   category: string
   start_step: number
   end_step: number
+  workspace: string
 }
 
 export const phase1API = {

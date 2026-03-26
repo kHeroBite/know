@@ -1,5 +1,29 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-27 — 설계안 갭 전면 해소: executor CLI 통합 + 워크스페이스 경로 + 미구현 모듈 4개 추가
+
+### 수정 내용
+- **know-api/phase1/executor.py**: 쉘 스크립트 호출 완전 제거 → Python 모듈 직접 호출로 전환 (SCRIPTS_DIR/JIANA_DIR → WORKSPACE_BASE), `workspace` 파라미터 추가, `_run_shell` 제거, `_run_python` 확장, `_sync_convert()` 인수 불일치 버그 수정
+- **know-api/api/phase1.py**: `workspace` 파라미터 수신 추가
+- **know-api/services/phase1_service.py**: `workspace` 인수 executor로 전달
+- **know-api/frontend/src/api/phase1.ts**: `workspace` 파라미터 추가
+- **know-api/frontend/src/pages/Phase1Pipeline.tsx**: stepRange 기본값 `[1,3]` 변경 (0단계 제거)
+- **know-api/frontend/src/components/phase1/ControlPanel.tsx**: step0 noop UI 제거
+- **[신규] know-ops/src/know/pipeline/검증/__init__.py**: 검증 패키지 초기화
+- **[신규] know-ops/src/know/pipeline/검증/사전등록검증기.py**: check_after_dic.sh Python 포팅 (탭/공백 검사, 문법검사, diff비교, 누락검출)
+- **[신규] know-ops/src/know/pipeline/공통/__init__.py**: 공통 패키지 초기화
+- **[신규] know-ops/src/know/pipeline/공통/텍스트유틸.py**: 인코딩감지, UTF-8변환, 정렬/필터/정규화 유틸 모음
+- **[신규] know-ops/src/know/pipeline/유사어/목록변환기.py**: pair2list.pl Python 포팅
+- **[신규] know-ops/src/know/pipeline/유사어/차이비교기.py**: fdiff.pl Python 포팅
+
+### 배경
+- executor.py의 쉘 스크립트 경유 방식(이원화)을 Python 모듈 직접 호출로 통합
+- 워크스페이스별 동적 경로 지원 (`/home/know/apps/know-ops/workspace/{workspace}`)
+- 미구현으로 남아있던 검증·공통·유사어 서브모듈 4개를 이번 작업에서 일괄 구현
+- 데이터전처리 UI에서 step0(noop) 제거 — 사용자에게는 1~3단계만 노출
+
+---
+
 ## 2026-03-27 — modify_cotton 파이썬 변환 + 파이프라인 4단계 구성
 
 ### 수정 내용
