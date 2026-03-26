@@ -62,7 +62,8 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
       return false
     },
     onChange: async (info) => {
-      const file = info.fileList[0]?.originFileObj
+      if (info.file.status !== undefined) return
+      const file = info.file as unknown as File
       if (!file) return
       set업로딩(true)
       try {

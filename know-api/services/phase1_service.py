@@ -1,12 +1,15 @@
 """Phase 1 서비스 — 파일 관리 + 실행 오케스트레이션"""
 import os
+import shutil
 import asyncio
 import json
 from datetime import datetime
 from typing import Optional, List, Dict
 from core.database import 세션팩토리
 
-WORKS_DIR = "/home/know/apps/bin/works_know"
+BUILD_DIR = "/home/know/apps/know-ops/build"
+DOMAIN_DIR = "/home/know/apps/know-ops/domain"
+WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
 
 class Phase1서비스:
@@ -14,7 +17,7 @@ class Phase1서비스:
     async def 파일목록(folder: str) -> Dict:
         loop = asyncio.get_event_loop()
         def _list():
-            dir_path = os.path.join(WORKS_DIR, folder)
+            dir_path = os.path.join(BUILD_DIR, folder)
             os.makedirs(dir_path, exist_ok=True)
             files = []
             for fname in sorted(os.listdir(dir_path)):
@@ -33,7 +36,7 @@ class Phase1서비스:
     async def 파일저장(folder: str, filename: str, content: bytes) -> Dict:
         loop = asyncio.get_event_loop()
         def _write():
-            dir_path = os.path.join(WORKS_DIR, folder)
+            dir_path = os.path.join(BUILD_DIR, folder)
             os.makedirs(dir_path, exist_ok=True)
             file_path = os.path.join(dir_path, filename)
             with open(file_path, 'wb') as f:
@@ -51,7 +54,7 @@ class Phase1서비스:
     async def 파일삭제(folder: str, filename: str) -> Dict:
         loop = asyncio.get_event_loop()
         def _delete():
-            file_path = os.path.join(WORKS_DIR, folder, filename)
+            file_path = os.path.join(BUILD_DIR, folder, filename)
             if not os.path.exists(file_path):
                 from fastapi import HTTPException
                 raise HTTPException(status_code=404, detail=f"파일 없음: {filename}")
@@ -104,9 +107,73 @@ class Phase1서비스:
 
         try:
             await loop.run_in_executor(None, _update_status, "running", -1, None)
-            file_path = os.path.join(WORKS_DIR, 요청.category, 요청.filename)
+            file_path = os.path.join(BUILD_DIR, 요청.category, 요청.filename)
             from phase1.executor import phase1_실행
             await phase1_실행(run_id, 요청.domain, file_path, 요청.start_step, 요청.end_step)
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
             await loop.run_in_executor(None, _update_status, "failed", -1, str(e))
+
+    # ─────────────────────────────────────────────
+    # 도메인 관리
+    # ─────────────────────────────────────────────
+
+    @staticmethod
+    async def 도메인목록() -> Dict:
+        loop = asyncio.get_event_loop()
+        def _list():
+            os.makedirs(DOMAIN_DIR, exist_ok=True)
+            folders = [
+                d for d in sorted(os.listdir(DOMAIN_DIR))
+                if os.path.isdir(os.path.join(DOMAIN_DIR, d))
+            ]
+            return {"domains": folders}
+        return await loop.run_in_executor(None, _list)
+
+    @staticmethod
+    async def 도메인생성(name: str) -> Dict:
+        loop = asyncio.get_event_loop()
+        def _create():
+            dir_path = os.path.join(DOMAIN_DIR, name)
+            if os.path.exists(dir_path):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=409, detail=f"이미 존재하는 도메인: {name}")
+            os.makedirs(dir_path, exist_ok=True)
+            return {"created": True, "name": name}
+        return await loop.run_in_executor(None, _create)
+
+    @staticmethod
+    async def 도메인삭제(name: str) -> Dict:
+        loop = asyncio.get_event_loop()
+        def _delete():
+            dir_path = os.path.join(DOMAIN_DIR, name)
+            if not os.path.exists(dir_path):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail=f"도메인 없음: {name}")
+            shutil.rmtree(dir_path)
+            return {"deleted": True, "name": name}
+        return await loop.run_in_executor(None, _delete)
+
+    @staticmethod
+    async def 도메인불러오기(name: str) -> Dict:
+        loop = asyncio.get_event_loop()
+        def _load():
+            src_dir = os.path.join(DOMAIN_DIR, name)
+            if not os.path.exists(src_dir):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail=f"도메인 없음: {name}")
+            os.makedirs(WORKSPACE_DIR, exist_ok=True)
+            copied = 0
+            for item in os.listdir(src_dir):
+                s = os.path.join(src_dir, item)
+                d = os.path.join(WORKSPACE_DIR, item)
+                if os.path.isfile(s):
+                    shutil.copy2(s, d)
+                    copied += 1
+                elif os.path.isdir(s):
+                    if os.path.exists(d):
+                        shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                    copied += 1
+            return {"loaded": True, "name": name, "copied": copied}
+        return await loop.run_in_executor(None, _load)

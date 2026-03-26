@@ -3,8 +3,10 @@ import { Row, Col, Card, message, Typography } from 'antd'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
 import LogPanel from '../components/phase1/LogPanel'
+import DomainPanel from '../components/phase1/DomainPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
 import { phase1API } from '../api/phase1'
+import { useAuthStore } from '../stores/authStore'
 
 const { Title } = Typography
 
@@ -27,6 +29,7 @@ function usePhase1State() {
 export default function Phase1Pipeline() {
   const state = usePhase1State()
   const ws = usePhase1WebSocket(state.runId)
+  const currentUser = useAuthStore(s => s.user)
 
   const 실행핸들러 = async (params: {
     domain: string
@@ -48,6 +51,13 @@ export default function Phase1Pipeline() {
   return (
     <div style={{ padding: '0 0 24px' }}>
       <Title level={3}>데이터 전처리</Title>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col xs={24}>
+          <Card title="도메인 관리">
+            <DomainPanel currentUser={currentUser} />
+          </Card>
+        </Col>
+      </Row>
       <Row gutter={16}>
         <Col xs={24} lg={10}>
           <Card title="파일 관리" style={{ height: '100%' }}>

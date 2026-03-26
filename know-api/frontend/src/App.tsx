@@ -21,8 +21,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/phase1" replace />} />
-        <Route path="phase1" element={<Phase1Pipeline />} />
+        <Route index element={<Navigate to="/preprocess" replace />} />
+        <Route path="preprocess" element={<Phase1Pipeline />} />
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="category" element={<CategoryManage />} />

@@ -1,5 +1,22 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 — 데이터 전처리 리네이밍 + 도메인 관리 기능 + 업로드 버그 수정 (커밋: TBD)
+
+### 수정 내용
+- **URL 리네이밍**: `/phase1/*` → `/preprocess/*` (api/phase1.py 전체 엔드포인트)
+- **사이드바**: "Phase 1 파이프라인" → "데이터 전처리" (Layout.tsx)
+- **Route path**: `/phase1` → `/preprocess` (App.tsx)
+- **도메인 관리 신설**: DomainPanel.tsx (신규), phase1.ts API 추가, phase1_service.py 도메인 CRUD, api/phase1.py 도메인 엔드포인트 3개
+- **경로 분리**: WORKS_DIR/BUILD_DIR → BUILD_DIR + DOMAIN_DIR + WORKSPACE_DIR (phase1_service.py, executor.py)
+- **드래그&드롭 버그 수정**: FilePanel.tsx — `info.fileList[0]?.originFileObj` → `info.file as File`, `info.file.status !== undefined` 조건 추가
+
+### 배경
+- Phase1 기능이 데이터 전처리 용도로 확정되어 UI/URL 일관성을 위해 리네이밍
+- 도메인 관리 기능 신설로 사용자가 직접 도메인 폴더 추가/삭제 가능
+- antd Upload의 onChange가 status 이벤트도 발생시켜 드래그&드롭 시 파일 미인식 버그 발생
+
+---
+
 ## 2026-03-26 — Phase1 타이틀 변경 + 업로드 파일명 제한 완화 (커밋: TBD)
 
 ### 수정 내용

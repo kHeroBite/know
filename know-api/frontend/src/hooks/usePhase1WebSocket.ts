@@ -29,7 +29,7 @@ export function usePhase1WebSocket(runId: string | null) {
     retryRef.current = 0
 
     const connect = () => {
-      const ws = new WebSocket(`ws://${window.location.host}/ws/phase1/${runId}`)
+      const ws = new WebSocket(`ws://${window.location.host}/ws/preprocess/${runId}`)
       wsRef.current = ws
 
       ws.onopen = () => {

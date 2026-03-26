@@ -6,12 +6,12 @@ import os
 from datetime import datetime
 from typing import Optional
 
-WORKS_DIR = "/home/know/apps/bin/works_know"
+SCRIPTS_DIR = "/home/know/apps/bin/works_know"
 JIANA_DIR = "/home/know/jiana1.5.12"
 
 PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
-    1: {"name": "정제",       "type": "shell", "script": f"{WORKS_DIR}/refine_log.sh"},
+    1: {"name": "정제",       "type": "shell", "script": f"{SCRIPTS_DIR}/refine_log.sh"},
     2: {"name": "형태소분석", "type": "shell", "script": f"{JIANA_DIR}/cotton_test.sh"},
     3: {"name": "등록",       "type": "db"},
     4: {"name": "빌드",       "type": "shell", "script": f"{JIANA_DIR}/antdic.sh"},

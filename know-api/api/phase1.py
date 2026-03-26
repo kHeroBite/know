@@ -6,9 +6,11 @@ import json
 import asyncio
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from api.auth import 현재사용자가져오기
 
 라우터 = APIRouter()
 ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
@@ -32,14 +34,17 @@ class Phase1실행요청(BaseModel):
     start_step: int = 0
     end_step: int = 4
 
-@라우터.get("/phase1/files/{folder}")
+class 도메인생성요청(BaseModel):
+    name: str
+
+@라우터.get("/preprocess/files/{folder}")
 async def 파일목록(folder: str):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.파일목록(folder)
 
-@라우터.post("/phase1/files/{folder}")
+@라우터.post("/preprocess/files/{folder}")
 async def 파일업로드(folder: str, file: UploadFile = File(...)):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
@@ -54,7 +59,7 @@ async def 파일업로드(folder: str, file: UploadFile = File(...)):
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.파일저장(folder, safe_name, content)
 
-@라우터.delete("/phase1/files/{folder}/{filename}")
+@라우터.delete("/preprocess/files/{folder}/{filename}")
 async def 파일삭제(folder: str, filename: str):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
@@ -62,7 +67,7 @@ async def 파일삭제(folder: str, filename: str):
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.파일삭제(folder, safe_name)
 
-@라우터.post("/phase1/run")
+@라우터.post("/preprocess/run")
 async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundTasks):
     if 요청.category not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"카테고리 오류: {요청.category}")
@@ -72,7 +77,33 @@ async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundT
     background_tasks.add_task(Phase1서비스.실행, run_id, 요청)
     return {"run_id": run_id}
 
-@ws라우터.websocket("/ws/phase1/{run_id}")
+# ─────────────────────────────────────────────
+# 도메인 관리 API
+# ─────────────────────────────────────────────
+
+@라우터.get("/preprocess/domains")
+async def 도메인목록조회():
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.도메인목록()
+
+@라우터.post("/preprocess/domains")
+async def 도메인생성(body: 도메인생성요청):
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.도메인생성(body.name)
+
+@라우터.delete("/preprocess/domains/{name}")
+async def 도메인삭제(name: str, current_user: dict = Depends(현재사용자가져오기)):
+    if current_user.get("user_id") != "super":
+        raise HTTPException(status_code=403, detail="super 권한 필요")
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.도메인삭제(name)
+
+@라우터.post("/preprocess/domains/{name}/load")
+async def 도메인불러오기(name: str):
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.도메인불러오기(name)
+
+@ws라우터.websocket("/ws/preprocess/{run_id}")
 async def phase1_ws(websocket: WebSocket, run_id: str):
     await websocket.accept()
     try:
