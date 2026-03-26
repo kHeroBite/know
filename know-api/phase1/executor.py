@@ -3,18 +3,19 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime
 from typing import Optional
 
 SCRIPTS_DIR = "/home/know/apps/bin/works_know"
 JIANA_DIR = "/home/know/jiana1.5.12"
+KNOW_OPS_SRC = "/home/know/apps/know-ops/src"
 
 PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
     1: {"name": "정제",       "type": "shell", "script": f"{SCRIPTS_DIR}/refine_log.sh"},
     2: {"name": "형태소분석", "type": "shell", "script": f"{JIANA_DIR}/cotton_test.sh"},
-    3: {"name": "등록",       "type": "db"},
-    4: {"name": "빌드",       "type": "shell", "script": f"{JIANA_DIR}/antdic.sh"},
+    3: {"name": "결과변환",   "type": "python"},
 }
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,23 @@ async def _run_shell(run_id: str, step_num: int, step: dict, file_path: str, dom
     await proc.wait()
     if proc.returncode != 0:
         raise RuntimeError(f"단계 {step_num}({step['name']}) 실패 (exit={proc.returncode})")
+
+def _sync_convert(domain: str, file_path: str) -> str:
+    """동기 Python 변환 — know-ops 형태소결과변환기 호출"""
+    if KNOW_OPS_SRC not in sys.path:
+        sys.path.insert(0, KNOW_OPS_SRC)
+    from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
+    converter = 형태소결과변환기()
+    result = converter.변환(domain, file_path)
+    return str(result)
+
+
+async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str) -> None:
+    """python 단계 — run_in_executor로 비동기 처리"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_convert, domain, file_path)
+    _publish_phase1(run_id, step_num, step["name"], 100, f"변환 완료: {result}", "running")
+
 
 def _sync_register(domain: str, file_path: str) -> int:
     """동기 DB INSERT — SQLAlchemy 독립 세션 (tasks.py _do_register 미사용)"""
@@ -109,6 +127,8 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
         try:
             if step["type"] == "shell":
                 await _run_shell(run_id, step_num, step, file_path, domain)
+            elif step["type"] == "python":
+                await _run_python(run_id, step_num, step, domain, file_path)
             elif step["type"] == "db":
                 await _run_register(run_id, step_num, step, domain, file_path)
             _publish_phase1(run_id, step_num, step["name"], 100, "완료", "completed")

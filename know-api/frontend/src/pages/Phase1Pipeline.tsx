@@ -9,7 +9,7 @@ import { phase1API } from '../api/phase1'
 const { Title } = Typography
 
 function usePhase1State() {
-  const [stepRange, setStepRange] = useState<[number, number]>([0, 4])
+  const [stepRange, setStepRange] = useState<[number, number]>([0, 3])
   const [runId, setRunId] = useState<string | null>(null)
 
   return {

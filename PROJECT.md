@@ -172,14 +172,18 @@ know refine query_log.txt --도메인 site1
 # 형태소 분석 (JDK 7 + jiana1.5.jar)
 know analyze input.txt --도메인 site1
 
-# 유사어 페어 처리
+# 형태소 결과 변환 (modify_cotton.sh → Python 변환)
+know transform input.txt --도메인 site1
+
+# 유사어 페어 처리 (파이프라인 분리 — 별도 실행)
 know synonym site1.pair --도메인 site1
 
-# 사전 빌드
+# 사전 빌드 (파이프라인 분리 — 별도 실행)
 know build --도메인 site1
 
-# 전체 파이프라인 (extract → refine → analyze → synonym → build)
+# 전체 파이프라인 4단계 (파일선택 → 정제 → 형태소분석 → 결과변환)
 know pipeline input.txt --도메인 site1
+# synonym/build는 파이프라인에서 분리됨 (코드 유지, 별도 실행)
 ```
 
 ---
@@ -199,6 +203,8 @@ know pipeline input.txt --도메인 site1
 ## Phase 계획
 
 - **Phase 1** ✅ 완료: Python CLI 패키지 (know-ops) 신규 생성 + 서버 설치 완료 (Python 3.8 호환)
+  - 파이프라인 4단계 확정: 파일선택 → 정제 → 형태소분석 → 결과변환(transform)
+  - know-ops/src/know/pipeline/변환/ 신규 패키지 (형태소결과변환기.py — modify_cotton.sh 포팅)
 - **Phase 2** ✅ 완료: FastAPI :18000 서버 + React SPA 관리 UI 구현 (JWT 인증, 도메인/사전/카테고리/통계 CRUD, systemd 유닛)
 - **Phase 3** ✅ 완료: Celery 자동화 파이프라인 구현 + 프론트엔드 통합 (Redis 미설치 → 동기 fallback 운영)
 

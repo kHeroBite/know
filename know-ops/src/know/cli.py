@@ -52,6 +52,26 @@ def 분석(입력파일: Path | None, 도메인: str, 출력: Path | None):
     click.echo(f"✅ 분석 완료: {결과파일}")
 
 
+@메인.command("transform")
+@click.argument("입력파일", required=False, type=click.Path(path_type=Path))
+@click.option("--출력", type=click.Path(path_type=Path), help="출력 파일 경로")
+def 변환(입력파일: Path | None, 출력: Path | None):
+    """형태소 분석 결과 변환 (modify_cotton.sh 대체)."""
+    from know.core.config import 기본설정
+    from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
+
+    실제입력파일 = 입력파일 or (기본설정.work_경로 / "analyzed.txt")
+    if not 실제입력파일.exists():
+        raise click.ClickException(f"입력파일 없음: {실제입력파일}")
+
+    변환기 = 형태소결과변환기()
+    결과파일 = 변환기.변환(실제입력파일)
+    if 출력 and 결과파일 != 출력:
+        결과파일.rename(출력)
+        결과파일 = 출력
+    click.echo(f"✅ 변환 완료: {결과파일}")
+
+
 @메인.command("synonym")
 @click.argument("입력", required=False, type=click.Path(path_type=Path))
 @click.option("--출력", type=click.Path(path_type=Path), help="출력 파일 경로 (기본: txt_resrc/synonym.UTF-8)")
@@ -115,19 +135,20 @@ def 추출(모드: str, n값: int, 출력: Path | None):
 @click.argument("입력파일", type=click.Path(exists=True, path_type=Path))
 @click.option("--도메인", default="default", help="도메인명")
 @click.option("--단계", default="all",
-              type=click.Choice(["all", "extract", "refine", "analyze", "synonym", "build"]),
+              type=click.Choice(["all", "extract", "refine", "analyze", "transform"]),
               help="실행할 파이프라인 단계")
 def 파이프라인(입력파일: Path, 도메인: str, 단계: str):
-    """전체 파이프라인 실행 (extract → refine → analyze → synonym → build)."""
+    """전체 파이프라인 실행 (extract → refine → analyze → transform)."""
     click.echo(f"🚀 파이프라인 시작 — 도메인: {도메인}, 단계: {단계}")
 
-    단계_순서 = ["extract", "refine", "analyze", "synonym", "build"]
+    단계_순서 = ["extract", "refine", "analyze", "transform"]
     실행_단계들 = 단계_순서 if 단계 == "all" else [단계]
 
     from know.core.config import 기본설정
 
     추출산출물 = 기본설정.work_경로 / "keywords.txt"
     정제산출물 = 기본설정.work_경로 / "refine.txt"
+    분석산출물 = 기본설정.work_경로 / "analyzed.txt"
     현재입력파일 = 입력파일
 
     for 현재단계 in 실행_단계들:
@@ -151,5 +172,19 @@ def 파이프라인(입력파일: Path, 도메인: str, 단계: str):
             결과파일 = 정제기.정제(정제입력, 도메인, 출력파일)
             현재입력파일 = 결과파일
             click.echo(f"  ✅ {현재단계} 완료: {결과파일}")
-        else:
-            click.echo(f"  (상세 구현은 Phase 2에서 추가 예정)")
+        elif 현재단계 == "analyze":
+            from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼
+
+            래퍼 = 형태소분석래퍼()
+            분석입력 = 정제산출물 if 단계 == "all" else 현재입력파일
+            결과파일 = 래퍼.분석(분석입력, 도메인, 분석산출물)
+            현재입력파일 = 결과파일
+            click.echo(f"  ✅ {현재단계} 완료: {결과파일}")
+        elif 현재단계 == "transform":
+            from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
+
+            변환기 = 형태소결과변환기()
+            변환입력 = 분석산출물 if 단계 == "all" else 현재입력파일
+            결과파일 = 변환기.변환(변환입력)
+            현재입력파일 = 결과파일
+            click.echo(f"  ✅ {현재단계} 완료: {결과파일}")

@@ -4,11 +4,10 @@ import { PlayCircleOutlined } from '@ant-design/icons'
 const { Text } = Typography
 
 const 단계마크 = {
-  0: '업로드',
+  0: '파일선택',
   1: '정제',
   2: '형태소',
-  3: '등록',
-  4: '빌드',
+  3: '결과변환',
 }
 
 interface RunParams {
@@ -33,7 +32,7 @@ export default function ControlPanel({
   const 실행가능 = !isRunning
 
   const 실행클릭 = (전체: boolean) => {
-    const range = 전체 ? [0, 4] as [number, number] : stepRange
+    const range = 전체 ? [0, 3] as [number, number] : stepRange
     onRun({
       category: folder,
       start_step: range[0],
@@ -51,7 +50,7 @@ export default function ControlPanel({
         <Slider
           range
           min={0}
-          max={4}
+          max={3}
           step={1}
           marks={단계마크}
           value={stepRange}
@@ -80,7 +79,7 @@ export default function ControlPanel({
             onClick={() => 실행클릭(true)}
             disabled={!실행가능}
           >
-            전체 실행 (0→4)
+            전체 실행 (0→3)
           </Button>
         </Tooltip>
       </Space>

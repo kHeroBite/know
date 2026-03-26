@@ -1,5 +1,23 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-27 — modify_cotton 파이썬 변환 + 파이프라인 4단계 구성
+
+### 수정 내용
+- **[신규] know-ops/src/know/pipeline/변환/__init__.py**: 변환 패키지 초기화
+- **[신규] know-ops/src/know/pipeline/변환/형태소결과변환기.py**: modify_cotton.sh → Python 변환 구현
+- **know-ops/src/know/cli.py**: `transform` 명령 추가 + pipeline 4단계 구성
+- **know-api/phase1/executor.py**: PHASE1_STEPS 4단계 정의 + `_run_python` 메서드 추가
+- **know-api/frontend/src/components/phase1/ControlPanel.tsx**: stepRange 0~3 업데이트
+- **know-api/frontend/src/pages/Phase1Pipeline.tsx**: stepRange [0,3] 기본값 변경
+- **know-api/frontend/src/components/phase1/LogPanel.tsx**: 단계이름 4단계 매핑
+
+### 배경
+- 기존 Bash 스크립트(modify_cotton.sh)의 형태소 결과 변환 로직을 Python으로 포팅
+- 파이프라인 4단계 확정: 파일선택 → 정제 → 형태소분석 → 결과변환
+- synonym/build는 코드 유지, 파이프라인에서 분리 (별도 실행)
+
+---
+
 ## 2026-03-26 — kplaywright 스킬 Windows Chrome CDP 전환
 
 ### 수정 내용
