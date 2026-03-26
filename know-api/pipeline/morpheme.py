@@ -63,12 +63,12 @@ async def run_morpheme(
     if not os.path.exists(input_file):
         raise MorphemeError(f"입력 파일 없음: {input_file}")
 
-    cmd = f"bash {script_path} {input_file} {output_file}"
-    logger.info("형태소분석 실행: %s", cmd)
+    cmd_args = ["bash", script_path, input_file, output_file]
+    logger.info("형태소분석 실행: %s", " ".join(cmd_args))
 
     try:
         result = await asyncio.wait_for(
-            _run_with_streaming(cmd, pipeline_id),
+            _run_with_streaming(cmd_args, pipeline_id),
             timeout=timeout,
         )
     except asyncio.TimeoutError:
@@ -92,10 +92,10 @@ async def run_morpheme(
     }
 
 
-async def _run_with_streaming(cmd: str, pipeline_id: int) -> Dict[str, Any]:
+async def _run_with_streaming(cmd_args: list, pipeline_id: int) -> Dict[str, Any]:
     """subprocess 실행 + stdout/stderr 스트리밍 (100자 단위 Redis 발행)"""
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    proc = await asyncio.create_subprocess_exec(
+        *cmd_args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

@@ -108,14 +108,12 @@ class BuildService:
         items = []
         for i, bh in enumerate(rows):
             item = _bh_to_dict(bh)
+            # prev_row_count: 다음 항목(시간상 이전 빌드)의 entry_count
             if i + 1 < len(rows):
                 prev = rows[i + 1]
-                if prev.entry_count is not None and bh.entry_count is not None:
-                    item["entry_count_diff"] = bh.entry_count - prev.entry_count
-                else:
-                    item["entry_count_diff"] = None
+                item["prev_row_count"] = prev.entry_count  # None 가능
             else:
-                item["entry_count_diff"] = None
+                item["prev_row_count"] = None
             items.append(item)
 
         return {
@@ -214,17 +212,24 @@ class BuildService:
 # ──────────────────────────────────────────────────────────
 
 def _bh_to_dict(bh: BuildHistory) -> dict:
+    """BuildHistory → dict 변환 (프론트엔드 스펙 준수).
+
+    프론트엔드(BuildHistory.tsx) 기대 필드:
+      id, domain, status, row_count, prev_row_count, started_at, completed_at, error_message
+    """
     return {
-        "build_history_id": bh.id,
+        "id": bh.id,
         "domain": bh.domain,
         "build_type": bh.build_type,
         "status": bh.status,
+        "row_count": bh.entry_count,          # entry_count → row_count (프론트 스펙)
+        "prev_row_count": None,               # 빌드이력() 에서 채움
         "started_at": bh.started_at.isoformat() if bh.started_at else None,
         "completed_at": bh.completed_at.isoformat() if bh.completed_at else None,
         "started_by": bh.started_by,
         "output_path": bh.output_path,
         "file_size": bh.file_size,
-        "entry_count": bh.entry_count,
+        "error_message": None,                # 확장 시 bh.error_message 매핑
     }
 
 

@@ -1,17 +1,13 @@
 """services/pipeline_service.py — 파이프라인 비즈니스 로직 서비스"""
 from __future__ import annotations
+import json
 import logging
 from typing import Optional
-import redis
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from models.pipeline import PipelineHistory, PipelineStageLog
 
 logger = logging.getLogger(__name__)
-_APPROVE_KEY = "approve:{pipeline_id}:{stage}"
-
-def _redis_client() -> redis.Redis:
-    return redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
 class PipelineService:
     def 파이프라인시작(self, db: Session, domain: str, file_path: str, started_by=None) -> dict:
@@ -52,12 +48,16 @@ class PipelineService:
         if pipeline.status == "cancelled":
             raise HTTPException(status_code=400, detail="취소된 파이프라인은 승인할 수 없습니다.")
         try:
-            r = _redis_client()
-            key = _APPROVE_KEY.format(pipeline_id=pipeline_id, stage=stage)
-            r.set(key, approved_by, ex=86400)
-            logger.info("파이프라인 승인 설정 key=%s by=%s", key, approved_by)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Redis 승인 처리 오류: {exc}")
+            approved = json.loads(pipeline.approved_stages or '{}')
+        except (ValueError, TypeError):
+            approved = {}
+        approved[stage] = approved_by
+        pipeline.approved_stages = json.dumps(approved, ensure_ascii=False)
+        # 파이프라인 상태를 paused → running으로 복귀
+        if pipeline.status == "paused":
+            pipeline.status = "running"
+        db.commit()
+        logger.info("파이프라인 DB 승인 pipeline_id=%s stage=%s by=%s", pipeline_id, stage, approved_by)
         return {"pipeline_id": pipeline_id, "stage": stage, "approved_by": approved_by, "message": f"'{stage}' 단계 승인 완료"}
 
     def 파이프라인취소(self, db: Session, pipeline_id: int) -> dict:

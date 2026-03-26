@@ -1,6 +1,6 @@
 from __future__ import annotations
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import 설정값
 
 
@@ -13,6 +13,12 @@ from .config import 설정값
 )
 
 세션팩토리 = sessionmaker(autocommit=False, autoflush=False, bind=엔진)
+
+# ORM 모델 기반 클래스 — models/pipeline.py 등에서 사용
+Base = declarative_base()
+
+# SessionLocal: build_wrapper, tasks 등 외부 모듈에서 사용하는 별칭
+SessionLocal = 세션팩토리
 
 
 def DB세션():

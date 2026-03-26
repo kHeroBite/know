@@ -1,15 +1,16 @@
-# pipeline/build_wrapper.py — antdic.sh subprocess 래퍼 (asyncio 기반)
+# pipeline/build_wrapper.py — antdic.sh subprocess 래퍼 (sync 기반)
 """
 실제 스크립트 경로: /home/know/jiana1.5.12/antdic.sh
   - ant dic 실행 (ant 빌드 + FTP 전송 + data.tar 생성)
-  - 동시 빌드 방지: asyncio.Lock (전역)
+  - 동시 빌드 방지: threading.Lock (전역)
   - 빌드 완료 후 entry_count 확인
 
 build_history 레코드 업데이트 포함.
 """
-import asyncio
 import logging
 import os
+import subprocess
+import threading
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -19,8 +20,8 @@ logger = logging.getLogger(__name__)
 ANTDIC_SH = "/home/know/jiana1.5.12/antdic.sh"
 JIANA_HOME = "/home/know/jiana1.5.12"
 
-# 전역 빌드 Lock: 동시 빌드 방지
-_build_lock = asyncio.Lock()
+# 전역 빌드 Lock: 동시 빌드 방지 (threading.Lock — Celery worker sync 환경)
+_build_lock = threading.Lock()
 
 # 빌드 타임아웃: 1시간
 BUILD_TIMEOUT = 3600
@@ -34,16 +35,16 @@ class BuildError(Exception):
         self.stderr = stderr
 
 
-async def run_build(
+def run_build(
     domain: str,
     pipeline_id: Optional[int] = None,
     build_history_id: Optional[int] = None,
     script_path: str = ANTDIC_SH,
     timeout: int = BUILD_TIMEOUT,
 ) -> Dict[str, Any]:
-    """antdic.sh를 asyncio subprocess로 실행
+    """antdic.sh를 subprocess로 실행
 
-    동시 빌드를 방지하기 위해 전역 asyncio.Lock 사용.
+    동시 빌드를 방지하기 위해 전역 threading.Lock 사용.
     build_history 테이블에 시작/완료/실패 상태를 기록.
 
     Args:
@@ -68,40 +69,37 @@ async def run_build(
         raise BuildError(f"antdic.sh 경로 없음: {script_path}")
 
     # DB에서 현재 빌드 중 여부 확인
-    _bh_id = build_history_id or await _create_build_history(domain)
+    _bh_id = build_history_id or _create_build_history(domain)
 
-    # 전역 Lock 획득 (동시 빌드 방지)
-    if _build_lock.locked():
+    # 전역 Lock 획득 시도 (non-blocking)
+    if not _build_lock.acquire(blocking=False):
         err_msg = "다른 빌드가 진행 중입니다. 잠시 후 다시 시도하세요."
-        await _fail_build_history(_bh_id, err_msg)
+        _fail_build_history(_bh_id, err_msg)
         raise BuildError(err_msg)
 
-    async with _build_lock:
+    try:
         logger.info("빌드 시작: domain=%s, build_history_id=%s", domain, _bh_id)
-        await _update_build_history(_bh_id, status="running")
+        _update_build_history(_bh_id, status="running")
 
         try:
-            result = await asyncio.wait_for(
-                _run_antdic(script_path, domain, pipeline_id),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
+            result = _run_antdic(script_path, domain, pipeline_id, timeout)
+        except subprocess.TimeoutExpired:
             msg = f"빌드 타임아웃 ({timeout}초 초과)"
-            await _fail_build_history(_bh_id, msg)
+            _fail_build_history(_bh_id, msg)
             raise BuildError(msg, returncode=-1)
 
         if result["returncode"] != 0:
             msg = f"antdic.sh 실패 (returncode={result['returncode']})"
-            await _fail_build_history(_bh_id, msg, log_text=result.get("log", ""))
+            _fail_build_history(_bh_id, msg, log_text=result.get("log", ""))
             raise BuildError(msg, returncode=result["returncode"],
                              stderr=result.get("stderr", ""))
 
         # 빌드 결과물 확인
         data_tar = os.path.join(JIANA_HOME, "data.tar")
         file_size = os.path.getsize(data_tar) if os.path.exists(data_tar) else None
-        entry_count = await _count_entries(domain)
+        entry_count = _count_entries(domain)
 
-        await _update_build_history(
+        _update_build_history(
             _bh_id,
             status="completed",
             output_path=data_tar,
@@ -119,53 +117,51 @@ async def run_build(
             "log": result.get("log", ""),
             "build_history_id": _bh_id,
         }
+    finally:
+        _build_lock.release()
 
 
-async def _run_antdic(script_path: str, domain: str,
-                      pipeline_id: Optional[int]) -> Dict[str, Any]:
-    """antdic.sh 실행 + 로그 스트리밍"""
-    # antdic.sh는 JIANA_HOME 디렉토리에서 실행해야 함
+def _run_antdic(script_path: str, domain: str,
+                pipeline_id: Optional[int],
+                timeout: int) -> Dict[str, Any]:
+    """antdic.sh 실행 (subprocess.run 동기 방식)"""
     cmd = f"cd {JIANA_HOME} && bash {script_path}"
     logger.info("antdic.sh 실행: %s", cmd)
 
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=JIANA_HOME,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            cwd=JIANA_HOME,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise
+
+    stdout_text = proc.stdout.decode("utf-8", errors="replace")
+    stderr_text = proc.stderr.decode("utf-8", errors="replace")
 
     log_parts = []
-    stderr_buf = []
+    for line in stdout_text.splitlines():
+        log_parts.append(f"[OUT] {line}")
+    for line in stderr_text.splitlines():
+        log_parts.append(f"[ERR] {line}")
 
-    async def read_stream(stream, buf: list, label: str):
-        accumulated = ""
-        async for line in stream:
-            text = line.decode("utf-8", errors="replace").rstrip()
-            buf.append(text)
-            log_parts.append(f"[{label}] {text}")
-            accumulated += text + "\n"
-            if len(accumulated) >= 100:
-                if pipeline_id is not None:
-                    _publish_log(pipeline_id, "build", accumulated)
-                accumulated = ""
-        if accumulated and pipeline_id is not None:
-            _publish_log(pipeline_id, "build", accumulated)
+    full_log = "\n".join(log_parts)
 
-    await asyncio.gather(
-        read_stream(proc.stdout, log_parts, "OUT"),
-        read_stream(proc.stderr, stderr_buf, "ERR"),
-    )
-    await proc.wait()
+    # Redis pub/sub 로그 발행 (실패해도 무시)
+    if pipeline_id is not None and full_log:
+        _publish_log(pipeline_id, "build", full_log)
 
     return {
         "returncode": proc.returncode,
-        "log": "\n".join(log_parts),
-        "stderr": "\n".join(stderr_buf),
+        "log": full_log,
+        "stderr": stderr_text,
     }
 
 
-async def _count_entries(domain: str) -> Optional[int]:
+def _count_entries(domain: str) -> Optional[int]:
     """빌드 결과 항목 수 조회 (dictionary 테이블)"""
     try:
         from core.database import SessionLocal
@@ -184,7 +180,7 @@ async def _count_entries(domain: str) -> Optional[int]:
         return None
 
 
-async def _create_build_history(domain: str) -> int:
+def _create_build_history(domain: str) -> int:
     """build_history 신규 레코드 생성, ID 반환"""
     try:
         from core.database import SessionLocal
@@ -203,7 +199,7 @@ async def _create_build_history(domain: str) -> int:
         return -1
 
 
-async def _update_build_history(
+def _update_build_history(
     build_id: int,
     status: str,
     output_path: str = None,
@@ -239,17 +235,18 @@ async def _update_build_history(
         logger.warning("build_history 업데이트 실패: %s", e)
 
 
-async def _fail_build_history(build_id: int, error_msg: str,
-                               log_text: str = None):
+def _fail_build_history(build_id: int, error_msg: str,
+                        log_text: str = None):
     """build_history 실패 처리"""
-    await _update_build_history(build_id, status="failed", log_text=
-                                f"[오류] {error_msg}\n" + (log_text or ""))
+    _update_build_history(build_id, status="failed", log_text=
+                          f"[오류] {error_msg}\n" + (log_text or ""))
 
 
 def _publish_log(pipeline_id: int, stage: str, text: str):
-    """Redis pub/sub으로 빌드 로그 스트리밍"""
+    """Redis pub/sub으로 빌드 로그 스트리밍 (실패 시 무시)"""
     try:
-        import redis, json
+        import redis
+        import json
         r = redis.Redis(host="localhost", port=6379, db=0)
         payload = json.dumps({
             "stage": stage,
@@ -268,5 +265,5 @@ if __name__ == "__main__":
     import sys
     logging.basicConfig(level=logging.INFO)
     domain_arg = sys.argv[1] if len(sys.argv) > 1 else "base"
-    result = asyncio.run(run_build(domain_arg))
+    result = run_build(domain_arg)
     print(f"빌드 결과: {result}")

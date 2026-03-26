@@ -8,14 +8,14 @@ from api.auth import 현재사용자가져오기
 from core.database import DB세션
 from services.build_service import build_service
 
-라우터 = APIRouter(tags=["빌드"])
+라우터 = APIRouter(prefix="/api/build", tags=["빌드"])
 
 
 # ──────────────────────────────────────────────
 # 빌드
 # ──────────────────────────────────────────────
 
-@라우터.post("/api/build/{domain}")
+@라우터.post("/{domain}")
 def 빌드시작(
     domain: str,
     background_tasks: BackgroundTasks,
@@ -27,7 +27,7 @@ def 빌드시작(
     return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by)
 
 
-@라우터.get("/api/build/{domain}/status")
+@라우터.get("/{domain}/status")
 def 빌드상태조회(
     domain: str,
     current_user: dict = Depends(현재사용자가져오기),
@@ -37,7 +37,7 @@ def 빌드상태조회(
     return build_service.빌드상태(db, domain)
 
 
-@라우터.get("/api/build/{domain}/history")
+@라우터.get("/{domain}/history")
 def 빌드이력조회(
     domain: str,
     page: int = Query(default=1, ge=1),

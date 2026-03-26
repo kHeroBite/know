@@ -1,5 +1,6 @@
 # pipeline/tasks.py — Celery 태스크 체인 (Phase 3 파이프라인 6단계)
 import logging
+import os
 from datetime import datetime
 
 from celery import chain
@@ -18,10 +19,48 @@ def _get_db():
     return SessionLocal()
 
 
-def _publish(pipeline_id: int, stage: str, pct: int, msg: str):
-    """Redis pub/sub으로 진행률 발행"""
+def _wait_for_approval(pipeline_id, stage, timeout=3600):
+    # type: (int, str, int) -> str
+    """DB 폴링으로 승인 대기. 5초 간격으로 최대 timeout 초 대기."""
+    import time
+    import json
+    from models.pipeline import PipelineHistory
+
+    deadline = time.time() + timeout
+    # 파이프라인 상태를 paused로 변경
+    db = _get_db()
     try:
-        import redis, json
+        pipeline = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
+        if pipeline:
+            pipeline.status = "paused"
+            db.commit()
+    finally:
+        db.close()
+
+    while time.time() < deadline:
+        time.sleep(5)
+        db = _get_db()
+        try:
+            pipeline = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
+            if not pipeline or pipeline.status == "cancelled":
+                raise Exception("파이프라인 취소됨")
+            try:
+                approved = json.loads(pipeline.approved_stages or '{}')
+            except Exception:
+                approved = {}
+            if stage in approved:
+                return approved[stage]
+        finally:
+            db.close()
+
+    raise Exception("승인 타임아웃 ({timeout}초): {stage}".format(timeout=timeout, stage=stage))
+
+
+def _publish(pipeline_id: int, stage: str, pct: int, msg: str):
+    """Redis pub/sub으로 진행률 발행 (실패 시 무시)"""
+    try:
+        import redis
+        import json
         r = redis.Redis(host="localhost", port=6379, db=0)
         payload = json.dumps({
             "stage": stage,
@@ -111,6 +150,10 @@ def task_refine(self, pipeline_id: int, file_path: str):
                       log_text=result["summary"])
         _publish(pipeline_id, "refine", 20,
                  f"정제 완료: {result['output_count']}건 (제거 {result['removed_count']}건)")
+        db.close()
+        # 승인 게이트: refine 완료 후 morpheme 시작 전 관리자 승인 필요
+        _wait_for_approval(pipeline_id, "refine")
+        db = _get_db()
         return {"pipeline_id": pipeline_id, "refined_file": result["output_file"]}
     except Exception as exc:
         logger.error("task_refine 실패 pipeline_id=%s: %s", pipeline_id, exc)
@@ -136,15 +179,16 @@ def task_morpheme(self, prev_result: dict, pipeline_id: int):
         _update_pipeline(db, pipeline_id, "running", current_stage="morpheme")
         _publish(pipeline_id, "morpheme", 25, "형태소분석 시작")
 
-        import asyncio
         from pipeline.morpheme import run_morpheme
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(run_morpheme(refined_file, pipeline_id))
-        loop.close()
+        result = run_morpheme(refined_file, pipeline_id)
 
         _update_stage(db, pipeline_id, "morpheme", "completed",
                       log_text=result.get("log", ""))
         _publish(pipeline_id, "morpheme", 50, "형태소분석 완료")
+        db.close()
+        # 승인 게이트: morpheme 완료 후 register 시작 전 관리자 승인 필요
+        _wait_for_approval(pipeline_id, "morpheme")
+        db = _get_db()
         return {"pipeline_id": pipeline_id, "morpheme_result": result["output_file"]}
     except Exception as exc:
         logger.error("task_morpheme 실패 pipeline_id=%s: %s", pipeline_id, exc)
@@ -170,7 +214,12 @@ def task_register(self, prev_result: dict, pipeline_id: int):
         _update_pipeline(db, pipeline_id, "running", current_stage="register")
         _publish(pipeline_id, "register", 55, "사전등록 시작")
 
-        registered = _do_register(morpheme_result, pipeline_id, db)
+        # pipeline_history에서 domain 조회
+        from models.pipeline import PipelineHistory
+        ph_row = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
+        domain = ph_row.domain if ph_row and hasattr(ph_row, "domain") else "base"
+
+        registered = _do_register(db, pipeline_id, domain, morpheme_result)
 
         _update_stage(db, pipeline_id, "register", "completed",
                       output_count=registered,
@@ -187,22 +236,33 @@ def task_register(self, prev_result: dict, pipeline_id: int):
         db.close()
 
 
-def _do_register(morpheme_result_file: str, pipeline_id: int, db) -> int:
-    """형태소분석 결과 파일을 읽어 dictionary 테이블에 등록"""
-    import os
-    if not morpheme_result_file or not os.path.exists(morpheme_result_file):
-        logger.warning("형태소분석 결과 파일 없음: %s", morpheme_result_file)
+def _do_register(db, pipeline_id: int, domain: str, morpheme_path: str) -> int:
+    """형태소분석 결과를 dictionary_{domain} 테이블에 INSERT"""
+    if not morpheme_path or not os.path.exists(morpheme_path):
+        logger.warning("형태소분석 결과 파일 없음: %s", morpheme_path)
         return 0
 
-    registered = 0
-    with open(morpheme_result_file, "r", encoding="utf-8") as f:
-        for line in f:
-            word = line.strip()
-            if not word:
-                continue
-            # TODO: domain 파라미터 필요 — pipeline_history에서 조회
-            registered += 1
-    return registered
+    count = 0
+    try:
+        with open(morpheme_path, "r", encoding="utf-8") as f:
+            words = [line.strip() for line in f if line.strip()]
+
+        if words:
+            from sqlalchemy import text
+            for word in words:
+                try:
+                    db.execute(
+                        text(f"INSERT IGNORE INTO dictionary_{domain}(_WORD) VALUES (:w)"),
+                        {"w": word},
+                    )
+                    count += 1
+                except Exception as e:
+                    logger.debug("단어 INSERT 실패 (word=%s): %s", word, e)
+            db.commit()
+            logger.info("_do_register 완료: domain=%s, 등록=%d건", domain, count)
+    except Exception as e:
+        logger.error("_do_register 오류: %s", e)
+    return count
 
 
 # ─────────────────────────────────────────────
@@ -218,11 +278,8 @@ def task_build(self, prev_result: dict, pipeline_id: int, domain: str):
         _update_pipeline(db, pipeline_id, "running", current_stage="build")
         _publish(pipeline_id, "build", 75, "사전 빌드 시작")
 
-        import asyncio
         from pipeline.build_wrapper import run_build
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(run_build(domain, pipeline_id))
-        loop.close()
+        result = run_build(domain, pipeline_id)
 
         summary = (
             f"빌드 완료 — domain={domain} "

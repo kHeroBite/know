@@ -26,6 +26,7 @@ class PipelineHistory(Base):
     input_file = Column(String(500), nullable=True)
     result_summary = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    approved_stages = Column(MEDIUMTEXT, nullable=True)  # JSON: {"refine": "admin", "morpheme": "admin"}
 
     def __repr__(self):
         return f"<PipelineHistory id={self.id} domain={self.domain} status={self.status}>"
