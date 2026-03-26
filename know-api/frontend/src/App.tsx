@@ -9,6 +9,7 @@ import Statistics from './pages/Statistics'
 import Pipeline from './pages/Pipeline'
 import Knowledge from './pages/Knowledge'
 import BuildHistory from './pages/BuildHistory'
+import Phase1Pipeline from './pages/Phase1Pipeline'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token)
@@ -20,7 +21,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/domains" replace />} />
+        <Route index element={<Navigate to="/phase1" replace />} />
+        <Route path="phase1" element={<Phase1Pipeline />} />
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="category" element={<CategoryManage />} />

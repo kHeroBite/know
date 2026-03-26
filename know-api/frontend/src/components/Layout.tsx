@@ -11,6 +11,7 @@ export default function Layout() {
   const location = useLocation()
 
   const menuItems = [
+    { key: '/phase1', label: 'Phase1 파이프라인' },
     { key: '/domains', label: '도메인 관리' },
     { key: '/dictionary', label: '사전 관리' },
     { key: '/category', label: '카테고리 관리' },

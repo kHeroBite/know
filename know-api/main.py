@@ -14,6 +14,7 @@ from api.pipeline import 라우터 as 파이프라인라우터
 from api.knowledge import 라우터 as 지식작업라우터
 from api.build import 라우터 as 빌드라우터
 from api.realtime import 라우터 as 실시간라우터
+from api.phase1 import 라우터 as phase1라우터, ws라우터 as phase1_ws라우터
 
 
 앱 = FastAPI(
@@ -41,6 +42,8 @@ from api.realtime import 라우터 as 실시간라우터
 앱.include_router(빌드라우터)
 # WebSocket 라우터는 prefix 없이 등록 (/ws/... 경로 유지)
 앱.include_router(실시간라우터)
+앱.include_router(phase1라우터, prefix="/api", tags=["phase1"])
+앱.include_router(phase1_ws라우터)  # Phase1 WS는 prefix 없이
 
 
 
