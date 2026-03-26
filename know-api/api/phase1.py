@@ -34,8 +34,15 @@ class Phase1실행요청(BaseModel):
     start_step: int = 0
     end_step: int = 4
 
-class 도메인생성요청(BaseModel):
+class 워크스페이스생성요청(BaseModel):
     name: str
+
+class 도메인복사요청(BaseModel):
+    source: str
+    target: str
+
+class 도메인적용요청(BaseModel):
+    workspace: str
 
 @라우터.get("/preprocess/files/{folder}")
 async def 파일목록(folder: str):
@@ -78,6 +85,27 @@ async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundT
     return {"run_id": run_id}
 
 # ─────────────────────────────────────────────
+# 워크스페이스 관리 API
+# ─────────────────────────────────────────────
+
+@라우터.get("/preprocess/workspaces")
+async def 워크스페이스목록조회():
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.워크스페이스목록()
+
+@라우터.post("/preprocess/workspaces")
+async def 워크스페이스생성(body: 워크스페이스생성요청):
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.워크스페이스생성(body.name)
+
+@라우터.delete("/preprocess/workspaces/{name}")
+async def 워크스페이스삭제(name: str, current_user: dict = Depends(현재사용자가져오기)):
+    if current_user.get("user_id") != "super":
+        raise HTTPException(status_code=403, detail="super 권한 필요")
+    from services.phase1_service import Phase1서비스
+    return await Phase1서비스.워크스페이스삭제(name)
+
+# ─────────────────────────────────────────────
 # 도메인 관리 API
 # ─────────────────────────────────────────────
 
@@ -86,10 +114,10 @@ async def 도메인목록조회():
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.도메인목록()
 
-@라우터.post("/preprocess/domains")
-async def 도메인생성(body: 도메인생성요청):
+@라우터.post("/preprocess/domains/copy")
+async def 도메인복사(body: 도메인복사요청):
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.도메인생성(body.name)
+    return await Phase1서비스.도메인복사(body.source, body.target)
 
 @라우터.delete("/preprocess/domains/{name}")
 async def 도메인삭제(name: str, current_user: dict = Depends(현재사용자가져오기)):
@@ -98,10 +126,10 @@ async def 도메인삭제(name: str, current_user: dict = Depends(현재사용�
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.도메인삭제(name)
 
-@라우터.post("/preprocess/domains/{name}/load")
-async def 도메인불러오기(name: str):
+@라우터.post("/preprocess/domains/{name}/apply")
+async def 도메인적용(name: str, body: 도메인적용요청):
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.도메인불러오기(name)
+    return await Phase1서비스.도메인적용(name, body.workspace)
 
 @ws라우터.websocket("/ws/preprocess/{run_id}")
 async def phase1_ws(websocket: WebSocket, run_id: str):
