@@ -4,6 +4,7 @@
 
 /* ---------- CSS 변수 ---------- */
 :root {
+  --theme-color: #1a1a2e;
   --primary: #4f8ef7;
   --primary-hover: #2d6ef5;
   --sider-bg-start: #0f1c3f;
@@ -97,7 +98,7 @@ body {
 }
 
 .app-sider .ant-menu-dark .ant-menu-item:hover {
-  background: rgba(79, 142, 247, 0.2) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
   padding-left: 20px !important;
   transform: translateX(2px);
 }
@@ -107,8 +108,8 @@ body {
 }
 
 .app-sider .ant-menu-dark .ant-menu-item-selected {
-  background: rgba(79, 142, 247, 0.3) !important;
-  box-shadow: inset 0 0 0 1px rgba(79, 142, 247, 0.4);
+  background: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .app-sider .ant-menu-dark .ant-menu-item-selected::before {

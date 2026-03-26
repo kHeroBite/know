@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  Card, Form, Input, Select, Button, Steps, Table, Tag, Modal,
+  Card, Form, Input, Button, Steps, Table, Tag, Modal,
   Typography, Space, Divider, message
 } from 'antd'
 import {
@@ -8,6 +8,7 @@ import {
   LoadingOutlined, ClockCircleOutlined, WarningOutlined
 } from '@ant-design/icons'
 import { usePipelineStore } from '../stores/pipelineStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import { 파이프라인API } from '../api/pipeline'
 
 const { Title, Text } = Typography
@@ -28,8 +29,6 @@ const 단계색: Record<string, string> = {
   waiting_approval: 'warning',
 }
 
-const 도메인목록 = ['it', 'law', 'med', 'eco', 'sci', 'general']
-
 export default function Pipeline() {
   const [form] = Form.useForm()
   const [이력, set이력] = useState<any[]>([])
@@ -39,6 +38,8 @@ export default function Pipeline() {
   const [로딩, set로딩] = useState(false)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
+
+  const { selectedDomain } = useWorkspaceStore()
 
   const {
     currentPipelineId, status, stages, logs,
@@ -93,9 +94,13 @@ export default function Pipeline() {
   }, [logs])
 
   const 파이프라인시작 = async (values: any) => {
+    if (!selectedDomain) {
+      message.warning('워크스페이스에서 도메인을 먼저 선택하세요.')
+      return
+    }
     set로딩(true)
     try {
-      const res = await 파이프라인API.시작(values.domain, values.file_path)
+      const res = await 파이프라인API.시작(selectedDomain, values.file_path)
       setCurrentPipeline(res.data.pipeline_id)
       message.success('파이프라인이 시작되었습니다.')
     } catch (err: any) {
@@ -146,10 +151,8 @@ export default function Pipeline() {
       {/* 시작 폼 */}
       <Card title="파이프라인 시작">
         <Form form={form} layout="inline" onFinish={파이프라인시작}>
-          <Form.Item name="domain" rules={[{ required: true, message: '도메인 선택' }]}>
-            <Select placeholder="도메인" style={{ width: 140 }}>
-              {도메인목록.map(d => <Select.Option key={d} value={d}>{d}</Select.Option>)}
-            </Select>
+          <Form.Item label="도메인">
+            <Text strong>{selectedDomain || <Text type="secondary">워크스페이스 미선택</Text>}</Text>
           </Form.Item>
           <Form.Item name="file_path" rules={[{ required: true, message: '파일 경로 입력' }]} style={{ flex: 1 }}>
             <Input placeholder="/path/to/input.csv" style={{ width: 400 }} />

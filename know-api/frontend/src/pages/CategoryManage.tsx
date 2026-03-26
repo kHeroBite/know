@@ -1,26 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Select, Table, Button, Modal, Form, Input, Popconfirm, message, Space, Typography } from 'antd'
+import { Table, Button, Modal, Form, Input, Popconfirm, message, Typography } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
-interface Domain { site: string; memo: string }
 interface Category { word: string; display_category: string }
 
 export default function CategoryManage() {
-  const [도메인목록, set도메인목록] = useState<Domain[]>([])
-  const [선택도메인, set선택도메인] = useState<string>('')
+  const { selectedDomain: 선택도메인 } = useWorkspaceStore()
   const [목록, set목록] = useState<Category[]>([])
   const [로딩, set로딩] = useState(false)
   const [모달열림, set모달열림] = useState(false)
   const [저장중, set저장중] = useState(false)
   const [form] = Form.useForm()
-
-  useEffect(() => {
-    클라이언트.get('/domains').then(res => {
-      set도메인목록(res.data?.items || [])
-      if (res.data?.items?.length > 0) set선택도메인(res.data.items[0].site)
-    }).catch(() => message.error('도메인 목록 조회 실패'))
-  }, [])
 
   useEffect(() => {
     if (선택도메인) 목록조회()
@@ -87,16 +79,7 @@ export default function CategoryManage() {
     <div>
       <Typography.Title level={4} style={{ marginBottom: 16 }}>카테고리 관리</Typography.Title>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Space>
-          <span>도메인:</span>
-          <Select
-            value={선택도메인}
-            onChange={val => set선택도메인(val)}
-            style={{ width: 180 }}
-            options={도메인목록.map(d => ({ value: d.site, label: d.site }))}
-          />
-        </Space>
+      <div style={{ marginBottom: 16 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); set모달열림(true) }}>
           항목 추가
         </Button>

@@ -41,14 +41,16 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <Title level={3}>데이터 전처리</Title>
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={24} lg={12}>
-          <Card title="파일 관리 — popular" style={{ height: '100%' }}>
-            <FilePanel folder="popular" />
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="파일 관리 — fails" style={{ height: '100%' }}>
-            <FilePanel folder="fails" />
+        <Col span={24}>
+          <Card title="파일관리">
+            <Row gutter={16}>
+              <Col xs={24} lg={12}>
+                <FilePanel folder="popular" />
+              </Col>
+              <Col xs={24} lg={12}>
+                <FilePanel folder="fails" />
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>

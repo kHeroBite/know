@@ -15,6 +15,7 @@ import {
   Modal,
   Empty,
   Spin,
+  Popover,
 } from 'antd'
 import {
   PlusOutlined,
@@ -22,6 +23,7 @@ import {
   DisconnectOutlined,
   DeleteOutlined,
   CheckCircleOutlined,
+  BgColorsOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
 import { useAuthStore } from '../stores/authStore'
@@ -29,10 +31,18 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title, Text } = Typography
 
+const 색상팔레트 = [
+  '#0f1c3f', '#1a1a2e', '#1a2744', '#1e3a5f',
+  '#134e4a', '#14532d', '#4c1d95', '#7f1d1d',
+  '#7c2d12', '#1e293b', '#312e81', '#164e63',
+]
+
 interface 워크스페이스항목 {
   name: string
   status: 'IDLE' | 'USED'
   domain: string | null
+  connected_by: string | null
+  color: string | null
 }
 
 export default function Workspace() {
@@ -42,10 +52,12 @@ export default function Workspace() {
   const [도메인목록, set도메인목록] = useState<string[]>([])
   const [로딩, set로딩] = useState(false)
   const [새이름, set새이름] = useState('')
+  const [새색상, set새색상] = useState<string | null>(null)
   const [생성로딩, set생성로딩] = useState(false)
   const [연결팝업WS, set연결팝업WS] = useState<string | null>(null)
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
+  const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
   const isSuper = currentUser?.user_id === 'super'
@@ -103,9 +115,10 @@ export default function Workspace() {
     }
     set생성로딩(true)
     try {
-      await workspaceAPI.워크스페이스생성(새이름.trim())
+      await workspaceAPI.워크스페이스생성(새이름.trim(), 새색상)
       message.success(`워크스페이스 "${새이름}" 생성 완료`)
       set새이름('')
+      set새색상(null)
       await 목록조회()
     } catch (err: any) {
       message.error(err.response?.data?.detail || '생성 실패')
@@ -152,12 +165,60 @@ export default function Workspace() {
     }
   }
 
+  const 색상변경핸들러 = async (wsName: string, color: string) => {
+    try {
+      await workspaceAPI.색상변경(wsName, color)
+      set색상팝업WS(null)
+      // 현재 선택된 워크스페이스 색상이 변경된 경우 스토어도 즉시 갱신
+      if (selectedWorkspace === wsName) {
+        const ws = 목록.find(w => w.name === wsName)
+        if (ws?.domain) setWorkspace(wsName, ws.domain, color)
+      }
+      await 목록조회()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '색상 변경 실패')
+    }
+  }
+
+  const 색상팔레트UI = (wsName: string, currentColor: string | null) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 168 }}>
+      {색상팔레트.map(c => (
+        <div
+          key={c}
+          onClick={() => 색상변경핸들러(wsName, c)}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 6,
+            background: c,
+            cursor: 'pointer',
+            border: currentColor === c ? '2px solid #fff' : '2px solid transparent',
+            boxShadow: currentColor === c ? '0 0 0 2px #1677ff' : 'none',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.15)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+        />
+      ))}
+    </div>
+  )
+
   const getCardStyle = (ws: 워크스페이스항목): React.CSSProperties => {
     const isSelected = selectedWorkspace === ws.name
+    const themeColor = ws.color
     if (isSelected) {
       return {
-        border: '2px solid #52c41a',
-        boxShadow: '0 0 14px rgba(82, 196, 26, 0.35)',
+        border: `2px solid ${themeColor || '#52c41a'}`,
+        boxShadow: themeColor
+          ? `0 0 14px ${themeColor}88`
+          : '0 0 14px rgba(82, 196, 26, 0.35)',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (themeColor) {
+      return {
+        border: ws.status === 'USED' ? `1px solid ${themeColor}` : `1px dashed ${themeColor}`,
         transition: 'all 0.3s ease',
         animation: 'wsCardFadeIn 0.4s ease',
       }
@@ -189,22 +250,50 @@ export default function Workspace() {
 
       {isSuper && (
         <Card style={{ marginBottom: 16, animation: 'wsCardFadeIn 0.3s ease' }}>
-          <Space>
-            <Input
-              placeholder="워크스페이스 이름"
-              value={새이름}
-              onChange={e => set새이름(e.target.value)}
-              onPressEnter={생성핸들러}
-              style={{ width: 200 }}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={생성핸들러}
-              loading={생성로딩}
-            >
-              생성
-            </Button>
+          <Space direction="vertical" size={10}>
+            <Space>
+              <Input
+                placeholder="워크스페이스 이름"
+                value={새이름}
+                onChange={e => set새이름(e.target.value)}
+                onPressEnter={생성핸들러}
+                style={{ width: 200 }}
+              />
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={생성핸들러}
+                loading={생성로딩}
+              >
+                생성
+              </Button>
+            </Space>
+            {/* 색상 팔레트 (생성 시) */}
+            <Space size={4} align="center">
+              <Text type="secondary" style={{ fontSize: 12 }}>색상:</Text>
+              {색상팔레트.map(c => (
+                <div
+                  key={c}
+                  onClick={() => set새색상(새색상 === c ? null : c)}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 4,
+                    background: c,
+                    cursor: 'pointer',
+                    border: 새색상 === c ? '2px solid #1677ff' : '2px solid #d9d9d9',
+                    transition: 'transform 0.15s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+                />
+              ))}
+              {새색상 && (
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  선택됨
+                </Text>
+              )}
+            </Space>
           </Space>
         </Card>
       )}
@@ -240,13 +329,30 @@ export default function Workspace() {
                       marginBottom: 10,
                     }}
                   >
-                    <Text strong style={{ fontSize: 15 }}>
-                      {ws.name}
-                    </Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {ws.color && (
+                        <div
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: 3,
+                            background: ws.color,
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <Text strong style={{ fontSize: 15 }}>
+                        {ws.name}
+                      </Text>
+                    </div>
                     {isSelected ? (
                       <Badge
                         status="success"
-                        text={<Text style={{ color: '#52c41a', fontSize: 12 }}>선택됨</Text>}
+                        text={
+                          <Text style={{ color: ws.color || '#52c41a', fontSize: 12 }}>
+                            선택됨
+                          </Text>
+                        }
                       />
                     ) : ws.status === 'USED' ? (
                       <Badge status="processing" text={<Text style={{ fontSize: 12 }}>USED</Text>} />
@@ -256,7 +362,7 @@ export default function Workspace() {
                   </div>
 
                   {/* 도메인 정보 */}
-                  <div style={{ marginBottom: 14, minHeight: 22 }}>
+                  <div style={{ marginBottom: 4, minHeight: 22 }}>
                     {ws.domain ? (
                       <Badge color="blue" text={<Text style={{ fontSize: 13 }}>{ws.domain}</Text>} />
                     ) : (
@@ -264,6 +370,15 @@ export default function Workspace() {
                         연결된 도메인 없음
                       </Text>
                     )}
+                  </div>
+
+                  {/* 연결자 정보 */}
+                  <div style={{ marginBottom: 12, minHeight: 18 }}>
+                    {ws.connected_by ? (
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        연결: {ws.connected_by}
+                      </Text>
+                    ) : null}
                   </div>
 
                   {/* 버튼 영역 */}
@@ -282,6 +397,17 @@ export default function Workspace() {
                         >
                           연결
                         </Button>
+                        <Popover
+                          content={색상팔레트UI(ws.name, ws.color)}
+                          title="색상 선택"
+                          trigger="click"
+                          open={색상팝업WS === ws.name}
+                          onOpenChange={open => set색상팝업WS(open ? ws.name : null)}
+                        >
+                          <Button size="small" icon={<BgColorsOutlined />}>
+                            색상
+                          </Button>
+                        </Popover>
                         {isSuper && (
                           <Popconfirm
                             title={`"${ws.name}" 워크스페이스를 삭제하시겠습니까?`}
@@ -304,10 +430,21 @@ export default function Workspace() {
                           size="small"
                           icon={isSelected ? <CheckCircleOutlined /> : undefined}
                           disabled={!currentUser || isSelected}
-                          onClick={() => ws.domain && setWorkspace(ws.name, ws.domain)}
+                          onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
                         >
                           {isSelected ? '선택됨' : '선택'}
                         </Button>
+                        <Popover
+                          content={색상팔레트UI(ws.name, ws.color)}
+                          title="색상 선택"
+                          trigger="click"
+                          open={색상팝업WS === ws.name}
+                          onOpenChange={open => set색상팝업WS(open ? ws.name : null)}
+                        >
+                          <Button size="small" icon={<BgColorsOutlined />}>
+                            색상
+                          </Button>
+                        </Popover>
                         <Popconfirm
                           title={`"${ws.name}" 워크스페이스를 해제하시겠습니까?`}
                           onConfirm={() => 해제핸들러(ws.name)}

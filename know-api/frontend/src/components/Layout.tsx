@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
@@ -10,7 +11,23 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
+
+  useEffect(() => {
+    const color = selectedColor || '#1a1a2e'
+    document.documentElement.style.setProperty('--theme-color', color)
+    if (selectedColor) {
+      document.documentElement.style.setProperty('--primary', selectedColor)
+      document.documentElement.style.setProperty('--primary-hover', selectedColor)
+      document.documentElement.style.setProperty('--sider-bg-start', selectedColor)
+      document.documentElement.style.setProperty('--sider-bg-end', selectedColor)
+    } else {
+      document.documentElement.style.removeProperty('--primary')
+      document.documentElement.style.removeProperty('--primary-hover')
+      document.documentElement.style.removeProperty('--sider-bg-start')
+      document.documentElement.style.removeProperty('--sider-bg-end')
+    }
+  }, [selectedColor])
 
   const menuItems = [
     {
@@ -39,7 +56,11 @@ export default function Layout() {
     <AntLayout style={{ minHeight: '100vh' }}>
       <Sider className="app-sider">
         <div className="app-sider-title">
-          {selectedWorkspace ? `지식작업소(${selectedWorkspace})` : '지식작업소'}
+          {selectedWorkspace
+            ? selectedDomain
+              ? `지식작업소(${selectedWorkspace}-${selectedDomain})`
+              : `지식작업소(${selectedWorkspace})`
+            : '지식작업소'}
         </div>
         <Menu
           theme="dark"

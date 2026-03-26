@@ -5,10 +5,9 @@ import {
 } from 'antd'
 import { BuildOutlined, ReloadOutlined } from '@ant-design/icons'
 import { 빌드API } from '../api/pipeline'
+import { workspaceAPI } from '../api/workspace'
 
 const { Title, Text } = Typography
-
-const 도메인목록 = ['it', 'law', 'med', 'eco', 'sci', 'general']
 
 interface 빌드이력항목 {
   id: number
@@ -22,13 +21,22 @@ interface 빌드이력항목 {
 }
 
 export default function BuildHistory() {
-  const [선택도메인, set선택도메인] = useState<string>('it')
+  const [도메인목록, set도메인목록] = useState<string[]>([])
+  const [선택도메인, set선택도메인] = useState<string>('')
   const [이력, set이력] = useState<빌드이력항목[]>([])
   const [빌드로그, set빌드로그] = useState<string[]>([])
   const [빌드중, set빌드중] = useState(false)
   const [이력로딩, set이력로딩] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    workspaceAPI.도메인목록().then(res => {
+      const list = res.data as string[]
+      set도메인목록(list)
+      if (list.length > 0) set선택도메인(list[0])
+    }).catch(() => message.error('도메인 목록 조회 실패'))
+  }, [])
 
   const 이력조회 = async (domain: string) => {
     set이력로딩(true)

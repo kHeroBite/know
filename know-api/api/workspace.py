@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from api.auth import 현재사용자가져오기
 from services.workspace_service import (
     도메인목록,
     도메인연결,
+    색상변경,
     워크스페이스목록,
     워크스페이스삭제,
     워크스페이스생성,
@@ -21,10 +22,15 @@ from services.workspace_service import (
 
 class 워크스페이스생성요청(BaseModel):
     name: str
+    color: Optional[str] = None
 
 
 class 도메인연결요청(BaseModel):
     domain: str
+
+
+class 색상변경요청(BaseModel):
+    color: str
 
 
 def _super권한확인(current: dict) -> None:
@@ -55,7 +61,7 @@ def 워크스페이스추가(
 ) -> Dict[str, Any]:
     """워크스페이스 생성 (super 전용). 하위 폴더 자동 생성."""
     _super권한확인(current)
-    return 워크스페이스생성(요청.name)
+    return 워크스페이스생성(요청.name, 요청.color)
 
 
 @라우터.delete("/{name}", status_code=status.HTTP_200_OK)
@@ -73,10 +79,10 @@ def 워크스페이스제거(
 def 도메인연결처리(
     name: str,
     요청: 도메인연결요청,
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
     """도메인 연결. USED 상태면 409 반환. domain 폴더를 workspace로 cp."""
-    return 도메인연결(name, 요청.domain)
+    return 도메인연결(name, 요청.domain, current.get("user_id"))
 
 
 @라우터.post("/{name}/release")
@@ -86,6 +92,16 @@ def 워크스페이스해제처리(
 ) -> Dict[str, Any]:
     """워크스페이스 해제 (IDLE 상태로 변경)."""
     return 워크스페이스해제(name)
+
+
+@라우터.put("/{name}/color")
+def 워크스페이스색상변경(
+    name: str,
+    요청: 색상변경요청,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """워크스페이스 테마 색상 변경."""
+    return 색상변경(name, 요청.color)
 
 
 @라우터.get("/{name}/progress")

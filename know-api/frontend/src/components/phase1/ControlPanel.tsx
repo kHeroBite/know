@@ -65,7 +65,6 @@ export default function ControlPanel({
       <Space>
         <Tooltip title={isRunning ? '실행 중' : ''}>
           <Button
-            type="primary"
             icon={<PlayCircleOutlined />}
             onClick={() => 실행클릭(false)}
             disabled={!실행가능}
@@ -76,6 +75,7 @@ export default function ControlPanel({
         </Tooltip>
         <Tooltip title={isRunning ? '실행 중' : ''}>
           <Button
+            type="primary"
             icon={<PlayCircleOutlined />}
             onClick={() => 실행클릭(true)}
             disabled={!실행가능}

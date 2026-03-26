@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
 import {
   Card, Form, Input, InputNumber, Button, Table, Tag,
-  Upload, Space, Typography, message, Modal, Divider, Select
+  Upload, Space, Typography, message, Modal, Divider
 } from 'antd'
 import {
   UploadOutlined, InboxOutlined, SyncOutlined, DeleteOutlined
 } from '@ant-design/icons'
 import type { UploadFile, UploadProps } from 'antd'
 import { 지식작업API, 사전API } from '../api/pipeline'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title, Text } = Typography
 const { Dragger } = Upload
-
-const 도메인목록 = ['it', 'law', 'med', 'eco', 'sci', 'general']
 
 interface 업로드결과 {
   file_id: number
@@ -22,7 +21,7 @@ interface 업로드결과 {
 }
 
 export default function Knowledge() {
-  const [선택도메인, set선택도메인] = useState<string>('')
+  const { selectedDomain: 선택도메인 } = useWorkspaceStore()
   const [업로드결과, set업로드결과] = useState<업로드결과 | null>(null)
   const [작업목록, set작업목록] = useState<any[]>([])
   const [분배폼] = Form.useForm()
@@ -134,18 +133,6 @@ export default function Knowledge() {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Title level={3}>지식작업 워크플로우</Title>
-
-      {/* 도메인 선택 */}
-      <Card title="도메인 선택">
-        <Select
-          placeholder="도메인 선택"
-          style={{ width: 200 }}
-          value={선택도메인 || undefined}
-          onChange={set선택도메인}
-        >
-          {도메인목록.map(d => <Select.Option key={d} value={d}>{d}</Select.Option>)}
-        </Select>
-      </Card>
 
       {/* 파일 업로드 */}
       <Card title="파일 업로드 (CSV/Excel, 최대 100MB)">

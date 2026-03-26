@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Select, Tabs, Table, Input, Button, Modal, Form, Popconfirm, message, Space, Typography } from 'antd'
+import { Tabs, Table, Input, Button, Modal, Form, Popconfirm, message, Typography } from 'antd'
 import { PlusOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
-interface Domain { site: string; memo: string }
 interface DicEntry { word: string; memo?: string }
 interface ThesaurusEntry { head_word: string; tail_word: string }
 
 type TabKey = 'udic' | 'cndic' | 'thesaurus'
 
 export default function DictionaryManage() {
-  const [도메인목록, set도메인목록] = useState<Domain[]>([])
-  const [선택도메인, set선택도메인] = useState<string>('')
+  const { selectedDomain: 선택도메인 } = useWorkspaceStore()
   const [활성탭, set활성탭] = useState<TabKey>('udic')
   const [데이터, set데이터] = useState<any[]>([])
   const [검색어, set검색어] = useState('')
@@ -19,13 +18,6 @@ export default function DictionaryManage() {
   const [모달열림, set모달열림] = useState(false)
   const [저장중, set저장중] = useState(false)
   const [form] = Form.useForm()
-
-  useEffect(() => {
-    클라이언트.get('/domains').then(res => {
-      set도메인목록(res.data?.items || [])
-      if (res.data?.items?.length > 0) set선택도메인(res.data.items[0].site)
-    }).catch(() => message.error('도메인 목록 조회 실패'))
-  }, [])
 
   useEffect(() => {
     if (선택도메인) 데이터조회()
@@ -137,16 +129,6 @@ export default function DictionaryManage() {
   return (
     <div>
       <Typography.Title level={4} style={{ marginBottom: 16 }}>사전 관리</Typography.Title>
-
-      <Space style={{ marginBottom: 16 }}>
-        <span>도메인:</span>
-        <Select
-          value={선택도메인}
-          onChange={set선택도메인}
-          style={{ width: 180 }}
-          options={도메인목록.map(d => ({ value: d.site, label: d.site }))}
-        />
-      </Space>
 
       <Tabs
         activeKey={활성탭}

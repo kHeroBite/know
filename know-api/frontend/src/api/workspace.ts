@@ -4,8 +4,8 @@ export const workspaceAPI = {
   워크스페이스목록: () =>
     클라이언트.get('/workspaces'),
 
-  워크스페이스생성: (name: string) =>
-    클라이언트.post('/workspaces', { name }),
+  워크스페이스생성: (name: string, color?: string | null) =>
+    클라이언트.post('/workspaces', { name, ...(color ? { color } : {}) }),
 
   워크스페이스삭제: (name: string) =>
     클라이언트.delete(`/workspaces/${name}`),
@@ -21,4 +21,7 @@ export const workspaceAPI = {
 
   진행률조회: (name: string) =>
     클라이언트.get(`/workspaces/${name}/progress`),
+
+  색상변경: (name: string, color: string) =>
+    클라이언트.put(`/workspaces/${name}/color`, { color }),
 }

@@ -63,9 +63,8 @@ export default function FilePanel({ folder }: FilePanelProps) {
       return false
     },
     onChange: async (info) => {
-      if (info.file.status !== undefined) return
-      const file = info.file as unknown as File
-      if (!file) return
+      const file = info.file.originFileObj || (info.file as unknown as File)
+      if (!file || !(file instanceof File)) return
       set업로딩(true)
       try {
         await phase1API.파일업로드(folder, file)
