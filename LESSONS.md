@@ -46,6 +46,13 @@
 **재발방지**: CentOS 7 sudo 없는 환경 Redis 필요 시 서버 관리자에게 사전 요청 또는 소스 빌드. 기능은 동기 fallback으로 먼저 구현 후 Redis 추가.
 **Level**: 1
 
+### L-007: 프론트엔드 API baseURL 이중 접두사 버그 (2026-03-26)
+
+**현상**: phase1.ts 리네이밍(phase1→preprocess) 시 엔드포인트에 `/api/` 접두사를 중복 기재하여 `/api/api/preprocess/` 이중 경로 버그 발생. 커밋 7316a5e(역라우팅)에서 수정.
+**원인**: axios 클라이언트 `client.ts`의 `baseURL: '/api'`를 인지 못하고 기존 경로의 `/api/` 접두사를 그대로 복사-치환.
+**재발방지**: API 엔드포인트 경로 수정 시 `src/api/client.ts`의 `baseURL` 설정 먼저 확인. 기존 경로 복사-치환 시 접두사 중복 검증 필수.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -55,4 +62,5 @@
 | L-001 | kdone 소멸 패턴 | MEMORY | MEMORY.md | 2026-03-25 | ✅ |
 | L-002 | 증거 파일 책임 분리 | MEMORY | MEMORY.md | 2026-03-25 | ✅ |
 | L-004 | 메인 직접 수정 11회 반복 | LESSONS (hook 이미 차단) | LESSONS.md | 2026-03-26 | ✅ |
-| L-005 | MariaDB 5.5 DATETIME 제약 | MEMORY | MEMORY.md | 2026-03-26 | ⬜ |
+| L-005 | MariaDB 5.5 DATETIME 제약 | MEMORY | MEMORY.md | 2026-03-26 | ✅ |
+| L-007 | API baseURL 이중 접두사 버그 | LESSONS | LESSONS.md | 2026-03-26 | ✅ |

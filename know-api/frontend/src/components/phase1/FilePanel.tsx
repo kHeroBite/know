@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Tabs, Button, Upload, Space, Typography, Popconfirm, message, Tag } from 'antd'
+import { Table, Card, Button, Upload, Typography, Popconfirm, message } from 'antd'
 import { InboxOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
 import { phase1API } from '../../api/phase1'
@@ -15,12 +15,14 @@ interface FileItem {
 
 interface FilePanelProps {
   folder: 'popular' | 'fails'
-  onFolderChange: (f: string) => void
-  selectedFile: string | null
-  onFileSelect: (name: string) => void
 }
 
-export default function FilePanel({ folder, onFolderChange, selectedFile, onFileSelect }: FilePanelProps) {
+const 폴더명: Record<string, string> = {
+  popular: '인기검색어',
+  fails: '실패검색어',
+}
+
+export default function FilePanel({ folder }: FilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
   const [업로딩, set업로딩] = useState(false)
@@ -44,7 +46,6 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
       await phase1API.파일삭제(folder, filename)
       message.success(`${filename} 삭제 완료`)
       목록조회()
-      if (selectedFile === filename) onFileSelect('')
     } catch (err: any) {
       message.error(err.response?.data?.detail || '삭제 실패')
     }
@@ -83,15 +84,6 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
       title: '파일명',
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => (
-        <Button
-          type="link"
-          style={{ padding: 0, textAlign: 'left' }}
-          onClick={() => onFileSelect(name)}
-        >
-          {selectedFile === name ? <Tag color="blue">{name}</Tag> : name}
-        </Button>
-      ),
     },
     {
       title: '크기',
@@ -125,16 +117,7 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
   ]
 
   return (
-    <div>
-      <Tabs
-        activeKey={folder}
-        onChange={onFolderChange}
-        items={[
-          { key: 'popular', label: '인기검색어' },
-          { key: 'fails', label: '실패검색어' },
-        ]}
-      />
-
+    <Card title={폴더명[folder]}>
       <Dragger {...draggerProps} style={{ marginBottom: 16 }} disabled={업로딩}>
         <p className="ant-upload-drag-icon"><InboxOutlined /></p>
         <p className="ant-upload-text">파일을 드래그하거나 클릭하여 업로드</p>
@@ -153,11 +136,7 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
         size="small"
         loading={로딩}
         pagination={{ pageSize: 10, size: 'small' }}
-        onRow={(record) => ({
-          onClick: () => onFileSelect(record.name),
-          style: { cursor: 'pointer', background: selectedFile === record.name ? '#e6f4ff' : undefined },
-        })}
       />
-    </div>
+    </Card>
   )
 }

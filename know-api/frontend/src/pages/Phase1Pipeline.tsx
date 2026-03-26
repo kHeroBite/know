@@ -3,25 +3,17 @@ import { Row, Col, Card, message, Typography } from 'antd'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
 import LogPanel from '../components/phase1/LogPanel'
-import DomainPanel from '../components/phase1/DomainPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
 import { phase1API } from '../api/phase1'
-import { useAuthStore } from '../stores/authStore'
 
 const { Title } = Typography
 
 function usePhase1State() {
-  const [folder, setFolder] = useState<'popular' | 'fails'>('popular')
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [stepRange, setStepRange] = useState<[number, number]>([0, 4])
-  const [domain, setDomain] = useState<string>('')
   const [runId, setRunId] = useState<string | null>(null)
 
   return {
-    folder, setFolder,
-    selectedFile, setSelectedFile,
     stepRange, setStepRange,
-    domain, setDomain,
     runId, setRunId,
   }
 }
@@ -29,12 +21,9 @@ function usePhase1State() {
 export default function Phase1Pipeline() {
   const state = usePhase1State()
   const ws = usePhase1WebSocket(state.runId)
-  const currentUser = useAuthStore(s => s.user)
 
   const 실행핸들러 = async (params: {
-    domain: string
     category: string
-    filename: string
     start_step: number
     end_step: number
   }) => {
@@ -52,36 +41,30 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <Title level={3}>데이터 전처리</Title>
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={24}>
-          <Card title="도메인 관리">
-            <DomainPanel currentUser={currentUser} />
+        <Col xs={24} lg={12}>
+          <Card title="파일 관리 — popular" style={{ height: '100%' }}>
+            <FilePanel folder="popular" />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="파일 관리 — fails" style={{ height: '100%' }}>
+            <FilePanel folder="fails" />
           </Card>
         </Col>
       </Row>
       <Row gutter={16}>
-        <Col xs={24} lg={10}>
-          <Card title="파일 관리" style={{ height: '100%' }}>
-            <FilePanel
-              folder={state.folder}
-              onFolderChange={(f) => state.setFolder(f as 'popular' | 'fails')}
-              selectedFile={state.selectedFile}
-              onFileSelect={state.setSelectedFile}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card title="파이프라인 실행" style={{ marginBottom: 16 }}>
+        <Col xs={24} lg={12}>
+          <Card title="파이프라인 실행" style={{ height: '100%' }}>
             <ControlPanel
               stepRange={state.stepRange}
               onStepRangeChange={state.setStepRange}
-              selectedFile={state.selectedFile}
-              folder={state.folder}
-              domain={state.domain}
-              onDomainChange={state.setDomain}
+              folder="popular"
               onRun={실행핸들러}
               isRunning={실행중}
             />
           </Card>
+        </Col>
+        <Col xs={24} lg={12}>
           <Card title="실행 로그">
             <LogPanel
               logs={ws.logs}

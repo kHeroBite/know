@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import Login from './pages/Login'
@@ -11,6 +12,8 @@ import Knowledge from './pages/Knowledge'
 import BuildHistory from './pages/BuildHistory'
 import Phase1Pipeline from './pages/Phase1Pipeline'
 
+const Workspace = lazy(() => import('./pages/Workspace'))
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token)
   return token ? <>{children}</> : <Navigate to="/login" replace />
@@ -22,6 +25,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Navigate to="/preprocess" replace />} />
+        <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />
         <Route path="preprocess" element={<Phase1Pipeline />} />
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />

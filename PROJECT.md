@@ -224,8 +224,12 @@ know-api/
 ├── services/                  # 비즈니스 로직
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
+│   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
+│   └── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반)
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
+│   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
+│   └── workspace.py           # 워크스페이스 엔드포인트 (GET/POST/DELETE /workspaces, POST/DELETE /workspaces/select)
 ├── migrations/                # DB 마이그레이션 SQL
 │   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 ├── pipeline/                  # Celery 태스크 모듈
@@ -237,8 +241,16 @@ know-api/
 │   └── install_redis.sh       # Redis 설치 스크립트
 ├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
-    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력 페이지
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
+    │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
+    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (생성/삭제/선택/해제)
+    ├── src/components/phase1/ # 데이터전처리 컴포넌트
+    │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)
+    │   └── ControlPanel.tsx   # 파이프라인 제어 패널
+    │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
+    ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
+    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
@@ -252,3 +264,11 @@ know-api/
 | /api/knowledge/* | 지식작업 워크플로우 |
 | /api/build/* | 빌드 이력 조회/실행 |
 | /api/realtime/* | 실시간 로그 스트리밍 (SSE) |
+
+### 데이터전처리/워크스페이스 API 엔드포인트
+
+| 경로 | 설명 |
+|------|------|
+| /preprocess/* | 데이터전처리 파이프라인 (파일 업로드/실행/로그) |
+| /workspaces | 워크스페이스 목록 조회 (GET) / 생성 (POST) / 삭제 (DELETE) |
+| /workspaces/select | 워크스페이스 선택 (POST) / 선택 해제 (DELETE) |

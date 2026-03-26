@@ -11,6 +11,7 @@ export default function Layout() {
   const location = useLocation()
 
   const menuItems = [
+    { key: '/workspace', label: '워크스페이스' },
     { key: '/preprocess', label: '데이터 전처리' },
     { key: '/domains', label: '도메인 관리' },
     { key: '/dictionary', label: '사전 관리' },

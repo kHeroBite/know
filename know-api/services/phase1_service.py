@@ -1,23 +1,14 @@
 """Phase 1 서비스 — 파일 관리 + 실행 오케스트레이션"""
 import os
-import shutil
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Dict
 from core.database import 세션팩토리
 
 BUILD_DIR = "/home/know/apps/know-ops/build"
-DOMAIN_DIR = "/home/know/apps/know-ops"
-WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
-PROTECTED_DIRS = {"build", "workspace", ".venv", "src", "site"}
+SCRIPTS_DIR = "/home/know/apps/know-ops/src"
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
-
-WORKSPACE_SUBDIRS = ["build/popular", "build/fails", "fail_log", "pop_log", "work"]
-
-def _make_workspace_subdirs(ws_dir: str) -> None:
-    for sub in WORKSPACE_SUBDIRS:
-        os.makedirs(os.path.join(ws_dir, sub), exist_ok=True)
 
 class Phase1서비스:
     @staticmethod
@@ -120,125 +111,3 @@ class Phase1서비스:
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
             await loop.run_in_executor(None, _update_status, "failed", -1, str(e))
-
-    # ─────────────────────────────────────────────
-    # 도메인 관리
-    # ─────────────────────────────────────────────
-
-    @staticmethod
-    async def 도메인목록() -> Dict:
-        loop = asyncio.get_event_loop()
-        def _list():
-            os.makedirs(DOMAIN_DIR, exist_ok=True)
-            folders = [
-                d for d in sorted(os.listdir(DOMAIN_DIR))
-                if os.path.isdir(os.path.join(DOMAIN_DIR, d))
-                and d not in PROTECTED_DIRS
-            ]
-            return {"domains": folders}
-        return await loop.run_in_executor(None, _list)
-
-    @staticmethod
-    async def 도메인복사(source: str, target: str) -> Dict:
-        loop = asyncio.get_event_loop()
-        def _copy():
-            if target in PROTECTED_DIRS:
-                from fastapi import HTTPException
-                raise HTTPException(status_code=400, detail=f"보호된 이름: {target}")
-            src_dir = os.path.join(DOMAIN_DIR, source)
-            if not os.path.exists(src_dir):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail=f"도메인 없음: {source}")
-            dst_dir = os.path.join(DOMAIN_DIR, target)
-            if os.path.exists(dst_dir):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=409, detail=f"이미 존재하는 도메인: {target}")
-            shutil.copytree(src_dir, dst_dir)
-            return {"copied": True, "source": source, "target": target}
-        return await loop.run_in_executor(None, _copy)
-
-    @staticmethod
-    async def 도메인삭제(name: str) -> Dict:
-        loop = asyncio.get_event_loop()
-        def _delete():
-            if name in PROTECTED_DIRS:
-                from fastapi import HTTPException
-                raise HTTPException(status_code=400, detail=f"보호된 이름: {name}")
-            dir_path = os.path.join(DOMAIN_DIR, name)
-            if not os.path.exists(dir_path):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail=f"도메인 없음: {name}")
-            shutil.rmtree(dir_path)
-            return {"deleted": True, "name": name}
-        return await loop.run_in_executor(None, _delete)
-
-    @staticmethod
-    async def 도메인적용(domain_name: str, workspace_name: str) -> Dict:
-        loop = asyncio.get_event_loop()
-        def _apply():
-            src_dir = os.path.join(DOMAIN_DIR, domain_name)
-            if not os.path.exists(src_dir):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail=f"도메인 없음: {domain_name}")
-            ws_dir = os.path.join(WORKSPACE_DIR, workspace_name)
-            _make_workspace_subdirs(ws_dir)
-            copied = 0
-            for item in os.listdir(src_dir):
-                s = os.path.join(src_dir, item)
-                d = os.path.join(ws_dir, item)
-                if os.path.isfile(s):
-                    shutil.copy2(s, d)
-                    copied += 1
-                elif os.path.isdir(s):
-                    if os.path.exists(d):
-                        shutil.rmtree(d)
-                    shutil.copytree(s, d)
-                    copied += 1
-            return {"applied": True, "domain": domain_name, "workspace": workspace_name, "copied": copied}
-        return await loop.run_in_executor(None, _apply)
-
-    # ─────────────────────────────────────────────
-    # 워크스페이스 관리
-    # ─────────────────────────────────────────────
-
-    @staticmethod
-    async def 워크스페이스목록() -> Dict:
-        loop = asyncio.get_event_loop()
-        def _list():
-            os.makedirs(WORKSPACE_DIR, exist_ok=True)
-            folders = [
-                d for d in sorted(os.listdir(WORKSPACE_DIR))
-                if os.path.isdir(os.path.join(WORKSPACE_DIR, d))
-            ]
-            return {"workspaces": folders}
-        return await loop.run_in_executor(None, _list)
-
-    @staticmethod
-    async def 워크스페이스생성(name: str) -> Dict:
-        loop = asyncio.get_event_loop()
-        def _create():
-            if name in PROTECTED_DIRS:
-                from fastapi import HTTPException
-                raise HTTPException(status_code=400, detail=f"보호된 이름: {name}")
-            ws_dir = os.path.join(WORKSPACE_DIR, name)
-            if os.path.exists(ws_dir):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=409, detail=f"이미 존재하는 워크스페이스: {name}")
-            _make_workspace_subdirs(ws_dir)
-            return {"created": True, "name": name}
-        return await loop.run_in_executor(None, _create)
-
-    @staticmethod
-    async def 워크스페이스삭제(name: str) -> Dict:
-        loop = asyncio.get_event_loop()
-        def _delete():
-            if name in PROTECTED_DIRS:
-                from fastapi import HTTPException
-                raise HTTPException(status_code=400, detail=f"보호된 이름: {name}")
-            ws_dir = os.path.join(WORKSPACE_DIR, name)
-            if not os.path.exists(ws_dir):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail=f"워크스페이스 없음: {name}")
-            shutil.rmtree(ws_dir)
-            return {"deleted": True, "name": name}
-        return await loop.run_in_executor(None, _delete)

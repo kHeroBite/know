@@ -1,5 +1,27 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 워크스페이스 메뉴 신설 + 데이터전처리 재설계
+
+### 변경 사항
+- **신규**: 워크스페이스 관리 페이지 (생성/삭제/선택/해제, JSON 상태 영속화)
+  - know-api/api/workspace.py (6개 엔드포인트: GET/POST/DELETE /workspaces, POST/DELETE /workspaces/select)
+  - know-api/services/workspace_service.py (파일 기반 상태 관리)
+  - know-api/frontend/src/api/workspace.ts
+  - know-api/frontend/src/pages/Workspace.tsx
+- **수정**: 데이터전처리 페이지 재설계
+  - DomainPanel.tsx 제거 (domain 관리를 워크스페이스로 이전)
+  - Phase1Pipeline.tsx: 4패널 레이아웃 (파일선택 좌우 패널 + 파이프라인 + 로그)
+  - FilePanel.tsx: 탭 구조 제거
+  - ControlPanel.tsx: 도메인/파일선택 UI 제거
+- **수정**: 사이드바 — 워크스페이스 메뉴 항목 추가
+- **수정**: phase1.py/phase1_service.py — 도메인/워크스페이스 관련 코드 제거
+- **삭제**: DomainPanel.tsx
+
+### 커밋
+- 미확정 (kdone_git에서 생성)
+
+---
+
 ## 2026-03-26 — 워크스페이스 N개 확장 + 도메인 복사/적용 기능 재설계 (커밋: TBD)
 
 ### 수정 내용
