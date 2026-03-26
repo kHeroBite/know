@@ -243,7 +243,7 @@ know-api/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (생성/삭제/선택/해제)
+    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (Card Grid + IDLE/USED 버튼 로직 + Progress 표시)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
     │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)
     │   └── ControlPanel.tsx   # 파이프라인 제어 패널
@@ -253,6 +253,8 @@ know-api/
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
+    ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
+    └── src/index.css           # 전역 디자인 CSS (glassmorphism, 애니메이션, CSS 변수)
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
 ```
 

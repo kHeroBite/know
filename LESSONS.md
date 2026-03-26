@@ -53,6 +53,20 @@
 **재발방지**: API 엔드포인트 경로 수정 시 `src/api/client.ts`의 `baseURL` 설정 먼저 확인. 기존 경로 복사-치환 시 접두사 중복 검증 필수.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-008: ktest 에이전트가 ktest_done 증거 파일 미생성 (2026-03-26)
+
+**현상**: ktest-1 에이전트가 ktest 모든 단계 완료 후 `evidence/ktest_done` 파일을 생성하지 않음.
+**원인**: ktest_quality 완료 후 `touch evidence/ktest_done` 단계 누락.
+**재발방지**: ktest 완료 직후 evidence/ktest_done 생성 필수. `ktest_done_guard.sh`(L-009)로 kdone spawn 시 물리 차단됨.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-009: ktest_done_guard.sh silent pass — trap 'exit 0' ERR 제거 (2026-03-26)
+
+**현상**: `ktest_done_guard.sh`에 `trap 'exit 0' ERR`이 있어 UUID 해석 실패 등 내부 오류 발생 시 무조건 exit 0 통과.
+**원인**: ERR trap이 UUID 해석 실패를 조용히 pass시켜 ktest_done 없어도 kdone spawn 허용.
+**재발방지**: `trap 'exit 0' ERR` 제거. UUID 해석 실패 시 `_unknown/logs/pipeline_errors.log`에 명시적 기록 후 exit 0. 차단 경로에 `log_hook_error` 추가. (이미 kdone_hooks에서 수정 완료)
+**Level**: 3 (hook 수정 완료)
+
 ---
 
 ## 반영 추적 테이블
@@ -64,3 +78,5 @@
 | L-004 | 메인 직접 수정 11회 반복 | LESSONS (hook 이미 차단) | LESSONS.md | 2026-03-26 | ✅ |
 | L-005 | MariaDB 5.5 DATETIME 제약 | MEMORY | MEMORY.md | 2026-03-26 | ✅ |
 | L-007 | API baseURL 이중 접두사 버그 | LESSONS | LESSONS.md | 2026-03-26 | ✅ |
+| L-008 | ktest_done 증거파일 미생성 | MEMORY | MEMORY.md | 2026-03-26 | ✅ |
+| L-009 | ktest_done_guard silent pass | hook | ktest_done_guard.sh | 2026-03-26 | ✅ |

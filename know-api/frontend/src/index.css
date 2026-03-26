@@ -1,0 +1,281 @@
+/* =====================================================
+   지식작업소 — 전역 디자인 CSS
+   ===================================================== */
+
+/* ---------- CSS 변수 ---------- */
+:root {
+  --primary: #4f8ef7;
+  --primary-hover: #2d6ef5;
+  --sider-bg-start: #0f1c3f;
+  --sider-bg-end: #1a2d5a;
+  --sider-width: 220px;
+  --header-height: 64px;
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.18);
+  --glow-primary: 0 0 12px rgba(79, 142, 247, 0.45);
+}
+
+/* ---------- 전역 기본 ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+  background: #f4f6fb;
+  animation: fadeIn 0.4s ease;
+}
+
+/* ---------- 사이드바 ---------- */
+.app-sider {
+  background: linear-gradient(180deg, var(--sider-bg-start) 0%, var(--sider-bg-end) 100%) !important;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 사이드바 배경 장식 */
+.app-sider::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(79, 142, 247, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* 사이드바 타이틀 */
+.app-sider-title {
+  color: #fff;
+  padding: 20px 16px 16px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+  animation: slideIn 0.4s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ant Design 사이드바 메뉴 오버라이드 */
+.app-sider .ant-menu-dark {
+  background: transparent !important;
+}
+
+.app-sider .ant-menu-dark .ant-menu-sub {
+  background: rgba(0, 0, 0, 0.15) !important;
+}
+
+.app-sider .ant-menu-dark .ant-menu-item {
+  border-radius: 6px;
+  margin: 2px 8px;
+  width: calc(100% - 16px);
+  transition: background var(--transition-fast), transform var(--transition-fast), padding-left var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.app-sider .ant-menu-dark .ant-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--primary);
+  transform: scaleY(0);
+  transition: transform var(--transition-fast);
+  border-radius: 0 2px 2px 0;
+}
+
+.app-sider .ant-menu-dark .ant-menu-item:hover {
+  background: rgba(79, 142, 247, 0.2) !important;
+  padding-left: 20px !important;
+  transform: translateX(2px);
+}
+
+.app-sider .ant-menu-dark .ant-menu-item:hover::before {
+  transform: scaleY(1);
+}
+
+.app-sider .ant-menu-dark .ant-menu-item-selected {
+  background: rgba(79, 142, 247, 0.3) !important;
+  box-shadow: inset 0 0 0 1px rgba(79, 142, 247, 0.4);
+}
+
+.app-sider .ant-menu-dark .ant-menu-item-selected::before {
+  transform: scaleY(1);
+}
+
+/* 서브메뉴 그룹 타이틀 */
+.app-sider .ant-menu-dark .ant-menu-submenu-title {
+  border-radius: 6px;
+  margin: 4px 8px;
+  width: calc(100% - 16px);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.85) !important;
+  transition: color var(--transition-fast);
+}
+
+.app-sider .ant-menu-dark .ant-menu-submenu-title:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ---------- 헤더 ---------- */
+.app-header {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  animation: slideDown 0.35s ease;
+}
+
+/* ---------- 카드 ---------- */
+.ant-card {
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  animation: fadeInUp 0.35s ease;
+}
+
+.ant-card:hover {
+  transform: scale(1.02) translateY(-2px);
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* ---------- 버튼 ---------- */
+.ant-btn-primary {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast) !important;
+}
+
+.ant-btn-primary:hover {
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+  box-shadow: var(--glow-primary) !important;
+  transform: translateY(-1px);
+}
+
+.ant-btn-primary:active {
+  transform: translateY(0);
+}
+
+.ant-btn:not(.ant-btn-primary):hover {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* ---------- 테이블 ---------- */
+.ant-table-wrapper {
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  animation: fadeInUp 0.4s ease;
+}
+
+.ant-table-thead > tr > th {
+  background: #f0f4ff !important;
+  font-weight: 600;
+  color: #374151 !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #f5f8ff !important;
+}
+
+/* ---------- 폼 인풋 ---------- */
+.ant-input, .ant-select-selector, .ant-input-number {
+  border-radius: 6px !important;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+}
+
+.ant-input:focus, .ant-input:hover,
+.ant-select-selector:hover,
+.ant-select-focused .ant-select-selector {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(79, 142, 247, 0.15) !important;
+}
+
+/* ---------- 태그 ---------- */
+.ant-tag {
+  border-radius: 4px !important;
+  transition: opacity var(--transition-fast);
+}
+
+/* ---------- 모달 ---------- */
+.ant-modal-content {
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-lg) !important;
+  animation: scaleIn 0.25s ease;
+}
+
+/* ---------- @keyframes ---------- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* ---------- 로딩 펄스 유틸 ---------- */
+.loading-pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* ---------- 반응형 ---------- */
+@media (max-width: 768px) {
+  .app-sider {
+    position: fixed !important;
+    z-index: 200;
+    height: 100vh;
+  }
+
+  .ant-layout-sider-collapsed .app-sider-title {
+    font-size: 0;
+    padding: 16px 8px;
+  }
+
+  .ant-card:hover {
+    transform: none;
+  }
+}

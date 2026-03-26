@@ -18,4 +18,7 @@ export const workspaceAPI = {
 
   도메인목록: () =>
     클라이언트.get('/workspaces/domains'),
+
+  진행률조회: (name: string) =>
+    클라이언트.get(`/workspaces/${name}/progress`),
 }

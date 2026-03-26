@@ -1,5 +1,25 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 — UI 전면 개편: 디자인 애니메이션 + 워크스페이스 Progress + 메뉴 2단 구조
+
+### 수정 내용
+- **workspace_service.py**: 도메인 연결 비동기 복사 + COPY_PROGRESS 상태 추가
+- **api/workspace.py**: 진행률(progress) API 엔드포인트 추가
+- **[신규] frontend/src/stores/workspaceStore.ts**: Zustand 전역 상태 관리 (워크스페이스 선택/목록)
+- **frontend/src/api/workspace.ts**: 진행률 API 클라이언트 추가
+- **frontend/src/components/Layout.tsx**: 헤더 "지식작업소(워크스페이스명)" 동적 표시 + 메뉴 2단(지식작업/관리) 구조
+- **frontend/src/main.tsx**: index.css 전역 import 추가
+- **[신규] frontend/src/index.css**: 전반 디자인 CSS — glassmorphism, 그라데이션, 애니메이션(fadeIn/fadeInUp/slideIn/pulse)
+- **frontend/src/pages/Workspace.tsx**: Card Grid UX 전면 개편 + 버튼 로직(IDLE/USED) + 진행률 Progress 표시
+
+### 배경
+- 워크스페이스 도메인 연결 시 파일 복사 진행률을 실시간으로 표시 (0~100%)
+- 전반적인 UI 디자인 개편: 다크 사이드바 그라데이션, glassmorphism 헤더, 카드 hover 애니메이션
+- 메뉴를 "지식작업"과 "관리" 2단 그룹으로 분리하여 가독성 향상
+- 헤더에 현재 선택된 워크스페이스명을 동적으로 표시
+
+---
+
 ## 2026-03-26 워크스페이스 메뉴 신설 + 데이터전처리 재설계
 
 ### 변경 사항

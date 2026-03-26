@@ -13,6 +13,7 @@ from services.workspace_service import (
     워크스페이스삭제,
     워크스페이스생성,
     워크스페이스해제,
+    진행률조회,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -85,3 +86,15 @@ def 워크스페이스해제처리(
 ) -> Dict[str, Any]:
     """워크스페이스 해제 (IDLE 상태로 변경)."""
     return 워크스페이스해제(name)
+
+
+@라우터.get("/{name}/progress")
+def 복사진행률조회(
+    name: str,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """도메인 복사 진행률 조회. 진행 중이면 percent/status 반환, 없으면 idle."""
+    진행 = 진행률조회(name)
+    if 진행 is None:
+        return {"status": "idle"}
+    return {"percent": 진행["percent"], "status": 진행["status"]}

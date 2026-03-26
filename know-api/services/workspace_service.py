@@ -4,10 +4,14 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, status
+
+# 비동기 복사 진행률 추적: {ws_name: {"percent": 0~100, "status": "copying"|"done"|"error", "message": ""}}
+COPY_PROGRESS: dict[str, dict[str, Any]] = {}
 
 WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
 DOMAIN_DIR = "/home/know/apps/know-ops/domain"
@@ -81,8 +85,34 @@ def 워크스페이스삭제(name: str) -> None:
         _상태쓰기(상태)
 
 
+def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str) -> None:
+    """백그라운드 스레드에서 파일 순회 복사 + 진행률 업데이트."""
+    try:
+        # 총 파일 수 카운트
+        전체파일수 = sum(len(files) for _, _, files in os.walk(도메인경로))
+        if 전체파일수 == 0:
+            COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": ""}
+            return
+
+        복사완료 = 0
+        for dirpath, dirnames, filenames in os.walk(도메인경로):
+            상대경로 = os.path.relpath(dirpath, 도메인경로)
+            대상디렉토리 = os.path.join(ws경로, 상대경로) if 상대경로 != "." else ws경로
+            os.makedirs(대상디렉토리, exist_ok=True)
+            for 파일명 in filenames:
+                원본 = os.path.join(dirpath, 파일명)
+                대상 = os.path.join(대상디렉토리, 파일명)
+                shutil.copy2(원본, 대상)
+                복사완료 += 1
+                COPY_PROGRESS[ws_name]["percent"] = int(복사완료 / 전체파일수 * 100)
+
+        COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": ""}
+    except Exception as e:
+        COPY_PROGRESS[ws_name] = {"percent": COPY_PROGRESS.get(ws_name, {}).get("percent", 0), "status": "error", "message": str(e)}
+
+
 def 도메인연결(ws_name: str, domain: str) -> dict[str, Any]:
-    """IDLE 체크 → cp -rf domain/도메인/* workspace/이름/ → 상태 USED+domain 기록."""
+    """IDLE 체크 → 상태 즉시 USED 기록 → 백그라운드 복사 시작."""
     상태 = _상태읽기()
     ws상태 = 상태.get(ws_name, {"status": "IDLE", "domain": None})
     if ws상태.get("status") == "USED":
@@ -102,20 +132,23 @@ def 도메인연결(ws_name: str, domain: str) -> dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
         )
-    # cp -rf domain/도메인/* workspace/이름/
-    결과 = subprocess.run(
-        ["cp", "-rf", f"{도메인경로}/.", ws경로],
-        capture_output=True,
-        text=True,
-    )
-    if 결과.returncode != 0:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"도메인 복사 실패: {결과.stderr}",
-        )
+    # 즉시 상태 USED + domain 기록
     상태[ws_name] = {"status": "USED", "domain": domain}
     _상태쓰기(상태)
+    # 진행률 초기화
+    COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
+    # 백그라운드 복사 스레드 시작
+    threading.Thread(
+        target=_복사작업,
+        args=(ws_name, domain, 도메인경로, ws경로),
+        daemon=True,
+    ).start()
     return {"name": ws_name, "status": "USED", "domain": domain}
+
+
+def 진행률조회(ws_name: str) -> dict[str, Any] | None:
+    """복사 진행률 반환. 진행 중이면 dict, 없으면 None."""
+    return COPY_PROGRESS.get(ws_name, None)
 
 
 def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
