@@ -94,6 +94,20 @@
 
 ---
 
+## 2026-03-26 — API 이중 경로 버그 수정 + 도메인 목록 경로 변경
+
+### 수정 내용
+- **phase1.ts**: `/api/preprocess/...` → `/preprocess/...` (이중 `/api/` 접두사 제거 — 8곳)
+- **phase1_service.py**: `DOMAIN_DIR` = `/home/know/apps/know-ops` (루트 경로로 변경)
+- **phase1_service.py**: `PROTECTED_DIRS = {"build", "workspace", ".venv", "src", "site"}` 보호 로직 추가
+
+### 배경
+- API 클라이언트 베이스URL에 `/api`가 포함된 상태에서 엔드포인트에도 `/api/`가 중복 기재되어 `/api/api/preprocess/` 이중 경로 버그 발생
+- 도메인 목록을 `BUILD_DIR(/build)` 하위에서 조회하던 것을 `know-ops` 루트로 변경 (도메인 폴더가 루트에 위치)
+- 시스템 디렉토리(build/workspace/.venv/src/site) 도메인 목록 노출 방지
+
+---
+
 ## 2026-03-25 — know-api 버그 수정
 
 ### 수정 내용

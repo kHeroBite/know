@@ -8,8 +8,9 @@ from typing import Optional, List, Dict
 from core.database import 세션팩토리
 
 BUILD_DIR = "/home/know/apps/know-ops/build"
-DOMAIN_DIR = "/home/know/apps/know-ops/domain"
+DOMAIN_DIR = "/home/know/apps/know-ops"
 WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
+PROTECTED_DIRS = {"build", "workspace", ".venv", "src", "site"}
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
 
 class Phase1서비스:
@@ -126,6 +127,7 @@ class Phase1서비스:
             folders = [
                 d for d in sorted(os.listdir(DOMAIN_DIR))
                 if os.path.isdir(os.path.join(DOMAIN_DIR, d))
+                and d not in PROTECTED_DIRS
             ]
             return {"domains": folders}
         return await loop.run_in_executor(None, _list)
@@ -134,6 +136,9 @@ class Phase1서비스:
     async def 도메인생성(name: str) -> Dict:
         loop = asyncio.get_event_loop()
         def _create():
+            if name in PROTECTED_DIRS:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail=f"보호된 이름: {name}")
             dir_path = os.path.join(DOMAIN_DIR, name)
             if os.path.exists(dir_path):
                 from fastapi import HTTPException
@@ -146,6 +151,9 @@ class Phase1서비스:
     async def 도메인삭제(name: str) -> Dict:
         loop = asyncio.get_event_loop()
         def _delete():
+            if name in PROTECTED_DIRS:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail=f"보호된 이름: {name}")
             dir_path = os.path.join(DOMAIN_DIR, name)
             if not os.path.exists(dir_path):
                 from fastapi import HTTPException
