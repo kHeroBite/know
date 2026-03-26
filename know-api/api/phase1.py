@@ -1,6 +1,6 @@
 """Phase 1 파이프라인 API — REST + WebSocket (realtime.py 무수정)"""
 import os
-import re
+import logging
 import uuid
 import json
 import asyncio
@@ -13,8 +13,9 @@ from pydantic import BaseModel
 라우터 = APIRouter()
 ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_FOLDERS = {"popular", "fails"}
-FILENAME_PATTERN = re.compile(r'^(popularKeyword|failureKeyword)\.\d{8}\.UTF-8$')
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
@@ -43,11 +44,13 @@ async def 파일업로드(folder: str, file: UploadFile = File(...)):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     safe_name = os.path.basename(file.filename or "")
-    if not FILENAME_PATTERN.match(safe_name):
-        raise HTTPException(status_code=422, detail=f"파일명 형식 오류: {safe_name}")
+    ct = file.content_type or ""
+    if ct.startswith(("image/", "audio/", "video/")):
+        raise HTTPException(status_code=422, detail=f"텍스트 파일만 허용됩니다: {ct}")
     content = await file.read()
     if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(status_code=422, detail=f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
+    logger.info(f"파일 업로드: name={safe_name}, size={len(content)}, content_type={ct}")
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.파일저장(folder, safe_name, content)
 

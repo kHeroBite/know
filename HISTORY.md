@@ -1,5 +1,18 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 — Phase1 타이틀 변경 + 업로드 파일명 제한 완화 (커밋: TBD)
+
+### 수정 내용
+- **Phase1Pipeline.tsx**: 페이지 타이틀 "Phase 1 파이프라인" → "데이터 전처리" 변경
+- **FilePanel.tsx**: FILENAME_PATTERN 제거, 파일명 형식 검증 삭제. 크기 체크(500MB)만 유지. 힌트 텍스트 "텍스트 형식 파일 (최대 500MB)"로 변경
+- **phase1.py**: FILENAME_PATTERN(re 모듈) 삭제 → content_type 기반 필터로 전환 (image/audio/video 거부). logging 모듈 추가 및 업로드 시 디버깅 로그(파일명, 크기, content_type) 출력
+
+### 배경
+- 기존 파일명 패턴(`popularKeyword.YYYYMMDD.UTF-8`)이 너무 엄격하여 다양한 텍스트 형식 업로드 불가
+- 텍스트 계열 파일은 모두 허용, 미디어 파일(image/audio/video)만 서버 측 거부로 변경
+
+---
+
 ## 2026-03-26 — Phase 3 완전 통합 파이프라인 구현 (커밋: TBD)
 
 ### 수정 내용

@@ -50,19 +50,11 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
     }
   }
 
-  // 파일명 검증 패턴
-  const FILENAME_PATTERN = /^(popularKeyword|failureKeyword)\.\d{8}\.UTF-8$/
-
   const draggerProps: UploadProps = {
     name: 'file',
     multiple: false,
     showUploadList: false,
     beforeUpload: (file) => {
-      if (!FILENAME_PATTERN.test(file.name)) {
-        message.error(`파일명 형식 오류: ${file.name}`)
-        message.info('형식: popularKeyword.YYYYMMDD.UTF-8 또는 failureKeyword.YYYYMMDD.UTF-8')
-        return Upload.LIST_IGNORE
-      }
       if (file.size > 500 * 1024 * 1024) {
         message.error('파일 크기 500MB 초과')
         return Upload.LIST_IGNORE
@@ -145,9 +137,7 @@ export default function FilePanel({ folder, onFolderChange, selectedFile, onFile
       <Dragger {...draggerProps} style={{ marginBottom: 16 }} disabled={업로딩}>
         <p className="ant-upload-drag-icon"><InboxOutlined /></p>
         <p className="ant-upload-text">파일을 드래그하거나 클릭하여 업로드</p>
-        <p className="ant-upload-hint">
-          형식: popularKeyword.YYYYMMDD.UTF-8 / failureKeyword.YYYYMMDD.UTF-8 (최대 500MB)
-        </p>
+        <p className="ant-upload-hint">텍스트 형식 파일 (최대 500MB)</p>
       </Dragger>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>

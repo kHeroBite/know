@@ -47,7 +47,7 @@ export default function Phase1Pipeline() {
 
   return (
     <div style={{ padding: '0 0 24px' }}>
-      <Title level={3}>Phase 1 파이프라인</Title>
+      <Title level={3}>데이터 전처리</Title>
       <Row gutter={16}>
         <Col xs={24} lg={10}>
           <Card title="파일 관리" style={{ height: '100%' }}>
