@@ -1,5 +1,18 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-26 — kplaywright 스킬 Windows Chrome CDP 전환
+
+### 수정 내용
+- **kplaywright SKILL.md**: Windows Chrome CDP 연결(기본) + WSL 번들 Chromium(fallback) 방식으로 전환
+  - 1순위: Chrome CDP (`--remote-debugging-port=9222`)
+  - 2순위: WSL Chromium fallback (playwright-cli 기존 방식)
+
+### 배경
+- 기존 WSL Headless Chromium 방식에서 Windows 네이티브 Chrome CDP 방식으로 전환
+- Windows 네이티브 렌더링으로 한글 폰트 완벽 지원 + WSLg 오버헤드 제거
+
+---
+
 ## 2026-03-26 — UI 전면 개편: 디자인 애니메이션 + 워크스페이스 Progress + 메뉴 2단 구조
 
 ### 수정 내용

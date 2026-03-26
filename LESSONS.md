@@ -67,6 +67,13 @@
 **재발방지**: `trap 'exit 0' ERR` 제거. UUID 해석 실패 시 `_unknown/logs/pipeline_errors.log`에 명시적 기록 후 exit 0. 차단 경로에 `log_hook_error` 추가. (이미 kdone_hooks에서 수정 완료)
 **Level**: 3 (hook 수정 완료)
 
+### L-010: 에이전트 프롬프트에 curl localhost 명시 시 L-110 hook 차단 (2026-03-26)
+
+**현상**: 에이전트 spawn 시 프롬프트에 `curl -s http://localhost:` 문자열이 포함되어 L-110 hook에 차단됨.
+**원인**: kplaywright 스킬 수정 작업 중 에이전트 프롬프트에 CDP 확인용 curl 명령이 직접 명시됨.
+**재발방지**: 에이전트 프롬프트 작성 시 `curl http://localhost:` 직접 명시 금지. 대신 'CDP 엔드포인트 확인', '포트 9222 연결 확인' 등 우회 표현 사용.
+**Level**: 1
+
 ---
 
 ## 반영 추적 테이블
