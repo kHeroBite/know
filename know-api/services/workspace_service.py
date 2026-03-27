@@ -89,11 +89,17 @@ def 워크스페이스삭제(name: str) -> None:
 
 def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str) -> None:
     """백그라운드 스레드에서 파일 순회 복사 + 진행률 업데이트."""
+    import time
+    시작시간 = time.time()
     try:
-        # 총 파일 수 카운트
         전체파일수 = sum(len(files) for _, _, files in os.walk(도메인경로))
         if 전체파일수 == 0:
-            COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": ""}
+            경과 = round(time.time() - 시작시간, 1)
+            COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 0}
+            상태 = _상태읽기()
+            if ws_name in 상태:
+                상태[ws_name]["status"] = "USED"
+                _상태쓰기(상태)
             return
 
         복사완료 = 0
@@ -108,20 +114,37 @@ def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str
                 복사완료 += 1
                 COPY_PROGRESS[ws_name]["percent"] = int(복사완료 / 전체파일수 * 100)
 
-        COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": ""}
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 전체파일수}
+        상태 = _상태읽기()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "USED"
+            _상태쓰기(상태)
     except Exception as e:
-        COPY_PROGRESS[ws_name] = {"percent": COPY_PROGRESS.get(ws_name, {}).get("percent", 0), "status": "error", "message": str(e)}
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": COPY_PROGRESS.get(ws_name, {}).get("percent", 0), "status": "error", "message": str(e), "elapsed": 경과}
+        상태 = _상태읽기()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "FAILED"
+            _상태쓰기(상태)
 
 
 def 도메인연결(ws_name: str, domain: str, connected_by: str | None = None) -> dict[str, Any]:
-    """IDLE 체크 → 상태 즉시 USED 기록 → 백그라운드 복사 시작."""
+    """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사 → 성공:USED / 실패:FAILED."""
     상태 = _상태읽기()
     ws상태 = 상태.get(ws_name, {"status": "IDLE", "domain": None})
-    if ws상태.get("status") == "USED":
+    if ws상태.get("status") in ("USED", "CONNECTING"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"이미 사용 중인 워크스페이스입니다: {ws_name}",
+            detail=f"이미 사용 중이거나 연결 중인 워크스페이스입니다: {ws_name}",
         )
+    # 다른 워크스페이스가 연결 중이면 차단
+    for other_name, other_state in 상태.items():
+        if other_name != ws_name and other_state.get("status") == "CONNECTING":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"다른 워크스페이스({other_name})가 연결 중입니다. 완료 후 시도하세요.",
+            )
     도메인경로 = os.path.join(DOMAIN_DIR, domain)
     if not os.path.exists(도메인경로):
         raise HTTPException(
@@ -134,20 +157,17 @@ def 도메인연결(ws_name: str, domain: str, connected_by: str | None = None) 
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
         )
-    # 기존 color 유지
     기존색상 = ws상태.get("color")
-    # 즉시 상태 USED + domain + connected_by 기록
-    상태[ws_name] = {"status": "USED", "domain": domain, "connected_by": connected_by, "color": 기존색상}
+    # 즉시 CONNECTING 상태로 기록
+    상태[ws_name] = {"status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상}
     _상태쓰기(상태)
-    # 진행률 초기화
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
-    # 백그라운드 복사 스레드 시작
     threading.Thread(
         target=_복사작업,
         args=(ws_name, domain, 도메인경로, ws경로),
         daemon=True,
     ).start()
-    return {"name": ws_name, "status": "USED", "domain": domain, "connected_by": connected_by, "color": 기존색상}
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상}
 
 
 def 진행률조회(ws_name: str) -> dict[str, Any] | None:
@@ -156,7 +176,7 @@ def 진행률조회(ws_name: str) -> dict[str, Any] | None:
 
 
 def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
-    """상태 IDLE + domain/connected_by null로 변경. color는 유지."""
+    """상태 IDLE + domain/connected_by null로 변경. color는 유지. 업로드 파일 삭제."""
     상태 = _상태읽기()
     if ws_name not in 상태:
         raise HTTPException(
@@ -166,6 +186,12 @@ def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
     기존색상 = 상태[ws_name].get("color")
     상태[ws_name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": 기존색상}
     _상태쓰기(상태)
+    # 업로드 파일 정리 (build/popular, build/fails)
+    for folder in ("popular", "fails"):
+        folder_path = os.path.join(WORKSPACE_DIR, ws_name, "build", folder)
+        if os.path.isdir(folder_path):
+            shutil.rmtree(folder_path)
+            os.makedirs(folder_path, exist_ok=True)
     return {"name": ws_name, "status": "IDLE", "domain": None, "connected_by": None, "color": 기존색상}
 
 
@@ -173,10 +199,14 @@ def 색상변경(ws_name: str, color: str) -> dict[str, Any]:
     """워크스페이스 테마 색상 변경."""
     상태 = _상태읽기()
     if ws_name not in 상태:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
-        )
+        ws경로 = os.path.join(WORKSPACE_DIR, ws_name)
+        if os.path.isdir(ws경로):
+            상태[ws_name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": None}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
+            )
     상태[ws_name]["color"] = color
     _상태쓰기(상태)
     ws상태 = 상태[ws_name]

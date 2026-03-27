@@ -1,21 +1,31 @@
 """Phase 1 서비스 — 파일 관리 + 실행 오케스트레이션"""
 import os
 import asyncio
-import json
+import logging
 from datetime import datetime
 from typing import Dict
 from core.database import 세션팩토리
 
-BUILD_DIR = "/home/know/apps/know-ops/build"
-SCRIPTS_DIR = "/home/know/apps/know-ops/src"
+WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
+BUILD_DIR = "/home/know/apps/know-ops/build"  # fallback (워크스페이스 미선택 시)
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
+
+logger = logging.getLogger(__name__)
+
+
+def _build_dir(workspace: str, folder: str) -> str:
+    """워크스페이스별 빌드 폴더 경로 반환."""
+    if workspace:
+        return os.path.join(WORKSPACE_DIR, workspace, "build", folder)
+    return os.path.join(BUILD_DIR, folder)
+
 
 class Phase1서비스:
     @staticmethod
-    async def 파일목록(folder: str) -> Dict:
+    async def 파일목록(folder: str, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _list():
-            dir_path = os.path.join(BUILD_DIR, folder)
+            dir_path = _build_dir(workspace, folder)
             os.makedirs(dir_path, exist_ok=True)
             files = []
             for fname in sorted(os.listdir(dir_path)):
@@ -31,10 +41,10 @@ class Phase1서비스:
         return await loop.run_in_executor(None, _list)
 
     @staticmethod
-    async def 파일저장(folder: str, filename: str, content: bytes) -> Dict:
+    async def 파일저장(folder: str, filename: str, content: bytes, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _write():
-            dir_path = os.path.join(BUILD_DIR, folder)
+            dir_path = _build_dir(workspace, folder)
             os.makedirs(dir_path, exist_ok=True)
             file_path = os.path.join(dir_path, filename)
             with open(file_path, 'wb') as f:
@@ -49,10 +59,10 @@ class Phase1서비스:
         return await loop.run_in_executor(None, _write)
 
     @staticmethod
-    async def 파일삭제(folder: str, filename: str) -> Dict:
+    async def 파일삭제(folder: str, filename: str, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _delete():
-            file_path = os.path.join(BUILD_DIR, folder, filename)
+            file_path = os.path.join(_build_dir(workspace, folder), filename)
             if not os.path.exists(file_path):
                 from fastapi import HTTPException
                 raise HTTPException(status_code=404, detail=f"파일 없음: {filename}")
@@ -62,29 +72,38 @@ class Phase1서비스:
 
     @staticmethod
     async def 실행DB등록(run_id: str, 요청) -> None:
-        loop = asyncio.get_event_loop()
-        def _insert():
-            db = 세션팩토리()
-            try:
-                from sqlalchemy import text
-                db.execute(text("""
-                    INSERT INTO phase1_runs (run_id, domain, category, filename, start_step, end_step, status)
-                    VALUES (:run_id, :domain, :category, :filename, :start_step, :end_step, 'pending')
-                """), {
-                    "run_id": run_id,
-                    "domain": 요청.domain,
-                    "category": 요청.category,
-                    "filename": 요청.filename,
-                    "start_step": 요청.start_step,
-                    "end_step": 요청.end_step,
-                })
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-        await loop.run_in_executor(None, _insert)
+        # 파일 자동 선택: filename이 없으면 폴더의 최신 파일 사용
+        resolved_filename = 요청.filename if 요청.filename else ""
+        if not resolved_filename:
+            folder_path = _build_dir(요청.workspace or "", 요청.category)
+            if os.path.isdir(folder_path):
+                found = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+                if found:
+                    found.sort(key=lambda x: os.path.getmtime(os.path.join(folder_path, x)), reverse=True)
+                    resolved_filename = found[0]
+        domain_val = 요청.domain if 요청.domain else ""
+        filename_val = resolved_filename if resolved_filename else "(auto)"
+        db = 세션팩토리()
+        try:
+            from sqlalchemy import text
+            db.execute(text("""
+                INSERT INTO phase1_runs (run_id, domain, category, filename, start_step, end_step, status)
+                VALUES (:run_id, :domain, :category, :filename, :start_step, :end_step, 'pending')
+            """), {
+                "run_id": run_id,
+                "domain": domain_val,
+                "category": 요청.category,
+                "filename": filename_val,
+                "start_step": 요청.start_step,
+                "end_step": 요청.end_step,
+            })
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+        요청.filename = resolved_filename
 
     @staticmethod
     async def 실행(run_id: str, 요청) -> None:
@@ -105,10 +124,20 @@ class Phase1서비스:
 
         try:
             await loop.run_in_executor(None, _update_status, "running", -1, None)
-            base_dir = os.path.join(BUILD_DIR, 요청.workspace) if 요청.workspace else BUILD_DIR
-            file_path = os.path.join(base_dir, 요청.category, 요청.filename)
+            folder_dir = _build_dir(요청.workspace or "", 요청.category)
+            filename = 요청.filename or ""
+            if not filename:
+                if os.path.isdir(folder_dir):
+                    files = [f for f in os.listdir(folder_dir) if os.path.isfile(os.path.join(folder_dir, f))]
+                    if files:
+                        files.sort(key=lambda f: os.path.getmtime(os.path.join(folder_dir, f)), reverse=True)
+                        filename = files[0]
+            file_path = os.path.join(folder_dir, filename) if filename else folder_dir
+            logger.info(f"Phase1 실행: run_id={run_id}, domain={요청.domain}, file_path={file_path}, "
+                        f"steps={요청.start_step}-{요청.end_step}, workspace={요청.workspace}")
             from phase1.executor import phase1_실행
-            await phase1_실행(run_id, 요청.domain, file_path, 요청.start_step, 요청.end_step, 요청.workspace)
+            await phase1_실행(run_id, 요청.domain or "", file_path, 요청.start_step, 요청.end_step, 요청.workspace or "")
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
+            logger.error(f"Phase1 실행 실패: run_id={run_id}, error={e}", exc_info=True)
             await loop.run_in_executor(None, _update_status, "failed", -1, str(e))

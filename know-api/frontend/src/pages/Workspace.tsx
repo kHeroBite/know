@@ -15,7 +15,7 @@ import {
   Modal,
   Empty,
   Spin,
-  Popover,
+  ColorPicker,
 } from 'antd'
 import {
   PlusOutlined,
@@ -31,7 +31,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title, Text } = Typography
 
-const 색상팔레트 = [
+const 프리셋색상 = [
   '#0f1c3f', '#1a1a2e', '#1a2744', '#1e3a5f',
   '#134e4a', '#14532d', '#4c1d95', '#7f1d1d',
   '#7c2d12', '#1e293b', '#312e81', '#164e63',
@@ -39,7 +39,7 @@ const 색상팔레트 = [
 
 interface 워크스페이스항목 {
   name: string
-  status: 'IDLE' | 'USED'
+  status: 'IDLE' | 'USED' | 'CONNECTING' | 'FAILED'
   domain: string | null
   connected_by: string | null
   color: string | null
@@ -69,8 +69,15 @@ export default function Workspace() {
         workspaceAPI.워크스페이스목록(),
         workspaceAPI.도메인목록(),
       ])
-      set목록(wsRes.data)
+      const wsList: 워크스페이스항목[] = wsRes.data
+      set목록(wsList)
       set도메인목록(dmRes.data)
+      // CONNECTING 상태 워크스페이스 자동 폴링
+      wsList.forEach(ws => {
+        if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
+          폴링시작(ws.name)
+        }
+      })
     } catch {
       message.error('목록 조회 실패')
     } finally {
@@ -85,25 +92,43 @@ export default function Workspace() {
     }
   }, [])
 
+  const 폴링종료 = async (wsName: string) => {
+    clearInterval(폴링ref.current[wsName])
+    delete 폴링ref.current[wsName]
+    set복사진행중(prev => {
+      const next = { ...prev }
+      delete next[wsName]
+      return next
+    })
+    await 목록조회()
+  }
+
   const 폴링시작 = (wsName: string) => {
     if (폴링ref.current[wsName]) return
     폴링ref.current[wsName] = setInterval(async () => {
       try {
         const res = await workspaceAPI.진행률조회(wsName)
+        const st = res.data?.status
+        if (st === 'done') {
+          const elapsed = res.data?.elapsed
+          const fileCount = res.data?.file_count
+          const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
+          message.success(`연결 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
+          await 폴링종료(wsName)
+          return
+        }
+        if (st === 'idle' || st === 'error') {
+          if (st === 'error') message.error(`연결 실패: ${res.data?.message || '알 수 없는 오류'}`)
+          await 폴링종료(wsName)
+          return
+        }
         const percent: number = res.data?.percent ?? 0
         set복사진행중(prev => ({ ...prev, [wsName]: percent }))
         if (percent >= 100) {
-          clearInterval(폴링ref.current[wsName])
-          delete 폴링ref.current[wsName]
-          set복사진행중(prev => {
-            const next = { ...prev }
-            delete next[wsName]
-            return next
-          })
-          await 목록조회()
+          await 폴링종료(wsName)
         }
       } catch {
-        // 폴링 오류 무시
+        await 폴링종료(wsName)
       }
     }, 2000)
   }
@@ -144,13 +169,21 @@ export default function Workspace() {
     }
     const wsName = 연결팝업WS
     try {
-      await workspaceAPI.도메인연결(wsName, 선택도메인)
-      message.success(`"${wsName}"에 도메인 "${선택도메인}" 연결 완료`)
+      // 즉시 UI에 진행률 0% 표시 (서버 응답 전)
+      set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
       set연결팝업WS(null)
       set선택도메인(null)
+      await workspaceAPI.도메인연결(wsName, 선택도메인)
+      message.success(`"${wsName}" 도메인 연결 시작`)
       폴링시작(wsName)
       await 목록조회()
     } catch (err: any) {
+      // 실패 시 progress 제거
+      set복사진행중(prev => {
+        const next = { ...prev }
+        delete next[wsName]
+        return next
+      })
       message.error(err.response?.data?.detail || '연결 실패')
     }
   }
@@ -169,7 +202,6 @@ export default function Workspace() {
     try {
       await workspaceAPI.색상변경(wsName, color)
       set색상팝업WS(null)
-      // 현재 선택된 워크스페이스 색상이 변경된 경우 스토어도 즉시 갱신
       if (selectedWorkspace === wsName) {
         const ws = 목록.find(w => w.name === wsName)
         if (ws?.domain) setWorkspace(wsName, ws.domain, color)
@@ -180,29 +212,6 @@ export default function Workspace() {
     }
   }
 
-  const 색상팔레트UI = (wsName: string, currentColor: string | null) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 168 }}>
-      {색상팔레트.map(c => (
-        <div
-          key={c}
-          onClick={() => 색상변경핸들러(wsName, c)}
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 6,
-            background: c,
-            cursor: 'pointer',
-            border: currentColor === c ? '2px solid #fff' : '2px solid transparent',
-            boxShadow: currentColor === c ? '0 0 0 2px #1677ff' : 'none',
-            transition: 'transform 0.15s ease',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.15)' }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
-        />
-      ))}
-    </div>
-  )
-
   const getCardStyle = (ws: 워크스페이스항목): React.CSSProperties => {
     const isSelected = selectedWorkspace === ws.name
     const themeColor = ws.color
@@ -212,6 +221,21 @@ export default function Workspace() {
         boxShadow: themeColor
           ? `0 0 14px ${themeColor}88`
           : '0 0 14px rgba(82, 196, 26, 0.35)',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (ws.status === 'FAILED') {
+      return {
+        border: '1px solid #ff4d4f',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (ws.status === 'CONNECTING') {
+      return {
+        border: `1px solid ${themeColor || '#faad14'}`,
+        boxShadow: '0 0 8px rgba(250, 173, 20, 0.3)',
         transition: 'all 0.3s ease',
         animation: 'wsCardFadeIn 0.4s ease',
       }
@@ -268,30 +292,20 @@ export default function Workspace() {
                 생성
               </Button>
             </Space>
-            {/* 색상 팔레트 (생성 시) */}
-            <Space size={4} align="center">
+            {/* 색상 선택 (생성 시) — ColorPicker */}
+            <Space size={8} align="center">
               <Text type="secondary" style={{ fontSize: 12 }}>색상:</Text>
-              {색상팔레트.map(c => (
-                <div
-                  key={c}
-                  onClick={() => set새색상(새색상 === c ? null : c)}
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 4,
-                    background: c,
-                    cursor: 'pointer',
-                    border: 새색상 === c ? '2px solid #1677ff' : '2px solid #d9d9d9',
-                    transition: 'transform 0.15s ease',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.2)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
-                />
-              ))}
+              <ColorPicker
+                value={새색상 || '#1a1a2e'}
+                onChange={(color) => set새색상(color.toHexString())}
+                presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                size="small"
+              />
               {새색상 && (
-                <Text type="secondary" style={{ fontSize: 11 }}>
-                  선택됨
-                </Text>
+                <div style={{
+                  width: 20, height: 20, borderRadius: 4,
+                  background: 새색상, border: '1px solid #d9d9d9',
+                }} />
               )}
             </Space>
           </Space>
@@ -303,7 +317,7 @@ export default function Workspace() {
           {목록.map(ws => {
             const isSelected = selectedWorkspace === ws.name
             const progressPercent = 복사진행중[ws.name]
-            const isInProgress = progressPercent !== undefined
+            const isInProgress = progressPercent !== undefined || ws.status === 'CONNECTING'
 
             return (
               <Col xs={24} sm={12} lg={8} key={ws.name}>
@@ -312,7 +326,7 @@ export default function Workspace() {
                   {isInProgress && (
                     <div style={{ marginBottom: 10 }}>
                       <Progress
-                        percent={progressPercent}
+                        percent={progressPercent ?? 0}
                         size="small"
                         status="active"
                         format={p => `${p}%`}
@@ -345,7 +359,11 @@ export default function Workspace() {
                         {ws.name}
                       </Text>
                     </div>
-                    {isSelected ? (
+                    {ws.status === 'CONNECTING' ? (
+                      <Badge status="warning" text={<Text style={{ color: '#faad14', fontSize: 12 }}>연결중</Text>} />
+                    ) : ws.status === 'FAILED' ? (
+                      <Badge status="error" text={<Text style={{ color: '#ff4d4f', fontSize: 12 }}>연결실패</Text>} />
+                    ) : isSelected ? (
                       <Badge
                         status="success"
                         text={
@@ -355,41 +373,45 @@ export default function Workspace() {
                         }
                       />
                     ) : ws.status === 'USED' ? (
-                      <Badge status="processing" text={<Text style={{ fontSize: 12 }}>USED</Text>} />
+                      <Badge status="processing" text={<Text style={{ fontSize: 12 }}>연결됨</Text>} />
                     ) : (
-                      <Badge status="default" text={<Text style={{ color: '#999', fontSize: 12 }}>IDLE</Text>} />
+                      <Badge status="default" text={<Text style={{ color: '#999', fontSize: 12 }}>유휴</Text>} />
                     )}
                   </div>
 
-                  {/* 도메인 정보 */}
-                  <div style={{ marginBottom: 4, minHeight: 22 }}>
-                    {ws.domain ? (
-                      <Badge color="blue" text={<Text style={{ fontSize: 13 }}>{ws.domain}</Text>} />
-                    ) : (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        연결된 도메인 없음
-                      </Text>
-                    )}
-                  </div>
-
-                  {/* 연결자 정보 */}
-                  <div style={{ marginBottom: 12, minHeight: 18 }}>
-                    {ws.connected_by ? (
-                      <Text type="secondary" style={{ fontSize: 11 }}>
+                  {/* 도메인 + 연결자 (한 줄) */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                    minHeight: 22,
+                  }}>
+                    <div>
+                      {ws.domain ? (
+                        <Badge color="blue" text={<Text style={{ fontSize: 13 }}>{ws.domain}</Text>} />
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          연결된 도메인 없음
+                        </Text>
+                      )}
+                    </div>
+                    {ws.connected_by && (
+                      <Text type="secondary" style={{ fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
                         연결: {ws.connected_by}
                       </Text>
-                    ) : null}
+                    )}
                   </div>
 
                   {/* 버튼 영역 */}
                   <Space size={6} wrap>
-                    {ws.status === 'IDLE' && (
+                    {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
                       <>
                         <Button
                           type="primary"
                           size="small"
                           icon={<LinkOutlined />}
-                          disabled={isInProgress}
+                          disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING')}
                           onClick={() => {
                             set연결팝업WS(ws.name)
                             set선택도메인(null)
@@ -397,17 +419,16 @@ export default function Workspace() {
                         >
                           연결
                         </Button>
-                        <Popover
-                          content={색상팔레트UI(ws.name, ws.color)}
-                          title="색상 선택"
-                          trigger="click"
-                          open={색상팝업WS === ws.name}
-                          onOpenChange={open => set색상팝업WS(open ? ws.name : null)}
+                        <ColorPicker
+                          value={ws.color || '#1a1a2e'}
+                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
+                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                          size="small"
                         >
                           <Button size="small" icon={<BgColorsOutlined />}>
                             색상
                           </Button>
-                        </Popover>
+                        </ColorPicker>
                         {isSuper && (
                           <Popconfirm
                             title={`"${ws.name}" 워크스페이스를 삭제하시겠습니까?`}
@@ -434,17 +455,16 @@ export default function Workspace() {
                         >
                           {isSelected ? '선택됨' : '선택'}
                         </Button>
-                        <Popover
-                          content={색상팔레트UI(ws.name, ws.color)}
-                          title="색상 선택"
-                          trigger="click"
-                          open={색상팝업WS === ws.name}
-                          onOpenChange={open => set색상팝업WS(open ? ws.name : null)}
+                        <ColorPicker
+                          value={ws.color || '#1a1a2e'}
+                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
+                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                          size="small"
                         >
                           <Button size="small" icon={<BgColorsOutlined />}>
                             색상
                           </Button>
-                        </Popover>
+                        </ColorPicker>
                         <Popconfirm
                           title={`"${ws.name}" 워크스페이스를 해제하시겠습니까?`}
                           onConfirm={() => 해제핸들러(ws.name)}

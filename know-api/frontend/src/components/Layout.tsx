@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { LogoutOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
-const { Sider, Content, Header } = AntLayout
+const { Sider, Content } = AntLayout
 
 export default function Layout() {
   const user = useAuthStore(s => s.user)
@@ -54,29 +55,69 @@ export default function Layout() {
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider className="app-sider">
+      <Sider className="app-sider" style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="app-sider-title">
-          {selectedWorkspace
-            ? selectedDomain
-              ? `지식작업소(${selectedWorkspace}-${selectedDomain})`
-              : `지식작업소(${selectedWorkspace})`
-            : '지식작업소'}
+          {/* 학사모 로고 아이콘 */}
+          <svg
+            viewBox="0 0 64 64"
+            width="36"
+            height="36"
+            style={{ display: 'block', margin: '0 auto 6px' }}
+          >
+            <polygon
+              points="32,8 60,24 32,40 4,24"
+              fill="rgba(255,255,255,0.9)"
+              stroke="rgba(255,255,255,0.3)"
+              strokeWidth="1"
+            />
+            <path
+              d="M16,28 L16,42 Q32,54 48,42 L48,28"
+              fill="rgba(255,255,255,0.2)"
+              stroke="rgba(255,255,255,0.5)"
+              strokeWidth="1"
+            />
+            <line x1="52" y1="22" x2="56" y2="38" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+            <circle cx="56" cy="40" r="3" fill="rgba(255,255,255,0.8)" />
+          </svg>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.5px' }}>
+            지식작업소
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, letterSpacing: '1px' }}>
+            {selectedWorkspace
+              ? selectedDomain
+                ? `${selectedWorkspace}-${selectedDomain}`
+                : selectedWorkspace
+              : 'A-epost'}
+          </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          defaultOpenKeys={['knowledge-group', 'admin-group']}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-        />
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            defaultOpenKeys={['knowledge-group', 'admin-group']}
+            items={menuItems}
+            onClick={({ key }) => navigate(key)}
+          />
+        </div>
+        {/* 사용자 정보 + 로그아웃 — 항상 최하단 고정 */}
+        <div className="app-sider-footer">
+          <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12 }}>
+            {user?.name} ({user?.auth})
+          </Typography.Text>
+          <Button
+            type="text"
+            size="small"
+            icon={<LogoutOutlined />}
+            onClick={logout}
+            style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, padding: '0 4px' }}
+          >
+            로그아웃
+          </Button>
+        </div>
       </Sider>
       <AntLayout>
-        <Header className="app-header" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 16px' }}>
-          <Typography.Text style={{ marginRight: 16 }}>{user?.name} ({user?.auth})</Typography.Text>
-          <Button onClick={logout}>로그아웃</Button>
-        </Header>
-        <Content style={{ margin: 16 }}>
+        <Content style={{ margin: 16, overflowX: 'hidden' }}>
           <Outlet />
         </Content>
       </AntLayout>

@@ -51,19 +51,33 @@ body {
   pointer-events: none;
 }
 
-/* 사이드바 타이틀 */
+/* 사이드바 타이틀 (3줄: 로고 + 지식작업소 + A-epost) */
 .app-sider-title {
   color: #fff;
-  padding: 20px 16px 16px;
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.3px;
+  padding: 16px 16px 14px;
+  text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 4px;
   animation: slideIn 0.4s ease;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* 사이드바 내부 컨테이너 — footer 최하단 고정 */
+.app-sider > .ant-layout-sider-children {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+/* 사이드바 하단 사용자 영역 — 항상 최하단 고정 */
+.app-sider-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  background: inherit;
 }
 
 /* Ant Design 사이드바 메뉴 오버라이드 */
@@ -155,7 +169,7 @@ body {
 }
 
 .ant-card:hover {
-  transform: scale(1.02) translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-lg) !important;
 }
 
@@ -263,6 +277,302 @@ body {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+/* =====================================================
+   로그인 페이지 — 모던 디자인
+   ===================================================== */
+
+/* 전체 배경 */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #0a0e27 0%, #151b3a 25%, #1a1040 50%, #0d1f4a 75%, #0a0e27 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 배경 애니메이션 오브 */
+.login-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.login-bg-orb-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.4) 0%, transparent 70%);
+  top: -10%;
+  right: -5%;
+  animation: orbFloat1 12s ease-in-out infinite;
+}
+
+.login-bg-orb-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, transparent 70%);
+  bottom: -15%;
+  left: -5%;
+  animation: orbFloat2 15s ease-in-out infinite;
+}
+
+.login-bg-orb-3 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: orbFloat3 10s ease-in-out infinite;
+}
+
+/* 그리드 배경 패턴 */
+.login-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 100%);
+}
+
+/* 글라스모피즘 카드 */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  padding: 48px 40px 36px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 -2px 16px rgba(79, 70, 229, 0.1) inset;
+  animation: loginCardEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.6), transparent);
+}
+
+/* 카드 헤더 */
+.login-card-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+/* 로고 SVG */
+.login-logo-svg {
+  display: block;
+  margin: 0 auto 16px;
+  animation: logoFloat 4s ease-in-out infinite;
+  filter: drop-shadow(0 4px 20px rgba(129, 140, 248, 0.3));
+}
+
+.login-logo-ring {
+  animation: ringRotate 20s linear infinite;
+  transform-origin: 60px 60px;
+}
+
+.login-logo-tassel {
+  animation: tasselPulse 2s ease-in-out infinite;
+}
+
+.login-logo-sparkle {
+  animation: sparklePulse 2.5s ease-in-out infinite;
+}
+
+.login-logo-sparkle-2 {
+  animation: sparklePulse 2.5s ease-in-out infinite 0.8s;
+}
+
+.login-logo-sparkle-3 {
+  animation: sparklePulse 2.5s ease-in-out infinite 1.6s;
+}
+
+/* 제목 */
+.login-title {
+  margin: 0 0 4px;
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 30%, #a5b4fc 60%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 2px;
+}
+
+.login-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(165, 180, 252, 0.5);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* 폼 — 항목 간격 30px 고정 */
+.login-form .ant-form-item {
+  margin-bottom: 30px !important;
+}
+
+.login-form .login-input,
+.login-form .login-input .ant-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  color: #e0e7ff !important;
+  font-size: 14px;
+  transition: all 0.3s ease !important;
+}
+
+.login-form .login-input:hover,
+.login-form .login-input:focus-within {
+  border-color: rgba(129, 140, 248, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1), 0 0 20px rgba(129, 140, 248, 0.08) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.login-form .login-input .ant-input::placeholder {
+  color: rgba(165, 180, 252, 0.35) !important;
+}
+
+.login-input-icon {
+  color: rgba(165, 180, 252, 0.5) !important;
+  font-size: 16px !important;
+  margin-right: 10px !important;
+}
+
+/* 인풋 내부 텍스트 여백 */
+.login-form .login-input .ant-input {
+  padding-left: 10px !important;
+}
+
+/* 비밀번호 토글 아이콘 */
+.login-form .ant-input-password .ant-input-suffix .anticon {
+  color: rgba(165, 180, 252, 0.4) !important;
+}
+
+.login-form .ant-input-password .ant-input-suffix .anticon:hover {
+  color: rgba(165, 180, 252, 0.7) !important;
+}
+
+/* 로그인 버튼 */
+.login-btn.ant-btn-primary {
+  height: 48px !important;
+  border-radius: 12px !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 2px !important;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4) !important;
+  transition: all 0.3s ease !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-btn.ant-btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.login-btn.ant-btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 30px rgba(79, 70, 229, 0.5) !important;
+}
+
+.login-btn.ant-btn-primary:hover::before {
+  transform: translateX(100%);
+}
+
+.login-btn.ant-btn-primary:active {
+  transform: translateY(0) !important;
+}
+
+/* 푸터 */
+.login-footer {
+  text-align: center;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.login-footer span {
+  font-size: 11px;
+  color: rgba(165, 180, 252, 0.3);
+  letter-spacing: 1px;
+}
+
+/* ---------- 로그인 @keyframes ---------- */
+@keyframes loginCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes ringRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes tasselPulse {
+  0%, 100% { opacity: 0.8; r: 4.5; }
+  50%      { opacity: 1; r: 5.5; }
+}
+
+@keyframes sparklePulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+@keyframes orbFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(-40px, 30px) scale(1.05); }
+  66%      { transform: translate(20px, -20px) scale(0.95); }
+}
+
+@keyframes orbFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(30px, -40px) scale(1.08); }
+  66%      { transform: translate(-20px, 20px) scale(0.92); }
+}
+
+@keyframes orbFloat3 {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  50%      { transform: translate(-50%, -50%) scale(1.15); opacity: 0.3; }
+}
+
 /* ---------- 반응형 ---------- */
 @media (max-width: 768px) {
   .app-sider {
@@ -278,5 +588,14 @@ body {
 
   .ant-card:hover {
     transform: none;
+  }
+
+  .login-card {
+    width: calc(100% - 32px);
+    padding: 36px 28px 28px;
+  }
+
+  .login-title {
+    font-size: 22px;
   }
 }

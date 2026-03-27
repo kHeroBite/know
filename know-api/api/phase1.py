@@ -5,7 +5,7 @@ import uuid
 import json
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Query, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
 from typing import Optional
 from pydantic import BaseModel
 
@@ -35,14 +35,14 @@ class Phase1실행요청(BaseModel):
     workspace: Optional[str] = None
 
 @라우터.get("/preprocess/files/{folder}")
-async def 파일목록(folder: str):
+async def 파일목록(folder: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일목록(folder)
+    return await Phase1서비스.파일목록(folder, workspace)
 
 @라우터.post("/preprocess/files/{folder}")
-async def 파일업로드(folder: str, file: UploadFile = File(...)):
+async def 파일업로드(folder: str, file: UploadFile = File(...), workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     safe_name = os.path.basename(file.filename or "")
@@ -52,17 +52,17 @@ async def 파일업로드(folder: str, file: UploadFile = File(...)):
     content = await file.read()
     if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(status_code=422, detail=f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
-    logger.info(f"파일 업로드: name={safe_name}, size={len(content)}, content_type={ct}")
+    logger.info(f"파일 업로드: name={safe_name}, size={len(content)}, content_type={ct}, workspace={workspace}")
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일저장(folder, safe_name, content)
+    return await Phase1서비스.파일저장(folder, safe_name, content, workspace)
 
 @라우터.delete("/preprocess/files/{folder}/{filename}")
-async def 파일삭제(folder: str, filename: str):
+async def 파일삭제(folder: str, filename: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     safe_name = os.path.basename(filename)
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일삭제(folder, safe_name)
+    return await Phase1서비스.파일삭제(folder, safe_name, workspace)
 
 @라우터.post("/preprocess/run")
 async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundTasks):

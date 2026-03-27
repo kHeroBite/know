@@ -4,7 +4,7 @@ import type { LogEntry } from '../../hooks/usePhase1WebSocket'
 
 const { Text } = Typography
 
-const 단계이름 = ['파일선택', '정제', '형태소분석', '결과변환']
+const 단계이름 = ['파일선택', '키워드추출', '정제', '형태소분석', '결과변환']
 
 interface LogPanelProps {
   logs: LogEntry[]

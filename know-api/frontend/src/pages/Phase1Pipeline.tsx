@@ -10,7 +10,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 const { Title } = Typography
 
 function usePhase1State() {
-  const [stepRange, setStepRange] = useState<[number, number]>([1, 3])
+  const [stepRange, setStepRange] = useState<[number, number]>([1, 4])
   const [runId, setRunId] = useState<string | null>(null)
 
   return {
@@ -22,7 +22,7 @@ function usePhase1State() {
 export default function Phase1Pipeline() {
   const state = usePhase1State()
   const ws = usePhase1WebSocket(state.runId)
-  const { selectedWorkspace } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
 
   const 실행핸들러 = async (params: {
     category: string
@@ -30,7 +30,11 @@ export default function Phase1Pipeline() {
     end_step: number
   }) => {
     try {
-      const { data } = await phase1API.실행({ ...params, workspace: selectedWorkspace ?? '' })
+      const { data } = await phase1API.실행({
+        ...params,
+        workspace: selectedWorkspace ?? '',
+        domain: selectedDomain ?? '',
+      })
       state.setRunId(data.run_id)
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
@@ -47,10 +51,10 @@ export default function Phase1Pipeline() {
           <Card title="파일관리">
             <Row gutter={16}>
               <Col xs={24} lg={12}>
-                <FilePanel folder="popular" />
+                <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
               </Col>
               <Col xs={24} lg={12}>
-                <FilePanel folder="fails" />
+                <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
               </Col>
             </Row>
           </Card>

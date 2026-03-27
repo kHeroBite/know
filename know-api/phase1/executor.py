@@ -13,9 +13,10 @@ WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
 
 PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
-    1: {"name": "정제",       "type": "python", "func": "refine"},
-    2: {"name": "형태소분석", "type": "python", "func": "analyze"},
-    3: {"name": "결과변환",   "type": "python", "func": "convert"},
+    1: {"name": "키워드추출", "type": "python", "func": "extract"},
+    2: {"name": "정제",       "type": "python", "func": "refine"},
+    3: {"name": "형태소분석", "type": "python", "func": "analyze"},
+    4: {"name": "결과변환",   "type": "python", "func": "convert"},
 }
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,19 @@ def _publish_phase1(run_id: str, step_num: int, step_name: str, percent: int, me
         logger.error(f"Redis 발행 실패: {e}")
 
 
+def _sync_extract(file_path: str, domain: str, workspace_dir: str) -> str:
+    """동기 키워드추출 — 키워드추출기 호출"""
+    _ensure_know_ops_path()
+    from know.pipeline.추출.키워드추출기 import 키워드추출기
+    설정값 = _make_설정(workspace_dir)
+    추출기 = 키워드추출기(설정값=설정값)
+    result = 추출기.추출(
+        입력파일=Path(file_path),
+        도메인=domain,
+    )
+    return str(result)
+
+
 def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
     """동기 정제 — 검색로그정제기 호출"""
     _ensure_know_ops_path()
@@ -97,7 +111,10 @@ async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_
     """python 단계 — run_in_executor로 비동기 처리"""
     loop = asyncio.get_event_loop()
     func = step.get("func", "convert")
-    if func == "refine":
+    if func == "extract":
+        result = await loop.run_in_executor(None, _sync_extract, file_path, domain, workspace_dir)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"추출 완료: {result}", "running")
+    elif func == "refine":
         result = await loop.run_in_executor(None, _sync_refine, file_path, domain, workspace_dir)
         _publish_phase1(run_id, step_num, step["name"], 100, f"정제 완료: {result}", "running")
     elif func == "analyze":

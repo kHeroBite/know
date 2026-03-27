@@ -15,6 +15,7 @@ interface FileItem {
 
 interface FilePanelProps {
   folder: 'popular' | 'fails'
+  workspace?: string
 }
 
 const 폴더명: Record<string, string> = {
@@ -22,7 +23,7 @@ const 폴더명: Record<string, string> = {
   fails: '실패검색어',
 }
 
-export default function FilePanel({ folder }: FilePanelProps) {
+export default function FilePanel({ folder, workspace }: FilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
   const [업로딩, set업로딩] = useState(false)
@@ -30,7 +31,7 @@ export default function FilePanel({ folder }: FilePanelProps) {
   const 목록조회 = async () => {
     set로딩(true)
     try {
-      const { data } = await phase1API.파일목록(folder)
+      const { data } = await phase1API.파일목록(folder, workspace)
       set파일목록(data.files || [])
     } catch {
       message.error('파일 목록 조회 실패')
@@ -39,11 +40,11 @@ export default function FilePanel({ folder }: FilePanelProps) {
     }
   }
 
-  useEffect(() => { 목록조회() }, [folder])
+  useEffect(() => { 목록조회() }, [folder, workspace])
 
   const 삭제핸들러 = async (filename: string) => {
     try {
-      await phase1API.파일삭제(folder, filename)
+      await phase1API.파일삭제(folder, filename, workspace)
       message.success(`${filename} 삭제 완료`)
       목록조회()
     } catch (err: any) {
@@ -67,7 +68,7 @@ export default function FilePanel({ folder }: FilePanelProps) {
       if (!file || !(file instanceof File)) return
       set업로딩(true)
       try {
-        await phase1API.파일업로드(folder, file)
+        await phase1API.파일업로드(folder, file, workspace)
         message.success(`${file.name} 업로드 완료`)
         목록조회()
       } catch (err: any) {
