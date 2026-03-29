@@ -50,6 +50,7 @@ def 사용자조회(db: Session, user_id: str) -> Optional[dict]:
 def 비밀번호찾기처리(db: Session, user_id: str, email: str) -> dict:
     """아이디+이메일 확인 후 비밀번호 초기화 + 이메일 발송."""
     from fastapi import HTTPException
+    from core.config import 설정값
 
     행 = db.execute(
         select(계정테이블).where(계정테이블.c._USER_ID == user_id)
@@ -65,19 +66,24 @@ def 비밀번호찾기처리(db: Session, user_id: str, email: str) -> dict:
     if 저장된이메일.strip().lower() != email.strip().lower():
         raise HTTPException(status_code=400, detail="등록된 이메일과 일치하지 않습니다")
 
+    # SMTP 설정 확인
+    if not 설정값.SMTP_HOST:
+        raise HTTPException(status_code=503, detail="메일 서버가 설정되지 않았습니다. 관리자에게 비밀번호 초기화를 요청하세요.")
+
     # 랜덤 8자리 비밀번호 생성
     새비밀번호 = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
 
-    # DB 업데이트
+    # 이메일 발송 먼저 시도 (성공해야 비밀번호 변경)
+    try:
+        from services.email_service import 비밀번호초기화메일발송
+        비밀번호초기화메일발송(저장된이메일, user_id, 새비밀번호)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="이메일 발송에 실패했습니다. 관리자에게 문의하세요.")
+
+    # 이메일 발송 성공 후 DB 업데이트
     db.execute(update(계정테이블).where(계정테이블.c._USER_ID == user_id).values(
         _PASSWORD=비밀번호해시(새비밀번호), _UPDATED=datetime.now()
     ))
     db.commit()
 
-    # 이메일 발송 시도
-    try:
-        from services.email_service import 비밀번호초기화메일발송
-        비밀번호초기화메일발송(저장된이메일, user_id, 새비밀번호)
-        return {"message": "임시 비밀번호가 이메일로 발송되었습니다."}
-    except Exception as e:
-        return {"message": f"비밀번호가 초기화되었으나 이메일 발송에 실패했습니다. 관리자에게 문의하세요. (오류: {e})"}
+    return {"message": "임시 비밀번호가 이메일로 발송되었습니다. 로그인 후 비밀번호를 변경하세요."}

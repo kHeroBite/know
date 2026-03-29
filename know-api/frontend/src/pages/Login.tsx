@@ -137,8 +137,8 @@ export default function Login() {
         set찾기로딩(true)
         try {
           const vals = await 찾기폼.validateFields()
-          await 클라이언트.post('/auth/forgot-password', vals)
-          message.success('임시 비밀번호가 이메일로 발송되었습니다.')
+          const res = await 클라이언트.post('/auth/forgot-password', vals)
+          message.success(res.data?.message || '임시 비밀번호가 이메일로 발송되었습니다.')
           set찾기모달(false)
           찾기폼.resetFields()
         } catch (e: any) {
