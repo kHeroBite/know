@@ -62,8 +62,16 @@ _프론트엔드경로 = os.path.join(os.path.dirname(__file__), "frontend", "di
 if os.path.isdir(_프론트엔드경로):
     앱.mount("/assets", StaticFiles(directory=os.path.join(_프론트엔드경로, "assets")), name="assets")
 
+    # 매뉴얼 스크린샷 정적 파일 서빙
+    _매뉴얼경로 = os.path.join(_프론트엔드경로, "manual")
+    if os.path.isdir(_매뉴얼경로):
+        앱.mount("/manual", StaticFiles(directory=_매뉴얼경로), name="manual")
+
     @앱.get("/{full_path:path}")
     def 프론트엔드서빙(full_path: str):
-        """SPA 라우팅 — 모든 비API 경로를 index.html로."""
+        """SPA 라우팅 — 정적 파일 존재 시 직접 서빙, 아니면 index.html."""
+        file_path = os.path.join(_프론트엔드경로, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
         index = os.path.join(_프론트엔드경로, "index.html")
         return FileResponse(index)
