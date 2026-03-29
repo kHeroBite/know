@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert } from 'antd'
+import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox } from 'antd'
 import { PlusOutlined, DeleteOutlined, ImportOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -176,11 +176,13 @@ export default function DictionaryManage() {
   const [임포트중, set임포트중] = useState(false)
   const [진행률, set진행률] = useState<{percent: number; stage: string; status: string; current: number} | null>(null)
   const [key, setKey] = useState(0)
+  const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
 
   const 임포트모달열기 = async () => {
     set임포트모달(true)
     set파일건수(null)
     set진행률(null)
+    set임포트옵션({udic: true, cndic: true, thesaurus: true})
     try {
       const res = await 클라이언트.get(`/dictionaries/${선택도메인}/file-preview`)
       set파일건수(res.data)
@@ -193,7 +195,7 @@ export default function DictionaryManage() {
     set임포트중(true)
     set진행률({ percent: 0, stage: 'preparing', status: 'running', current: 0 })
     try {
-      await 클라이언트.post(`/dictionaries/${선택도메인}/import-from-files`)
+      await 클라이언트.post(`/dictionaries/${선택도메인}/import-from-files?udic=${임포트옵션.udic}&cndic=${임포트옵션.cndic}&thesaurus=${임포트옵션.thesaurus}`)
       const poll = setInterval(async () => {
         try {
           const res = await 클라이언트.get(`/dictionaries/${선택도메인}/import-progress`)
@@ -255,7 +257,7 @@ export default function DictionaryManage() {
         onCancel={() => !임포트중 && set임포트모달(false)}
         footer={임포트중 ? null : [
           <Button key="cancel" onClick={() => set임포트모달(false)}>취소</Button>,
-          <Button key="ok" type="primary" danger onClick={임포트실행} disabled={!파일건수}>DB 초기화 후 가져오기</Button>,
+          <Button key="ok" type="primary" danger onClick={임포트실행} disabled={!파일건수 || (!임포트옵션.udic && !임포트옵션.cndic && !임포트옵션.thesaurus)}>선택 사전 가져오기</Button>,
         ]}
         width={600}
         closable={!임포트중}
@@ -263,13 +265,27 @@ export default function DictionaryManage() {
       >
         {!임포트중 && 파일건수 && (
           <div>
-            <Alert message="기존 DB 데이터를 모두 삭제하고 파일 사전으로 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />
+            <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="사용자사전">{파일건수.udic.toLocaleString()} 건</Descriptions.Item>
               <Descriptions.Item label="복합명사사전">{파일건수.cndic.toLocaleString()} 건</Descriptions.Item>
               <Descriptions.Item label="유의어사전">{파일건수.thesaurus.toLocaleString()} 건</Descriptions.Item>
               <Descriptions.Item label="합계">{(파일건수.udic + 파일건수.cndic + 파일건수.thesaurus).toLocaleString()} 건</Descriptions.Item>
             </Descriptions>
+            <div style={{ marginTop: 16 }}>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>임포트할 사전 선택:</Typography.Text>
+              <Checkbox checked={임포트옵션.udic} onChange={e => set임포트옵션({...임포트옵션, udic: e.target.checked})}>
+                사용자사전 ({파일건수.udic.toLocaleString()} 건)
+              </Checkbox>
+              <br />
+              <Checkbox checked={임포트옵션.cndic} onChange={e => set임포트옵션({...임포트옵션, cndic: e.target.checked})}>
+                복합명사사전 ({파일건수.cndic.toLocaleString()} 건)
+              </Checkbox>
+              <br />
+              <Checkbox checked={임포트옵션.thesaurus} onChange={e => set임포트옵션({...임포트옵션, thesaurus: e.target.checked})}>
+                유의어사전 ({파일건수.thesaurus.toLocaleString()} 건)
+              </Checkbox>
+            </div>
           </div>
         )}
         {!임포트중 && !파일건수 && (

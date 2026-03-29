@@ -239,17 +239,23 @@ def 유의어일괄추가(db: Session, site: str, items: List[dict], user_id: Op
 
 # ─── 파일에서 사전 임포트 ─────────────────────────────────────────
 
-def _사전파일찾기(도메인경로: str, patterns: List[str]) -> Optional[str]:
-    """도메인 디렉토리에서 패턴에 맞는 사전 파일 찾기."""
-    for pattern in patterns:
-        # 루트에서 먼저 탐색
-        matches = glob.glob(os.path.join(도메인경로, pattern))
-        if matches:
-            return sorted(matches)[-1]  # 가장 최신 파일
-        # 1단계 하위 디렉토리에서 탐색
-        matches = glob.glob(os.path.join(도메인경로, "*", pattern))
-        if matches:
-            return sorted(matches)[-1]
+def _사전파일찾기(도메인경로: str, patterns: List[str], 추가경로: Optional[List[str]] = None) -> Optional[str]:
+    """도메인 디렉토리에서 패턴에 맞는 사전 파일 찾기. 추가경로도 탐색."""
+    탐색경로목록 = [도메인경로]
+    if 추가경로:
+        탐색경로목록.extend(추가경로)
+    for 경로 in 탐색경로목록:
+        if not os.path.isdir(경로):
+            continue
+        for pattern in patterns:
+            # 루트에서 먼저 탐색
+            matches = glob.glob(os.path.join(경로, pattern))
+            if matches:
+                return sorted(matches)[-1]  # 가장 최신 파일
+            # 1단계 하위 디렉토리에서 탐색
+            matches = glob.glob(os.path.join(경로, "*", pattern))
+            if matches:
+                return sorted(matches)[-1]
     return None
 
 
@@ -274,18 +280,25 @@ def _파일읽기(파일경로: str) -> List[str]:
 _사전파일패턴 = {
     "udic": ["user.ks", "user*.ks"],
     "cndic": ["cnlist.ks", "cnlist*.ks"],
-    "thesaurus": ["addedsyn", "addsyn*"],
+    "thesaurus": ["quasisynonym.*.UTF-8", "quasisynonym.*", "addedsyn", "addsyn*"],
 }
+
+
+def _추가탐색경로(site: str) -> List[str]:
+    """사이트별 추가 탐색 경로 목록 반환."""
+    db경로 = f"/home/know/apps/data/{site.lower()}_db"
+    return [db경로] if os.path.isdir(db경로) else []
 
 
 def 사전파일건수미리보기(site: str) -> dict:
     """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
-    if not os.path.isdir(도메인경로):
+    추가경로 = _추가탐색경로(site)
+    if not os.path.isdir(도메인경로) and not 추가경로:
         return 결과
     for dic_type, patterns in _사전파일패턴.items():
-        파일경로 = _사전파일찾기(도메인경로, patterns)
+        파일경로 = _사전파일찾기(도메인경로, patterns, 추가경로=추가경로)
         if 파일경로 and os.path.isfile(파일경로):
             try:
                 with open(파일경로, 'rb') as f:
@@ -300,12 +313,19 @@ def 사전파일건수미리보기(site: str) -> dict:
 _임포트진행률: dict = {}
 
 
-def 비동기파일임포트시작(site: str, user_id: str = None) -> str:
+def 비동기파일임포트시작(site: str, user_id: str = None,
+                      import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True) -> str:
     """백그라운드 스레드에서 임포트 시작. run_id 반환."""
     import uuid as uuid_mod
     run_id = uuid_mod.uuid4().hex[:8]
     미리보기 = 사전파일건수미리보기(site)
-    전체건수 = sum(미리보기.values())
+    전체건수 = 0
+    if import_udic:
+        전체건수 += 미리보기.get("udic", 0)
+    if import_cndic:
+        전체건수 += 미리보기.get("cndic", 0)
+    if import_thesaurus:
+        전체건수 += 미리보기.get("thesaurus", 0)
     _임포트진행률[site] = {
         "status": "running", "total": 전체건수, "current": 0,
         "percent": 0, "stage": "preparing", "result": None, "run_id": run_id,
@@ -315,7 +335,8 @@ def 비동기파일임포트시작(site: str, user_id: str = None) -> str:
         from core.database import 세션팩토리
         try:
             db = 세션팩토리()
-            결과 = _동기파일임포트(db, site, user_id=user_id, progress_site=site)
+            결과 = _동기파일임포트(db, site, user_id=user_id, progress_site=site,
+                              import_udic=import_udic, import_cndic=import_cndic, import_thesaurus=import_thesaurus)
             _임포트진행률[site]["status"] = "done"
             _임포트진행률[site]["percent"] = 100
             _임포트진행률[site]["result"] = 결과
@@ -401,14 +422,32 @@ def _thesaurus_파일임포트(
         except (UnicodeDecodeError, UnicodeError):
             continue
 
-    # 탭 구분 형식 감지 (첫 10줄 중 탭이 있는지)
+    # 형식 감지 (첫 10줄 기준)
     비공백줄 = [l for l in 빈줄포함목록 if l]
     탭형식 = any("\t" in l for l in 비공백줄[:10])
+    쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
 
     삽입수 = 0
     중복set: set = set()
 
-    if 탭형식:
+    if 쉼표형식:
+        # 쉼표 구분: 대표어,유의어1,유의어2,... (quasisynonym 형식)
+        for 줄 in 비공백줄:
+            parts = 줄.split(",")
+            head = 단어정규화(parts[0].strip())
+            tail_parts = [p.strip() for p in parts[1:] if p.strip()]
+            tail = ",".join(tail_parts)
+            if not head or not tail or head in 중복set:
+                continue
+            중복set.add(head)
+            db.execute(insert(tbl).values(
+                _HEAD_WORD=head, _TAIL_WORD=tail,
+                _USER_ID=user_id, _UPDATED=datetime.now(),
+            ))
+            삽입수 += 1
+            if progress_site and 삽입수 % 1000 == 0:
+                _진행률갱신(progress_site, progress_offset + 삽입수)
+    elif 탭형식:
         for 줄 in 비공백줄:
             parts = 줄.split("\t")
             if len(parts) < 2:
@@ -476,7 +515,8 @@ def _thesaurus_파일임포트(
     return 삽입수
 
 
-def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None) -> dict:
+def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None,
+                   import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True) -> dict:
     """도메인 디렉토리에서 사전 파일을 읽어 DB에 임포트.
 
     기존 DB 데이터 전체 DELETE 후 새로 INSERT.
@@ -484,34 +524,38 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
     """
     사이트명검증(site)
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
-    if not os.path.isdir(도메인경로):
+    추가경로 = _추가탐색경로(site)
+    if not os.path.isdir(도메인경로) and not 추가경로:
         raise HTTPException(status_code=404, detail=f"도메인 디렉토리를 찾을 수 없음: {site}")
 
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
     누적 = 0
 
     # UDIC: user.ks 또는 user*.ks
-    if progress_site:
-        _진행률갱신(progress_site, 누적, "udic")
-    udic파일 = _사전파일찾기(도메인경로, ["user.ks", "user*.ks"])
-    if udic파일:
-        결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적)
-        누적 += 결과["udic"]
+    if import_udic:
+        if progress_site:
+            _진행률갱신(progress_site, 누적, "udic")
+        udic파일 = _사전파일찾기(도메인경로, ["user.ks", "user*.ks"], 추가경로=추가경로)
+        if udic파일:
+            결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적)
+            누적 += 결과["udic"]
 
     # CNDIC: cnlist.ks 또는 cnlist*.ks
-    if progress_site:
-        _진행률갱신(progress_site, 누적, "cndic")
-    cndic파일 = _사전파일찾기(도메인경로, ["cnlist.ks", "cnlist*.ks"])
-    if cndic파일:
-        결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적)
-        누적 += 결과["cndic"]
+    if import_cndic:
+        if progress_site:
+            _진행률갱신(progress_site, 누적, "cndic")
+        cndic파일 = _사전파일찾기(도메인경로, ["cnlist.ks", "cnlist*.ks"], 추가경로=추가경로)
+        if cndic파일:
+            결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적)
+            누적 += 결과["cndic"]
 
-    # THESAURUS: addedsyn 또는 addsyn*
-    if progress_site:
-        _진행률갱신(progress_site, 누적, "thesaurus")
-    thesaurus파일 = _사전파일찾기(도메인경로, ["addedsyn", "addsyn*"])
-    if thesaurus파일:
-        결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적)
+    # THESAURUS: quasisynonym 또는 addedsyn
+    if import_thesaurus:
+        if progress_site:
+            _진행률갱신(progress_site, 누적, "thesaurus")
+        thesaurus파일 = _사전파일찾기(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
+        if thesaurus파일:
+            결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적)
 
     return 결과
 

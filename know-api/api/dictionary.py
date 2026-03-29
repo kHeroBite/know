@@ -46,12 +46,18 @@ def 파일건수미리보기(domain: str, _: dict = Depends(현재사용자가�
 @라우터.post("/{domain}/import-from-files")
 def 파일사전임포트(
     domain: str,
+    udic: bool = Query(True),
+    cndic: bool = Query(True),
+    thesaurus: bool = Query(True),
     current: dict = Depends(현재사용자가져오기),
 ):
-    """백그라운드에서 사전 파일 임포트 시작 (비동기)."""
+    """백그라운드에서 사전 파일 임포트 시작 (비동기). 사전별 선택 가능."""
     if current.get("auth") not in ("W", "A"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
-    run_id = 비동기파일임포트시작(domain.upper(), user_id=current.get("user_id"))
+    run_id = 비동기파일임포트시작(
+        domain.upper(), user_id=current.get("user_id"),
+        import_udic=udic, import_cndic=cndic, import_thesaurus=thesaurus,
+    )
     return {"status": "started", "run_id": run_id, "message": "임포트가 시작되었습니다."}
 
 
