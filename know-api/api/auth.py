@@ -1,6 +1,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from core.database import DB세션
 from core.security import 액세스토큰생성, 토큰검증
@@ -47,3 +48,15 @@ def 로그아웃():
 @라우터.get("/me", response_model=사용자정보)
 def 내정보(current_user: dict = Depends(현재사용자가져오기)):
     return 사용자정보(**current_user)
+
+
+class 비밀번호찾기요청(BaseModel):
+    user_id: str
+    email: str
+
+
+@라우터.post("/forgot-password")
+def 비밀번호찾기(요청: 비밀번호찾기요청, db: Session = Depends(DB세션)):
+    from services.auth_service import 비밀번호찾기처리
+    result = 비밀번호찾기처리(db, 요청.user_id, 요청.email)
+    return result

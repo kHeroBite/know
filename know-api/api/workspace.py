@@ -9,6 +9,13 @@ from api.auth import 현재사용자가져오기
 from services.workspace_service import (
     도메인목록,
     도메인연결,
+    도메인삭제,
+    도메인이름변경,
+    도메인추가,
+    도메인추가진행률,
+    old도메인목록,
+    사용자설정읽기,
+    사용자설정저장,
     색상변경,
     워크스페이스목록,
     워크스페이스삭제,
@@ -18,6 +25,7 @@ from services.workspace_service import (
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
+도메인관리라우터 = APIRouter(prefix="/workspace-domains", tags=["도메인관리"])
 
 
 class 워크스페이스생성요청(BaseModel):
@@ -33,24 +41,117 @@ class 색상변경요청(BaseModel):
     color: str
 
 
+class 워크스페이스설정요청(BaseModel):
+    workspace: str
+    domain: Optional[str] = None
+    color: Optional[str] = None
+
+
+class 도메인추가요청(BaseModel):
+    name: str
+    base_source: str  # "domain" | "old"
+    base_name: str
+
+
+class 도메인이름변경요청(BaseModel):
+    new_name: str
+
+
 def _super권한확인(current: dict) -> None:
-    if current.get("user_id") != "super":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super 권한 필요")
+    if current.get("auth") != "A":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자(A) 권한 필요")
+
+
+# ─── 리터럴 경로 (/{name} 보다 먼저 정의) ───
+
+@라우터.get("/preference")
+def 워크스페이스설정조회(
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """사용자 워크스페이스 설정 조회."""
+    pref = 사용자설정읽기(current.get("user_id", ""))
+    if pref is None:
+        return {"workspace": None, "domain": None, "color": None}
+    return pref
+
+
+@라우터.put("/preference")
+def 워크스페이스설정저장처리(
+    요청: 워크스페이스설정요청,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """사용자 워크스페이스 설정 저장."""
+    return 사용자설정저장(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color)
 
 
 @라우터.get("/domains")
 def 도메인목록조회(
     _current: dict = Depends(현재사용자가져오기),
 ) -> List[str]:
-    """도메인 목록 조회 (/home/know/apps/know-ops/domain 폴더 목록)."""
+    """도메인 목록 조회."""
     return 도메인목록()
 
+
+@도메인관리라우터.get("/old-sources")
+def old도메인소스목록(
+    current: dict = Depends(현재사용자가져오기),
+) -> List[str]:
+    """old 영역 도메인 소스 목록 (super 전용)."""
+    _super권한확인(current)
+    return old도메인목록()
+
+
+@도메인관리라우터.post("", status_code=status.HTTP_201_CREATED)
+def 도메인추가처리(
+    요청: 도메인추가요청,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """도메인 추가 — 기존/old 소스에서 복사 (super 전용)."""
+    _super권한확인(current)
+    return 도메인추가(요청.name, 요청.base_source, 요청.base_name)
+
+
+@도메인관리라우터.get("/{name}/progress")
+def 도메인추가진행률조회(
+    name: str,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """도메인 복사 진행률 조회."""
+    진행 = 도메인추가진행률(name)
+    if 진행 is None:
+        return {"status": "idle"}
+    return 진행
+
+
+@도메인관리라우터.delete("/{name}")
+def 도메인삭제처리(
+    name: str,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, str]:
+    """도메인 삭제 (super 전용, 연결 중 차단)."""
+    _super권한확인(current)
+    도메인삭제(name)
+    return {"message": f"도메인 삭제 완료: {name}"}
+
+
+@도메인관리라우터.put("/{name}/rename")
+def 도메인이름변경처리(
+    name: str,
+    요청: 도메인이름변경요청,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, str]:
+    """도메인 이름 변경 (super 전용, 연결 중 차단)."""
+    _super권한확인(current)
+    return 도메인이름변경(name, 요청.new_name)
+
+
+# ─── 워크스페이스 CRUD ───
 
 @라우터.get("")
 def 워크스페이스목록조회(
     _current: dict = Depends(현재사용자가져오기),
 ) -> List[Dict[str, Any]]:
-    """워크스페이스 목록 (이름, 상태 USED/IDLE, 연결 도메인)."""
+    """워크스페이스 목록."""
     return 워크스페이스목록()
 
 
@@ -59,10 +160,12 @@ def 워크스페이스추가(
     요청: 워크스페이스생성요청,
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """워크스페이스 생성 (super 전용). 하위 폴더 자동 생성."""
+    """워크스페이스 생성 (super 전용)."""
     _super권한확인(current)
     return 워크스페이스생성(요청.name, 요청.color)
 
+
+# ─── /{name} 파라미터 경로 (반드시 리터럴 경로 뒤에) ───
 
 @라우터.delete("/{name}", status_code=status.HTTP_200_OK)
 def 워크스페이스제거(
@@ -81,7 +184,7 @@ def 도메인연결처리(
     요청: 도메인연결요청,
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """도메인 연결. USED 상태면 409 반환. domain 폴더를 workspace로 cp."""
+    """도메인 연결."""
     return 도메인연결(name, 요청.domain, current.get("user_id"))
 
 
@@ -90,7 +193,7 @@ def 워크스페이스해제처리(
     name: str,
     _current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """워크스페이스 해제 (IDLE 상태로 변경)."""
+    """워크스페이스 해제."""
     return 워크스페이스해제(name)
 
 
@@ -109,7 +212,7 @@ def 복사진행률조회(
     name: str,
     _current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """도메인 복사 진행률 조회. 진행 중이면 percent/status 반환, 없으면 idle."""
+    """도메인 복사 진행률 조회."""
     진행 = 진행률조회(name)
     if 진행 is None:
         return {"status": "idle"}

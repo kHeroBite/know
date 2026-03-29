@@ -30,4 +30,5 @@ export const accountApi = {
   수정: (userId: string, data: UpdateAccountReq) => 클라이언트.put<Account>(`/accounts/${userId}`, data),
   삭제: (userId: string) => 클라이언트.delete(`/accounts/${userId}`),
   비밀번호초기화: (userId: string) => 클라이언트.post(`/accounts/${userId}/reset-password`),
+  비밀번호찾기: (user_id: string, email: string) => 클라이언트.post('/auth/forgot-password', { user_id, email }),
 }

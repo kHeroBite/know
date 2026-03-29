@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Form, Input, Button, message } from 'antd'
+import { Form, Input, Button, message, Alert, Modal } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useNavigate } from 'react-router-dom'
+import 클라이언트 from '../api/client'
 
 const 학사모로고 = (
   <svg viewBox="0 0 120 120" width="80" height="80" className="login-logo-svg">
@@ -60,6 +61,10 @@ export default function Login() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [에러, set에러] = useState<string | null>(null)
+  const [찾기모달, set찾기모달] = useState(false)
+  const [찾기로딩, set찾기로딩] = useState(false)
+  const [찾기폼] = Form.useForm()
 
   async function onFinish(values: { user_id: string; password: string }) {
     setLoading(true)
@@ -68,7 +73,7 @@ export default function Login() {
       navigate('/')
     } catch (e: any) {
       const detail = e?.response?.data?.detail || '아이디 또는 비밀번호가 올바르지 않습니다.'
-      message.error(detail)
+      set에러(detail)
     } finally {
       setLoading(false)
     }
@@ -93,6 +98,7 @@ export default function Login() {
         </div>
 
         <Form form={form} onFinish={onFinish} layout="vertical" className="login-form">
+          {에러 && <Alert message={에러} type="error" showIcon closable onClose={() => set에러(null)} style={{ marginBottom: 16 }} />}
           <Form.Item name="user_id" rules={[{ required: true, message: '아이디를 입력하세요.' }]}>
             <Input
               prefix={<UserOutlined className="login-input-icon" />}
@@ -119,12 +125,37 @@ export default function Login() {
           >
             로그인
           </Button>
+          <div style={{ textAlign: 'center', marginTop: 12 }}><a onClick={() => set찾기모달(true)} style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>비밀번호를 잊으셨나요?</a></div>
         </Form>
 
         <div className="login-footer">
           <span>&copy; 2026 지식작업소</span>
         </div>
       </div>
+
+      <Modal title="비밀번호 찾기" open={찾기모달} onCancel={() => set찾기모달(false)} onOk={async () => {
+        set찾기로딩(true)
+        try {
+          const vals = await 찾기폼.validateFields()
+          await 클라이언트.post('/auth/forgot-password', vals)
+          message.success('임시 비밀번호가 이메일로 발송되었습니다.')
+          set찾기모달(false)
+          찾기폼.resetFields()
+        } catch (e: any) {
+          message.error(e?.response?.data?.detail || '비밀번호 찾기 실패')
+        } finally {
+          set찾기로딩(false)
+        }
+      }} okText="발송" cancelText="취소" confirmLoading={찾기로딩}>
+        <Form form={찾기폼} layout="vertical">
+          <Form.Item name="user_id" label="아이디" rules={[{ required: true, message: '아이디를 입력하세요' }]}>
+            <Input placeholder="아이디" />
+          </Form.Item>
+          <Form.Item name="email" label="등록된 이메일" rules={[{ required: true, message: '이메일을 입력하세요' }, { type: 'email', message: '올바른 이메일을 입력하세요' }]}>
+            <Input placeholder="가입 시 등록한 이메일" type="email" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

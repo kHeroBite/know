@@ -24,6 +24,8 @@ import {
   DeleteOutlined,
   CheckCircleOutlined,
   BgColorsOutlined,
+  EditOutlined,
+  FolderOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
 import { useAuthStore } from '../stores/authStore'
@@ -47,7 +49,7 @@ interface 워크스페이스항목 {
 
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
-  const { selectedWorkspace, setWorkspace } = useWorkspaceStore()
+  const { selectedWorkspace, setWorkspace, clearWorkspace } = useWorkspaceStore()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<string[]>([])
   const [로딩, set로딩] = useState(false)
@@ -60,7 +62,19 @@ export default function Workspace() {
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
-  const isSuper = currentUser?.user_id === 'super'
+  const isSuper = currentUser?.auth === 'A'
+
+  // 도메인 관리 상태
+  const [도메인추가팝업, set도메인추가팝업] = useState(false)
+  const [도메인신규이름, set도메인신규이름] = useState('')
+  const [도메인소스타입, set도메인소스타입] = useState<'domain' | 'old'>('domain')
+  const [도메인소스이름, set도메인소스이름] = useState<string | null>(null)
+  const [old소스목록, setOld소스목록] = useState<string[]>([])
+  const [도메인추가로딩, set도메인추가로딩] = useState(false)
+  const [도메인복사진행중, set도메인복사진행중] = useState<Record<string, number>>({})
+  const 도메인폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const [이름변경대상, set이름변경대상] = useState<string | null>(null)
+  const [변경후이름, set변경후이름] = useState('')
 
   const 목록조회 = async () => {
     set로딩(true)
@@ -152,6 +166,45 @@ export default function Workspace() {
     }
   }
 
+  const 도메인폴링시작 = (dmName: string) => {
+    if (도메인폴링ref.current[dmName]) return
+    도메인폴링ref.current[dmName] = setInterval(async () => {
+      try {
+        const res = await workspaceAPI.도메인추가진행률(dmName)
+        const st = res.data?.status
+        if (!st || st === 'idle') {
+          clearInterval(도메인폴링ref.current[dmName])
+          delete 도메인폴링ref.current[dmName]
+          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
+          await 목록조회()
+          return
+        }
+        if (st === 'done') {
+          const elapsed = res.data?.elapsed
+          const fc = res.data?.file_count
+          message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일, ${elapsed}초`)
+          clearInterval(도메인폴링ref.current[dmName])
+          delete 도메인폴링ref.current[dmName]
+          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
+          await 목록조회()
+          return
+        }
+        if (st === 'error') {
+          message.error(`도메인 추가 실패: ${res.data?.message}`)
+          clearInterval(도메인폴링ref.current[dmName])
+          delete 도메인폴링ref.current[dmName]
+          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
+          return
+        }
+        set도메인복사진행중(prev => ({ ...prev, [dmName]: res.data?.percent ?? 0 }))
+      } catch {
+        clearInterval(도메인폴링ref.current[dmName])
+        delete 도메인폴링ref.current[dmName]
+        set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
+      }
+    }, 1500)
+  }
+
   const 삭제핸들러 = async (name: string) => {
     try {
       await workspaceAPI.워크스페이스삭제(name)
@@ -191,11 +244,20 @@ export default function Workspace() {
   const 해제핸들러 = async (wsName: string) => {
     try {
       await workspaceAPI.워크스페이스해제(wsName)
-      message.success(`"${wsName}" 해제 완료`)
+      // 선택된 워크스페이스를 연결해제하면 선택도 해제 + 테마 초기화
+      if (selectedWorkspace === wsName) {
+        clearWorkspace()
+      }
+      message.success(`"${wsName}" 연결해제 완료`)
       await 목록조회()
     } catch (err: any) {
-      message.error(err.response?.data?.detail || '해제 실패')
+      message.error(err.response?.data?.detail || '연결해제 실패')
     }
+  }
+
+  const 선택해제핸들러 = () => {
+    clearWorkspace()
+    message.success('워크스페이스 선택 해제')
   }
 
   const 색상변경핸들러 = async (wsName: string, color: string) => {
@@ -216,11 +278,12 @@ export default function Workspace() {
     const isSelected = selectedWorkspace === ws.name
     const themeColor = ws.color
     if (isSelected) {
+      const bg = themeColor || '#1a1a2e'
       return {
-        border: `2px solid ${themeColor || '#52c41a'}`,
-        boxShadow: themeColor
-          ? `0 0 14px ${themeColor}88`
-          : '0 0 14px rgba(82, 196, 26, 0.35)',
+        border: `2px solid ${bg}`,
+        background: bg,
+        color: '#fff',
+        boxShadow: `0 0 14px ${bg}88`,
         transition: 'all 0.3s ease',
         animation: 'wsCardFadeIn 0.4s ease',
       }
@@ -355,7 +418,7 @@ export default function Workspace() {
                           }}
                         />
                       )}
-                      <Text strong style={{ fontSize: 15 }}>
+                      <Text strong style={{ fontSize: 15, color: isSelected ? '#fff' : undefined }}>
                         {ws.name}
                       </Text>
                     </div>
@@ -367,7 +430,7 @@ export default function Workspace() {
                       <Badge
                         status="success"
                         text={
-                          <Text style={{ color: ws.color || '#52c41a', fontSize: 12 }}>
+                          <Text style={{ color: '#fff', fontSize: 12 }}>
                             선택됨
                           </Text>
                         }
@@ -389,15 +452,15 @@ export default function Workspace() {
                   }}>
                     <div>
                       {ws.domain ? (
-                        <Badge color="blue" text={<Text style={{ fontSize: 13 }}>{ws.domain}</Text>} />
+                        <Badge color={isSelected ? 'white' : 'blue'} text={<Text style={{ fontSize: 13, color: isSelected ? '#fff' : undefined }}>{ws.domain}</Text>} />
                       ) : (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 12, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
                           연결된 도메인 없음
                         </Text>
                       )}
                     </div>
                     {ws.connected_by && (
-                      <Text type="secondary" style={{ fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 11, flexShrink: 0, marginLeft: 8, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
                         연결: {ws.connected_by}
                       </Text>
                     )}
@@ -446,15 +509,23 @@ export default function Workspace() {
 
                     {ws.status === 'USED' && (
                       <>
-                        <Button
-                          type={isSelected ? 'default' : 'primary'}
-                          size="small"
-                          icon={isSelected ? <CheckCircleOutlined /> : undefined}
-                          disabled={!currentUser || isSelected}
-                          onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
-                        >
-                          {isSelected ? '선택됨' : '선택'}
-                        </Button>
+                        {isSelected ? (
+                          <Button
+                            size="small"
+                            onClick={선택해제핸들러}
+                          >
+                            선택해제
+                          </Button>
+                        ) : (
+                          <Button
+                            type="primary"
+                            size="small"
+                            disabled={!currentUser}
+                            onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
+                          >
+                            선택
+                          </Button>
+                        )}
                         <ColorPicker
                           value={ws.color || '#1a1a2e'}
                           onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
@@ -466,13 +537,13 @@ export default function Workspace() {
                           </Button>
                         </ColorPicker>
                         <Popconfirm
-                          title={`"${ws.name}" 워크스페이스를 해제하시겠습니까?`}
+                          title={`"${ws.name}" 도메인 연결을 해제하시겠습니까?`}
                           onConfirm={() => 해제핸들러(ws.name)}
-                          okText="해제"
+                          okText="연결해제"
                           cancelText="취소"
                         >
                           <Button size="small" icon={<DisconnectOutlined />}>
-                            해제
+                            연결해제
                           </Button>
                         </Popconfirm>
                         {isSuper && (
@@ -514,10 +585,172 @@ export default function Workspace() {
         <Select
           style={{ width: '100%', marginTop: 8 }}
           placeholder="연결할 도메인 선택"
-          options={도메인목록.map(d => ({ label: d, value: d }))}
+          options={도메인목록.map(d => {
+            const 연결됨WS = 목록.find(ws => ws.domain === d && ws.status === 'USED')
+            return {
+              label: 연결됨WS ? `${d} (${연결됨WS.name}에 연결됨)` : d,
+              value: d,
+              disabled: !!연결됨WS,
+            }
+          })}
           onChange={v => set선택도메인(v)}
           value={선택도메인}
         />
+      </Modal>
+
+      {/* 이름 변경 모달 */}
+      <Modal
+        title={`도메인 이름 변경 — ${이름변경대상}`}
+        open={!!이름변경대상}
+        onOk={async () => {
+          if (!이름변경대상 || !변경후이름.trim()) return
+          try {
+            await workspaceAPI.도메인이름변경(이름변경대상, 변경후이름.trim())
+            message.success('이름 변경 완료')
+            set이름변경대상(null)
+            set변경후이름('')
+            await 목록조회()
+          } catch (err: any) {
+            message.error(err.response?.data?.detail || '이름 변경 실패')
+          }
+        }}
+        onCancel={() => { set이름변경대상(null); set변경후이름('') }}
+        okText="변경"
+        cancelText="취소"
+        okButtonProps={{ disabled: !변경후이름.trim() }}
+      >
+        <Input
+          placeholder="새 도메인 이름"
+          value={변경후이름}
+          onChange={e => set변경후이름(e.target.value)}
+          style={{ marginTop: 8 }}
+        />
+      </Modal>
+
+      {/* 도메인 관리 영역 (super 전용) */}
+      {isSuper && (
+        <Card
+          title={<><FolderOutlined /> 도메인 관리</>}
+          style={{ marginTop: 24 }}
+          extra={
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={async () => {
+                set도메인추가팝업(true)
+                try { const res = await workspaceAPI.old도메인소스목록(); setOld소스목록(res.data) } catch { /* ignore */ }
+              }}
+            >
+              도메인 추가
+            </Button>
+          }
+        >
+          {/* 도메인 복사 진행률 */}
+          {Object.entries(도메인복사진행중).map(([dm, pct]) => (
+            <div key={dm} style={{ marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, marginRight: 8 }}>{dm} 복사 중</Text>
+              <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block' }} />
+            </div>
+          ))}
+
+          <Row gutter={[8, 8]}>
+            {도메인목록.map(dm => {
+              const 연결됨 = 목록.some(ws => ws.domain === dm && (ws.status === 'USED' || ws.status === 'CONNECTING'))
+              return (
+                <Col key={dm}>
+                  <Card size="small" style={{ minWidth: 140 }} styles={{ body: { padding: '8px 12px' } }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <Text strong>{dm}</Text>
+                      <Space size={4}>
+                        <Button
+                          size="small"
+                          icon={<EditOutlined />}
+                          disabled={연결됨}
+                          onClick={() => { set이름변경대상(dm); set변경후이름(dm) }}
+                        />
+                        <Popconfirm
+                          title={`도메인 "${dm}"을 삭제하시겠습니까?`}
+                          onConfirm={async () => {
+                            try {
+                              await workspaceAPI.도메인삭제(dm)
+                              message.success(`도메인 "${dm}" 삭제 완료`)
+                              await 목록조회()
+                            } catch (err: any) {
+                              message.error(err.response?.data?.detail || '삭제 실패')
+                            }
+                          }}
+                          okText="삭제"
+                          cancelText="취소"
+                        >
+                          <Button size="small" danger icon={<DeleteOutlined />} disabled={연결됨} />
+                        </Popconfirm>
+                      </Space>
+                    </div>
+                    {연결됨 && <Text type="secondary" style={{ fontSize: 11 }}>연결 중</Text>}
+                  </Card>
+                </Col>
+              )
+            })}
+            {도메인목록.length === 0 && <Col><Text type="secondary">도메인이 없습니다</Text></Col>}
+          </Row>
+        </Card>
+      )}
+
+      {/* 도메인 추가 모달 */}
+      <Modal
+        title="도메인 추가"
+        open={도메인추가팝업}
+        onOk={async () => {
+          if (!도메인신규이름.trim() || !도메인소스이름) {
+            message.warning('이름과 소스를 모두 입력하세요')
+            return
+          }
+          set도메인추가로딩(true)
+          const dmName = 도메인신규이름.trim()
+          try {
+            await workspaceAPI.도메인추가(dmName, 도메인소스타입, 도메인소스이름)
+            message.info(`도메인 "${dmName}" 복사 시작`)
+            set도메인추가팝업(false)
+            set도메인신규이름('')
+            set도메인소스이름(null)
+            set도메인복사진행중(prev => ({ ...prev, [dmName]: 0 }))
+            도메인폴링시작(dmName)
+          } catch (err: any) {
+            message.error(err.response?.data?.detail || '추가 실패')
+          } finally {
+            set도메인추가로딩(false)
+          }
+        }}
+        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인소스이름(null) }}
+        okText="추가"
+        cancelText="취소"
+        confirmLoading={도메인추가로딩}
+        okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
+          <Input
+            placeholder="새 도메인 이름"
+            value={도메인신규이름}
+            onChange={e => set도메인신규이름(e.target.value)}
+          />
+          <Select
+            style={{ width: '100%' }}
+            value={도메인소스타입}
+            onChange={v => { set도메인소스타입(v); set도메인소스이름(null) }}
+            options={[
+              { label: '기존 도메인에서 복사', value: 'domain' },
+              { label: 'Old 영역에서 복사', value: 'old' },
+            ]}
+          />
+          <Select
+            style={{ width: '100%' }}
+            placeholder="소스 선택"
+            options={(도메인소스타입 === 'old' ? (old소스목록 || []) : 도메인목록).map(d => ({ label: d, value: d }))}
+            onChange={v => set도메인소스이름(v)}
+            value={도메인소스이름}
+          />
+        </Space>
       </Modal>
     </div>
   )

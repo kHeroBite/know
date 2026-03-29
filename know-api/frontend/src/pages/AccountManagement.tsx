@@ -49,10 +49,10 @@ export default function AccountManagement() {
       const values = await form.validateFields()
       if (editTarget) {
         const data: any = {}
-        if (values.name) data.name = values.name
+        if (values.name !== undefined && values.name !== '') data.name = values.name
         if (values.password) data.password = values.password
-        if (values.auth) data.auth = values.auth
-        if (values.email !== undefined) data.email = values.email
+        if (values.auth !== undefined) data.auth = values.auth
+        if (values.email !== undefined) data.email = values.email || null  // 빈 문자열이면 null로
         await accountApi.수정(editTarget.user_id, data)
         message.success('계정 수정 완료')
       } else {

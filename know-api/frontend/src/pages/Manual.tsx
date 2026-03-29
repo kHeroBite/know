@@ -42,13 +42,7 @@ export default function Manual() {
             type="info"
             showIcon
             message="초기 관리자 계정"
-            description={
-              <span>
-                아이디: <Text strong>admin</Text> / 비밀번호: <Text strong>1111</Text>
-                <br />
-                최초 로그인 후 반드시 비밀번호를 변경하세요.
-              </span>
-            }
+            description="관리자에게 초기 계정을 요청하세요."
             style={{ marginBottom: 16 }}
           />
           <Paragraph>
@@ -274,7 +268,8 @@ export default function Manual() {
           <Paragraph>
             <Text code>python3 init_db.py</Text>
             <br />
-            데이터베이스 테이블을 초기화하고 기본 관리자 계정(admin/1111)을 생성합니다.
+            데이터베이스 테이블을 초기화하고 기본 관리자 계정을 생성합니다.
+            비밀번호를 잊은 경우: (1) 로그인 페이지 '비밀번호를 잊으셨나요?' 클릭 → 등록된 이메일로 초기화, (2) 서버에서 <Text code>python3 init_db.py --reset-password 계정명</Text>
             <br />
             <Text type="danger">주의: 기존 데이터가 모두 삭제됩니다.</Text>
           </Paragraph>
