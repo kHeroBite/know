@@ -49,13 +49,14 @@ export default function Layout() {
       children: [
         { key: '/statistics', label: '통계' },
         { key: '/build-history', label: '빌드이력' },
+        ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },
   ]
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider className="app-sider" style={{ display: 'flex', flexDirection: 'column' }}>
+      <Sider className="app-sider" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, height: '100vh', zIndex: 100 }}>
         <div className="app-sider-title">
           {/* 학사모 로고 아이콘 */}
           <svg
@@ -117,7 +118,7 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        <Content style={{ margin: 16, overflowX: 'hidden' }}>
+        <Content style={{ margin: 16, marginLeft: 216, overflowX: 'hidden' }}>
           <Outlet />
         </Content>
       </AntLayout>

@@ -10,6 +10,7 @@ import Statistics from './pages/Statistics'
 import Pipeline from './pages/Pipeline'
 import Knowledge from './pages/Knowledge'
 import BuildHistory from './pages/BuildHistory'
+import AccountManagement from './pages/AccountManagement'
 import Phase1Pipeline from './pages/Phase1Pipeline'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="pipeline" element={<Pipeline />} />
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="build-history" element={<BuildHistory />} />
+        <Route path="accounts" element={<AccountManagement />} />
       </Route>
     </Routes>
   )
