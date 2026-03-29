@@ -35,6 +35,8 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
   const [로딩, set로딩] = useState(false)
   const [모달열림, set모달열림] = useState(false)
   const [저장중, set저장중] = useState(false)
+  const [총건수, set총건수] = useState(0)
+  const [현재페이지, set현재페이지] = useState(1)
   const [form] = Form.useForm()
   const cfg = 사전설정[dicType]
 
@@ -43,14 +45,17 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     set로딩(true)
     try {
       const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
-      const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${경로}`)
+      const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${경로}`, {
+        params: { page: 현재페이지, size: 50, ...(검색어 ? { search: 검색어 } : {}) },
+      })
       set데이터(res.data?.items || [])
+      set총건수(res.data?.total || 0)
     } catch {
       message.error(`${cfg.title} 조회 실패`)
     } finally {
       set로딩(false)
     }
-  }, [선택도메인, dicType])
+  }, [선택도메인, dicType, 현재페이지, 검색어])
 
   useEffect(() => {
     if (선택도메인) 데이터조회()
@@ -83,14 +88,6 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
       set저장중(false)
     }
   }
-
-  const 필터데이터 = 데이터.filter(item => {
-    if (!검색어) return true
-    const target = dicType === 'thesaurus'
-      ? `${item.head_word} ${item.tail_word}`
-      : `${item.word} ${item.memo || ''}`
-    return target.includes(검색어)
-  })
 
   const 삭제버튼 = (record: any) => (
     <Popconfirm title="삭제?" onConfirm={() => 삭제(record)} okText="삭제" cancelText="취소">
@@ -137,20 +134,28 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     >
       <Input.Search
         placeholder="검색..."
-        onSearch={v => set검색어(v)}
-        onChange={e => { if (!e.target.value) set검색어('') }}
+        onSearch={v => { set현재페이지(1); set검색어(v) }}
+        onChange={e => { if (!e.target.value) { set현재페이지(1); set검색어('') } }}
         allowClear
         size="small"
         style={{ marginBottom: 8 }}
       />
       <Table
-        dataSource={필터데이터}
+        dataSource={데이터}
         columns={columns}
         rowKey={dicType === 'thesaurus' ? (r: any) => `${r.head_word}-${r.tail_word}` : 'word'}
         loading={로딩}
         size="small"
         scroll={{ y: 500 }}
-        pagination={{ size: 'small', pageSize: 20, showSizeChanger: false, showTotal: t => `${t}건` }}
+        pagination={{
+          current: 현재페이지,
+          pageSize: 50,
+          total: 총건수,
+          showTotal: (total) => `총 ${total.toLocaleString()}건`,
+          showSizeChanger: false,
+          size: 'small',
+          onChange: (page) => { set현재페이지(page) },
+        }}
       />
       <Modal
         title={`${cfg.label} 추가`}
