@@ -24,4 +24,28 @@ export const workspaceAPI = {
 
   색상변경: (name: string, color: string) =>
     클라이언트.put(`/workspaces/${name}/color`, { color }),
+
+  // 도메인 관리
+  old도메인소스목록: () =>
+    클라이언트.get('/workspace-domains/old-sources'),
+
+  도메인추가: (name: string, base_source: string, base_name: string,
+    copy_dict_from?: string | null, mysql_dict_from?: string | null) =>
+    클라이언트.post('/workspace-domains', {
+      name, base_source, base_name,
+      ...(copy_dict_from ? { copy_dict_from } : {}),
+      ...(mysql_dict_from ? { mysql_dict_from } : {}),
+    }),
+
+  mysql도메인소스목록: () =>
+    클라이언트.get('/workspace-domains/mysql-sources'),
+
+  도메인추가진행률: (name: string) =>
+    클라이언트.get(`/workspace-domains/${name}/progress`),
+
+  도메인삭제: (name: string) =>
+    클라이언트.delete(`/workspace-domains/${name}`),
+
+  도메인이름변경: (name: string, new_name: string) =>
+    클라이언트.put(`/workspace-domains/${name}/rename`, { new_name }),
 }

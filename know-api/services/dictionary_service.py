@@ -564,3 +564,111 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
 def 파일에서사전임포트(db: Session, site: str, user_id: Optional[str] = None) -> dict:
     """동기 임포트 래퍼 (기존 호환)."""
     return _동기파일임포트(db, site, user_id=user_id)
+
+
+# ─── 도메인 사전 복사 ─────────────────────────────────────────────
+
+def 도메인사전복사(db: Session, source_site: str, target_site: str) -> dict:
+    """기존 SQLite 도메인의 사전 3종(UDIC/CNDIC/THESAURUS)을 새 도메인으로 복사."""
+    사이트명검증(source_site)
+    사이트명검증(target_site)
+    결과 = {}
+    for dic_type in ("udic", "cndic", "thesaurus"):
+        src_tbl = _사전테이블(db, source_site, dic_type)
+        tgt_tbl = _사전테이블(db, target_site, dic_type)
+        db.execute(delete(tgt_tbl))
+        rows = db.execute(select(src_tbl)).mappings().all()
+        if dic_type in ("udic", "cndic"):
+            for r in rows:
+                db.execute(insert(tgt_tbl).values(
+                    _WORD=r["_WORD"], _MEMO=r.get("_MEMO"),
+                    _USER_ID=r.get("_USER_ID"), _UPDATED=datetime.now(),
+                ))
+        else:  # thesaurus
+            for r in rows:
+                db.execute(insert(tgt_tbl).values(
+                    _HEAD_WORD=r["_HEAD_WORD"], _TAIL_WORD=r.get("_TAIL_WORD"),
+                    _MEMO=r.get("_MEMO"), _USER_ID=r.get("_USER_ID"), _UPDATED=datetime.now(),
+                ))
+        결과[dic_type] = len(rows)
+    db.commit()
+    return 결과
+
+
+def mysql도메인목록() -> list:
+    """MySQL know_mng DB에서 사전 테이블이 있는 도메인명 목록 반환."""
+    import pymysql
+    try:
+        conn = pymysql.connect(
+            host="localhost", user="root", password="@!roqkftjqj#",
+            database="know_mng", charset="utf8",
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT DISTINCT REPLACE(TABLE_NAME, '_THESAURUS', '') "
+            "FROM information_schema.tables "
+            "WHERE TABLE_SCHEMA = 'know_mng' AND TABLE_NAME LIKE '%%\\_THESAURUS'"
+        )
+        domains = sorted(r[0] for r in cur.fetchall())
+        conn.close()
+        return domains
+    except Exception:
+        return []
+
+
+def mysql에서사전마이그레이션(target_site: str, mysql_site: str) -> dict:
+    """MySQL의 사전 3종(UDIC/CNDIC/THESAURUS)을 SQLite 새 도메인으로 마이그레이션."""
+    import pymysql
+    from core.database import 세션팩토리
+
+    사이트명검증(target_site)
+
+    mysql_conn = pymysql.connect(
+        host="localhost", user="root", password="@!roqkftjqj#",
+        database="know_mng", charset="utf8",
+    )
+    db = 세션팩토리()
+
+    결과 = {}
+    try:
+        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS")]:
+            mysql_tbl = f"{mysql_site}{suffix}"
+            tgt_tbl = _사전테이블(db, target_site, dic_type)
+
+            try:
+                cur = mysql_conn.cursor()
+                cur.execute(f"SELECT COUNT(*) FROM `{mysql_tbl}`")
+                cnt = cur.fetchone()[0]
+
+                if cnt == 0:
+                    결과[dic_type] = 0
+                    continue
+
+                db.execute(delete(tgt_tbl))
+
+                if dic_type in ("udic", "cndic"):
+                    cur.execute(f"SELECT _WORD, _MEMO, _USER_ID FROM `{mysql_tbl}`")
+                    rows = cur.fetchall()
+                    for r in rows:
+                        db.execute(insert(tgt_tbl).values(
+                            _WORD=r[0], _MEMO=r[1],
+                            _USER_ID=r[2], _UPDATED=datetime.now(),
+                        ))
+                else:  # thesaurus
+                    cur.execute(f"SELECT _HEAD_WORD, _TAIL_WORD, _MEMO, _USER_ID FROM `{mysql_tbl}`")
+                    rows = cur.fetchall()
+                    for r in rows:
+                        db.execute(insert(tgt_tbl).values(
+                            _HEAD_WORD=r[0], _TAIL_WORD=r[1],
+                            _MEMO=r[2], _USER_ID=r[3], _UPDATED=datetime.now(),
+                        ))
+
+                db.commit()
+                결과[dic_type] = len(rows)
+            except Exception as e:
+                결과[dic_type] = f"오류: {e}"
+
+        return 결과
+    finally:
+        db.close()
+        mysql_conn.close()

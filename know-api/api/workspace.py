@@ -51,6 +51,8 @@ class 도메인추가요청(BaseModel):
     name: str
     base_source: str  # "domain" | "old"
     base_name: str
+    copy_dict_from: Optional[str] = None    # SQLite 기존 도메인에서 사전 복사
+    mysql_dict_from: Optional[str] = None   # MySQL에서 사전 마이그레이션
 
 
 class 도메인이름변경요청(BaseModel):
@@ -101,14 +103,26 @@ def old도메인소스목록(
     return old도메인목록()
 
 
+@도메인관리라우터.get("/mysql-sources")
+def mysql도메인소스목록(
+    current: dict = Depends(현재사용자가져오기),
+) -> List[str]:
+    """MySQL DB에서 사전이 있는 도메인 소스 목록 (super 전용)."""
+    _super권한확인(current)
+    from services.dictionary_service import mysql도메인목록
+    return mysql도메인목록()
+
+
 @도메인관리라우터.post("", status_code=status.HTTP_201_CREATED)
 def 도메인추가처리(
     요청: 도메인추가요청,
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """도메인 추가 — 기존/old 소스에서 복사 (super 전용)."""
+    """도메인 추가 — 기존/old 소스에서 복사 + 사전 복사 옵션 (super 전용)."""
     _super권한확인(current)
-    return 도메인추가(요청.name, 요청.base_source, 요청.base_name)
+    return 도메인추가(요청.name, 요청.base_source, 요청.base_name,
+                     copy_dict_from=요청.copy_dict_from,
+                     mysql_dict_from=요청.mysql_dict_from)
 
 
 @도메인관리라우터.get("/{name}/progress")

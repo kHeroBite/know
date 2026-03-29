@@ -16,6 +16,7 @@ import {
   Empty,
   Spin,
   ColorPicker,
+  Radio,
 } from 'antd'
 import {
   PlusOutlined,
@@ -75,6 +76,10 @@ export default function Workspace() {
   const 도메인폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const [이름변경대상, set이름변경대상] = useState<string | null>(null)
   const [변경후이름, set변경후이름] = useState('')
+  // 사전 복사 옵션
+  const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
+  const [사전복사소스, set사전복사소스] = useState<string | null>(null)
+  const [mysql소스목록, setMysql소스목록] = useState<string[]>([])
 
   const 목록조회 = async () => {
     set로딩(true)
@@ -179,10 +184,16 @@ export default function Workspace() {
           await 목록조회()
           return
         }
+        if (st === 'dict_copying') {
+          set도메인복사진행중(prev => ({ ...prev, [dmName]: 92 }))
+          return
+        }
         if (st === 'done') {
           const elapsed = res.data?.elapsed
           const fc = res.data?.file_count
-          message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일, ${elapsed}초`)
+          const dictResult = res.data?.dict_result
+          const dictMsg = dictResult ? ` + 사전 ${Object.values(dictResult).filter(v => typeof v === 'number').reduce((a: number, b) => a + (b as number), 0)}건` : ''
+          message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일${dictMsg}, ${elapsed}초`)
           clearInterval(도메인폴링ref.current[dmName])
           delete 도메인폴링ref.current[dmName]
           set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
@@ -639,7 +650,16 @@ export default function Workspace() {
               icon={<PlusOutlined />}
               onClick={async () => {
                 set도메인추가팝업(true)
-                try { const res = await workspaceAPI.old도메인소스목록(); setOld소스목록(res.data) } catch { /* ignore */ }
+                set사전복사모드('none')
+                set사전복사소스(null)
+                try {
+                  const [oldRes, mysqlRes] = await Promise.all([
+                    workspaceAPI.old도메인소스목록(),
+                    workspaceAPI.mysql도메인소스목록(),
+                  ])
+                  setOld소스목록(oldRes.data)
+                  setMysql소스목록(mysqlRes.data)
+                } catch { /* ignore */ }
               }}
             >
               도메인 추가
@@ -709,11 +729,15 @@ export default function Workspace() {
           set도메인추가로딩(true)
           const dmName = 도메인신규이름.trim()
           try {
-            await workspaceAPI.도메인추가(dmName, 도메인소스타입, 도메인소스이름)
-            message.info(`도메인 "${dmName}" 복사 시작`)
+            const copyDictFrom = 사전복사모드 === 'sqlite' ? 사전복사소스 : null
+            const mysqlDictFrom = 사전복사모드 === 'mysql' ? 사전복사소스 : null
+            await workspaceAPI.도메인추가(dmName, 도메인소스타입, 도메인소스이름, copyDictFrom, mysqlDictFrom)
+            message.info(`도메인 "${dmName}" 복사 시작${사전복사모드 !== 'none' ? ' (사전 포함)' : ''}`)
             set도메인추가팝업(false)
             set도메인신규이름('')
             set도메인소스이름(null)
+            set사전복사모드('none')
+            set사전복사소스(null)
             set도메인복사진행중(prev => ({ ...prev, [dmName]: 0 }))
             도메인폴링시작(dmName)
           } catch (err: any) {
@@ -722,7 +746,7 @@ export default function Workspace() {
             set도메인추가로딩(false)
           }
         }}
-        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인소스이름(null) }}
+        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null) }}
         okText="추가"
         cancelText="취소"
         confirmLoading={도메인추가로딩}
@@ -750,6 +774,37 @@ export default function Workspace() {
             onChange={v => set도메인소스이름(v)}
             value={도메인소스이름}
           />
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>사전 복사 옵션</Text>
+            <Radio.Group
+              value={사전복사모드}
+              onChange={e => { set사전복사모드(e.target.value); set사전복사소스(null) }}
+              size="small"
+            >
+              <Radio value="none">복사 안 함</Radio>
+              <Radio value="sqlite">기존 도메인에서</Radio>
+              <Radio value="mysql">MySQL에서</Radio>
+            </Radio.Group>
+          </div>
+          {사전복사모드 === 'sqlite' && (
+            <Select
+              style={{ width: '100%' }}
+              placeholder="사전 복사할 기존 도메인 선택"
+              options={도메인목록.map(d => ({ label: d, value: d }))}
+              onChange={v => set사전복사소스(v)}
+              value={사전복사소스}
+            />
+          )}
+          {사전복사모드 === 'mysql' && (
+            <Select
+              style={{ width: '100%' }}
+              placeholder="MySQL 도메인 선택"
+              showSearch
+              options={mysql소스목록.map(d => ({ label: d, value: d }))}
+              onChange={v => set사전복사소스(v)}
+              value={사전복사소스}
+            />
+          )}
         </Space>
       </Modal>
     </div>
