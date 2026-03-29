@@ -2,6 +2,7 @@ from __future__ import annotations
 import glob
 import os
 import re
+import threading
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -268,7 +269,86 @@ def _파일읽기(파일경로: str) -> List[str]:
     return 줄목록
 
 
-def _udic_cndic_파일임포트(db: Session, site: str, dic_type: str, 파일경로: str, user_id: Optional[str] = None) -> int:
+# ─── 파일 건수 미리보기 ──────────────────────────────────────────
+
+_사전파일패턴 = {
+    "udic": ["user.ks", "user*.ks"],
+    "cndic": ["cnlist.ks", "cnlist*.ks"],
+    "thesaurus": ["addedsyn", "addsyn*"],
+}
+
+
+def 사전파일건수미리보기(site: str) -> dict:
+    """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
+    if not os.path.isdir(도메인경로):
+        return 결과
+    for dic_type, patterns in _사전파일패턴.items():
+        파일경로 = _사전파일찾기(도메인경로, patterns)
+        if 파일경로 and os.path.isfile(파일경로):
+            try:
+                with open(파일경로, 'rb') as f:
+                    결과[dic_type] = sum(1 for line in f if line.strip())
+            except Exception:
+                pass
+    return 결과
+
+
+# ─── 비동기 임포트 + 진행률 추적 ────────────────────────────────
+
+_임포트진행률: dict = {}
+
+
+def 비동기파일임포트시작(site: str, user_id: str = None) -> str:
+    """백그라운드 스레드에서 임포트 시작. run_id 반환."""
+    import uuid as uuid_mod
+    run_id = uuid_mod.uuid4().hex[:8]
+    미리보기 = 사전파일건수미리보기(site)
+    전체건수 = sum(미리보기.values())
+    _임포트진행률[site] = {
+        "status": "running", "total": 전체건수, "current": 0,
+        "percent": 0, "stage": "preparing", "result": None, "run_id": run_id,
+    }
+
+    def _작업():
+        from core.database import 세션팩토리
+        try:
+            db = 세션팩토리()
+            결과 = _동기파일임포트(db, site, user_id=user_id, progress_site=site)
+            _임포트진행률[site]["status"] = "done"
+            _임포트진행률[site]["percent"] = 100
+            _임포트진행률[site]["result"] = 결과
+            db.close()
+        except Exception as e:
+            _임포트진행률[site]["status"] = "error"
+            _임포트진행률[site]["result"] = {"error": str(e)}
+
+    threading.Thread(target=_작업, daemon=True).start()
+    return run_id
+
+
+def 임포트진행률조회(site: str) -> dict:
+    """진행률 조회. 완료/오류 시 해당 결과도 포함."""
+    return _임포트진행률.get(site, {"status": "idle"})
+
+
+def _진행률갱신(progress_site: str, current: int, stage: str = None):
+    """진행률 딕셔너리 갱신 헬퍼."""
+    진행 = _임포트진행률.get(progress_site)
+    if not 진행:
+        return
+    진행["current"] = current
+    if stage:
+        진행["stage"] = stage
+    진행["percent"] = int(current / 진행["total"] * 100) if 진행["total"] > 0 else 0
+
+
+def _udic_cndic_파일임포트(
+    db: Session, site: str, dic_type: str, 파일경로: str,
+    user_id: Optional[str] = None,
+    progress_site: Optional[str] = None, progress_offset: int = 0,
+) -> int:
     """udic/cndic .ks 파일을 읽어 DB에 INSERT (기존 데이터 DELETE 후)."""
     tbl = _사전테이블(db, site, dic_type)
     db.execute(delete(tbl))
@@ -288,11 +368,19 @@ def _udic_cndic_파일임포트(db: Session, site: str, dic_type: str, 파일경
             _USER_ID=user_id, _UPDATED=datetime.now(),
         ))
         삽입수 += 1
+        if progress_site and 삽입수 % 1000 == 0:
+            _진행률갱신(progress_site, progress_offset + 삽입수)
+    if progress_site:
+        _진행률갱신(progress_site, progress_offset + 삽입수)
     db.commit()
     return 삽입수
 
 
-def _thesaurus_파일임포트(db: Session, site: str, 파일경로: str, user_id: Optional[str] = None) -> int:
+def _thesaurus_파일임포트(
+    db: Session, site: str, 파일경로: str,
+    user_id: Optional[str] = None,
+    progress_site: Optional[str] = None, progress_offset: int = 0,
+) -> int:
     """addedsyn 파일을 읽어 thesaurus DB에 INSERT (기존 데이터 DELETE 후).
 
     지원 형식:
@@ -302,7 +390,6 @@ def _thesaurus_파일임포트(db: Session, site: str, 파일경로: str, user_i
     tbl = _사전테이블(db, site, "thesaurus")
     db.execute(delete(tbl))
 
-    줄목록 = []
     빈줄포함목록 = []
     for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
         try:
@@ -337,6 +424,8 @@ def _thesaurus_파일임포트(db: Session, site: str, 파일경로: str, user_i
                 _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
             ))
             삽입수 += 1
+            if progress_site and 삽입수 % 1000 == 0:
+                _진행률갱신(progress_site, progress_offset + 삽입수)
     else:
         # 그룹 형식: 빈줄로 구분
         빈줄있음 = any(l == "" for l in 빈줄포함목록)
@@ -364,6 +453,8 @@ def _thesaurus_파일임포트(db: Session, site: str, 파일경로: str, user_i
                     _USER_ID=user_id, _UPDATED=datetime.now(),
                 ))
                 삽입수 += 1
+                if progress_site and 삽입수 % 1000 == 0:
+                    _진행률갱신(progress_site, progress_offset + 삽입수)
         else:
             # 빈줄 없는 그룹 형식: 각 단어를 개별 head_word로 등록
             for 줄 in 비공백줄:
@@ -376,12 +467,16 @@ def _thesaurus_파일임포트(db: Session, site: str, 파일경로: str, user_i
                     _USER_ID=user_id, _UPDATED=datetime.now(),
                 ))
                 삽입수 += 1
+                if progress_site and 삽입수 % 1000 == 0:
+                    _진행률갱신(progress_site, progress_offset + 삽입수)
 
+    if progress_site:
+        _진행률갱신(progress_site, progress_offset + 삽입수)
     db.commit()
     return 삽입수
 
 
-def 파일에서사전임포트(db: Session, site: str, user_id: Optional[str] = None) -> dict:
+def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None) -> dict:
     """도메인 디렉토리에서 사전 파일을 읽어 DB에 임포트.
 
     기존 DB 데이터 전체 DELETE 후 새로 INSERT.
@@ -393,20 +488,34 @@ def 파일에서사전임포트(db: Session, site: str, user_id: Optional[str] =
         raise HTTPException(status_code=404, detail=f"도메인 디렉토리를 찾을 수 없음: {site}")
 
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    누적 = 0
 
     # UDIC: user.ks 또는 user*.ks
+    if progress_site:
+        _진행률갱신(progress_site, 누적, "udic")
     udic파일 = _사전파일찾기(도메인경로, ["user.ks", "user*.ks"])
     if udic파일:
-        결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id)
+        결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적)
+        누적 += 결과["udic"]
 
     # CNDIC: cnlist.ks 또는 cnlist*.ks
+    if progress_site:
+        _진행률갱신(progress_site, 누적, "cndic")
     cndic파일 = _사전파일찾기(도메인경로, ["cnlist.ks", "cnlist*.ks"])
     if cndic파일:
-        결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id)
+        결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적)
+        누적 += 결과["cndic"]
 
     # THESAURUS: addedsyn 또는 addsyn*
+    if progress_site:
+        _진행률갱신(progress_site, 누적, "thesaurus")
     thesaurus파일 = _사전파일찾기(도메인경로, ["addedsyn", "addsyn*"])
     if thesaurus파일:
-        결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id)
+        결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적)
 
     return 결과
+
+
+def 파일에서사전임포트(db: Session, site: str, user_id: Optional[str] = None) -> dict:
+    """동기 임포트 래퍼 (기존 호환)."""
+    return _동기파일임포트(db, site, user_id=user_id)
