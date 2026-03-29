@@ -12,6 +12,7 @@ import Knowledge from './pages/Knowledge'
 import BuildHistory from './pages/BuildHistory'
 import AccountManagement from './pages/AccountManagement'
 import Phase1Pipeline from './pages/Phase1Pipeline'
+import Manual from './pages/Manual'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="build-history" element={<BuildHistory />} />
         <Route path="accounts" element={<AccountManagement />} />
+        <Route path="manual" element={<Manual />} />
       </Route>
     </Routes>
   )

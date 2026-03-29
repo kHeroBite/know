@@ -52,6 +52,13 @@ export default function Layout() {
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },
+    {
+      key: 'help-group',
+      label: '도움말',
+      children: [
+        { key: '/manual', label: '매뉴얼' },
+      ],
+    },
   ]
 
   return (
@@ -96,7 +103,7 @@ export default function Layout() {
             theme="dark"
             mode="inline"
             selectedKeys={[location.pathname]}
-            defaultOpenKeys={['knowledge-group', 'admin-group']}
+            defaultOpenKeys={['knowledge-group', 'admin-group', 'help-group']}
             items={menuItems}
             onClick={({ key }) => navigate(key)}
           />
