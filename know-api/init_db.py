@@ -2,10 +2,17 @@
 
 실행: cd know-api && python init_db.py
 결과: know.db 파일 생성 + 전체 테이블 + 시드 데이터
+
+CLI:
+  python3 init_db.py                              # DB 초기화
+  python3 init_db.py --reset-password admin        # 비밀번호를 1111로 초기화
+  python3 init_db.py --reset-password admin newpw  # 지정 비밀번호로 초기화
+  python3 init_db.py --import EPOST udic /path/to/file.txt  # 사전 파일 임포트
 """
 from __future__ import annotations
 import sys
 import os
+import argparse
 
 # know-api 디렉토리를 path에 추가
 sys.path.insert(0, os.path.dirname(__file__))
@@ -132,7 +139,154 @@ def 시드데이터():
         db.close()
 
 
+def 비밀번호리셋(user_id: str, new_password: str = "1111"):
+    """계정 비밀번호를 지정 값으로 초기화."""
+    db = 세션팩토리()
+    try:
+        row = db.execute(
+            계정테이블.select().where(계정테이블.c._USER_ID == user_id)
+        ).first()
+        if not row:
+            print(f"  [ERROR] 사용자를 찾을 수 없음: {user_id}")
+            sys.exit(1)
+        from sqlalchemy import update
+        db.execute(update(계정테이블).where(계정테이블.c._USER_ID == user_id).values(
+            _PASSWORD=비밀번호해시(new_password),
+            _UPDATED=datetime.now(),
+        ))
+        db.commit()
+        print(f"  [OK] '{user_id}' 비밀번호 초기화 완료 → '{new_password}'")
+    except Exception as e:
+        db.rollback()
+        print(f"  [ERROR] 비밀번호 초기화 실패: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def 사전임포트(도메인: str, 사전타입: str, 파일경로: str):
+    """사전 파일을 읽어 DB에 INSERT (중복 스킵)."""
+    if not os.path.exists(파일경로):
+        print(f"  [ERROR] 파일을 찾을 수 없음: {파일경로}")
+        sys.exit(1)
+
+    meta = MetaData()
+    테이블 = 사전테이블가져오기(도메인, 사전타입, meta)
+    # 테이블이 존재하는지 확인
+    inspector = inspect(엔진)
+    if 테이블.name not in inspector.get_table_names():
+        print(f"  [ERROR] 테이블이 존재하지 않음: {테이블.name} (먼저 init_db.py로 DB 초기화 필요)")
+        sys.exit(1)
+
+    db = 세션팩토리()
+    삽입수 = 0
+    스킵수 = 0
+    try:
+        with open(파일경로, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n").rstrip("\r")
+                if not line.strip():
+                    continue
+
+                if 사전타입 in ("udic", "cndic"):
+                    # 형식: word[\tmemo]
+                    parts = line.split("\t", 1)
+                    word = parts[0].strip()
+                    memo = parts[1].strip() if len(parts) > 1 else None
+                    if not word:
+                        continue
+                    # 중복 체크
+                    기존 = db.execute(테이블.select().where(테이블.c._WORD == word)).first()
+                    if 기존:
+                        스킵수 += 1
+                        continue
+                    db.execute(테이블.insert().values(
+                        _WORD=word,
+                        _MEMO=memo,
+                        _USER_ID="admin",
+                        _UPDATED=datetime.now(),
+                    ))
+                    삽입수 += 1
+
+                elif 사전타입 == "thesaurus":
+                    # 형식: head_word\ttail_word[\tmemo]
+                    parts = line.split("\t")
+                    if len(parts) < 2:
+                        continue
+                    head = parts[0].strip()
+                    tail = parts[1].strip()
+                    memo = parts[2].strip() if len(parts) > 2 else None
+                    if not head or not tail:
+                        continue
+                    기존 = db.execute(테이블.select().where(테이블.c._HEAD_WORD == head)).first()
+                    if 기존:
+                        스킵수 += 1
+                        continue
+                    db.execute(테이블.insert().values(
+                        _HEAD_WORD=head,
+                        _TAIL_WORD=tail,
+                        _MEMO=memo,
+                        _USER_ID="admin",
+                        _UPDATED=datetime.now(),
+                    ))
+                    삽입수 += 1
+
+                elif 사전타입 == "category":
+                    # 형식: word\tdisplay_category
+                    parts = line.split("\t")
+                    if len(parts) < 2:
+                        continue
+                    word = parts[0].strip()
+                    display_cat = parts[1].strip()
+                    if not word or not display_cat:
+                        continue
+                    기존 = db.execute(테이블.select().where(테이블.c._WORD == word)).first()
+                    if 기존:
+                        스킵수 += 1
+                        continue
+                    db.execute(테이블.insert().values(
+                        _WORD=word,
+                        _DISPLAY_CATEGORY=display_cat,
+                        _USER_ID="admin",
+                        _UPDATED=datetime.now(),
+                    ))
+                    삽입수 += 1
+
+        db.commit()
+        print(f"  [OK] {도메인}/{사전타입} 임포트 완료: {삽입수}건 삽입, {스킵수}건 스킵 (중복)")
+    except Exception as e:
+        db.rollback()
+        print(f"  [ERROR] 임포트 실패: {e}")
+        raise
+    finally:
+        db.close()
+
+
 def main():
+    parser = argparse.ArgumentParser(description="know-api DB 초기화 및 관리 도구")
+    parser.add_argument("--reset-password", nargs="+", metavar=("USER_ID", "NEW_PW"),
+                        help="계정 비밀번호 초기화 (기본: 1111)")
+    parser.add_argument("--import", nargs=3, metavar=("DOMAIN", "DIC_TYPE", "FILE"),
+                        dest="import_dict",
+                        help="사전 파일 임포트 (예: --import EPOST udic /path/to/file.txt)")
+    args = parser.parse_args()
+
+    # --reset-password 처리
+    if args.reset_password:
+        user_id = args.reset_password[0]
+        new_pw = args.reset_password[1] if len(args.reset_password) > 1 else "1111"
+        print(f"=== 비밀번호 초기화: {user_id} ===")
+        비밀번호리셋(user_id, new_pw)
+        return
+
+    # --import 처리
+    if args.import_dict:
+        도메인, 사전타입, 파일경로 = args.import_dict
+        print(f"=== 사전 임포트: {도메인}/{사전타입} ← {파일경로} ===")
+        사전임포트(도메인, 사전타입, 파일경로)
+        return
+
+    # 기본: DB 초기화
     db_path = os.path.join(os.path.dirname(__file__), "know.db")
     신규 = not os.path.exists(db_path)
     

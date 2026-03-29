@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Modal, Form, Input, Select, Popconfirm, Tag, message, Space, Typography } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, KeyOutlined } from '@ant-design/icons'
 import { accountApi, Account } from '../api/account'
 
 const AUTH_OPTIONS = [
@@ -35,7 +35,7 @@ export default function AccountManagement() {
   const 모달열기 = (account?: Account) => {
     if (account) {
       setEditTarget(account)
-      form.setFieldsValue({ user_id: account.user_id, name: account.name, auth: account.auth, password: '' })
+      form.setFieldsValue({ user_id: account.user_id, name: account.name, auth: account.auth, email: account.email, password: '' })
     } else {
       setEditTarget(null)
       form.resetFields()
@@ -52,6 +52,7 @@ export default function AccountManagement() {
         if (values.name) data.name = values.name
         if (values.password) data.password = values.password
         if (values.auth) data.auth = values.auth
+        if (values.email !== undefined) data.email = values.email
         await accountApi.수정(editTarget.user_id, data)
         message.success('계정 수정 완료')
       } else {
@@ -62,6 +63,18 @@ export default function AccountManagement() {
       목록조회()
     } catch (e: any) {
       if (e.response?.data?.detail) message.error(e.response.data.detail)
+    }
+  }
+
+  const 비밀번호리셋 = async (userId: string) => {
+    try {
+      const res = await accountApi.비밀번호초기화(userId)
+      message.success(res.data.message || '비밀번호 초기화 완료')
+      if (res.data.new_password) {
+        Modal.info({ title: '임시 비밀번호', content: `새 비밀번호: ${res.data.new_password}` })
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '비밀번호 초기화 실패')
     }
   }
 
@@ -79,12 +92,18 @@ export default function AccountManagement() {
     { title: '아이디', dataIndex: 'user_id', key: 'user_id', render: (v: string) => <><UserOutlined style={{ marginRight: 6 }} />{v}</> },
     { title: '이름', dataIndex: 'name', key: 'name' },
     { title: '권한', dataIndex: 'auth', key: 'auth', render: (v: string) => <Tag color={AUTH_COLORS[v]}>{AUTH_OPTIONS.find(o => o.value === v)?.label || v}</Tag> },
+    { title: '이메일', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
     { title: '생성일', dataIndex: 'created', key: 'created', render: (v: string) => v ? v.substring(0, 19) : '-' },
     {
       title: '작업', key: 'actions',
       render: (_: any, record: Account) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => 모달열기(record)}>수정</Button>
+          {record.email && (
+            <Popconfirm title={`'${record.user_id}' 비밀번호를 초기화하시겠습니까?`} onConfirm={() => 비밀번호리셋(record.user_id)} okText="초기화" cancelText="취소">
+              <Button size="small" icon={<KeyOutlined />}>초기화</Button>
+            </Popconfirm>
+          )}
           {record.user_id !== 'admin' && (
             <Popconfirm title={`'${record.user_id}' 계정을 삭제하시겠습니까?`} onConfirm={() => 삭제(record.user_id)} okText="삭제" cancelText="취소">
               <Button size="small" danger icon={<DeleteOutlined />}>삭제</Button>
@@ -112,6 +131,9 @@ export default function AccountManagement() {
           </Form.Item>
           <Form.Item name="password" label={editTarget ? '비밀번호 (변경 시에만 입력)' : '비밀번호'} rules={editTarget ? [] : [{ required: true, message: '비밀번호를 입력하세요' }]}>
             <Input.Password placeholder="비밀번호" />
+          </Form.Item>
+          <Form.Item name="email" label="이메일">
+            <Input placeholder="비밀번호 분실 시 초기화용" type="email" />
           </Form.Item>
           <Form.Item name="auth" label="권한">
             <Select options={AUTH_OPTIONS} />

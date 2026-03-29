@@ -66,8 +66,9 @@ export default function Login() {
     try {
       await login(values.user_id, values.password)
       navigate('/')
-    } catch {
-      message.error('아이디 또는 비밀번호가 올바르지 않습니다.')
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || '아이디 또는 비밀번호가 올바르지 않습니다.'
+      message.error(detail)
     } finally {
       setLoading(false)
     }
