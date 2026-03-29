@@ -244,10 +244,11 @@ def _사전파일찾기(도메인경로: str, patterns: List[str], 추가경로:
     탐색경로목록 = [도메인경로]
     if 추가경로:
         탐색경로목록.extend(추가경로)
-    for 경로 in 탐색경로목록:
-        if not os.path.isdir(경로):
-            continue
-        for pattern in patterns:
+    # 패턴 우선순위가 경로보다 높음 (quasisynonym이 addedsyn보다 우선)
+    for pattern in patterns:
+        for 경로 in 탐색경로목록:
+            if not os.path.isdir(경로):
+                continue
             # 루트에서 먼저 탐색
             matches = glob.glob(os.path.join(경로, pattern))
             if matches:

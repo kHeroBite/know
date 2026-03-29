@@ -267,25 +267,25 @@ export default function DictionaryManage() {
           <div>
             <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />
             <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="사용자사전">{파일건수.udic.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label="복합명사사전">{파일건수.cndic.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label="유의어사전">{파일건수.thesaurus.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label="합계">{(파일건수.udic + 파일건수.cndic + 파일건수.thesaurus).toLocaleString()} 건</Descriptions.Item>
+              <Descriptions.Item label={
+                <Checkbox checked={임포트옵션.udic} disabled={파일건수.udic === 0} onChange={e => set임포트옵션({...임포트옵션, udic: e.target.checked})}>
+                  사용자사전
+                </Checkbox>
+              }>{파일건수.udic.toLocaleString()} 건</Descriptions.Item>
+              <Descriptions.Item label={
+                <Checkbox checked={임포트옵션.cndic} disabled={파일건수.cndic === 0} onChange={e => set임포트옵션({...임포트옵션, cndic: e.target.checked})}>
+                  복합명사사전
+                </Checkbox>
+              }>{파일건수.cndic.toLocaleString()} 건</Descriptions.Item>
+              <Descriptions.Item label={
+                <Checkbox checked={임포트옵션.thesaurus} disabled={파일건수.thesaurus === 0} onChange={e => set임포트옵션({...임포트옵션, thesaurus: e.target.checked})}>
+                  유의어사전
+                </Checkbox>
+              }>{파일건수.thesaurus.toLocaleString()} 건</Descriptions.Item>
+              <Descriptions.Item label="합계">
+                {((임포트옵션.udic ? 파일건수.udic : 0) + (임포트옵션.cndic ? 파일건수.cndic : 0) + (임포트옵션.thesaurus ? 파일건수.thesaurus : 0)).toLocaleString()} 건 (선택) / {(파일건수.udic + 파일건수.cndic + 파일건수.thesaurus).toLocaleString()} 건 (전체)
+              </Descriptions.Item>
             </Descriptions>
-            <div style={{ marginTop: 16 }}>
-              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>임포트할 사전 선택:</Typography.Text>
-              <Checkbox checked={임포트옵션.udic} onChange={e => set임포트옵션({...임포트옵션, udic: e.target.checked})}>
-                사용자사전 ({파일건수.udic.toLocaleString()} 건)
-              </Checkbox>
-              <br />
-              <Checkbox checked={임포트옵션.cndic} onChange={e => set임포트옵션({...임포트옵션, cndic: e.target.checked})}>
-                복합명사사전 ({파일건수.cndic.toLocaleString()} 건)
-              </Checkbox>
-              <br />
-              <Checkbox checked={임포트옵션.thesaurus} onChange={e => set임포트옵션({...임포트옵션, thesaurus: e.target.checked})}>
-                유의어사전 ({파일건수.thesaurus.toLocaleString()} 건)
-              </Checkbox>
-            </div>
           </div>
         )}
         {!임포트중 && !파일건수 && (
