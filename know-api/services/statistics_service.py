@@ -7,10 +7,10 @@ from models.dictionary import 사이트명검증, 사전테이블가져오기
 
 
 def _테이블존재확인(db: Session, table_name: str) -> bool:
-    """테이블 존재 여부 확인 (INFORMATION_SCHEMA)."""
+    """테이블 존재 여부 확인 (sqlite_master)."""
     try:
         result = db.execute(
-            text("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t"),
+            text("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:t"),
             {"t": table_name},
         ).scalar()
         return bool(result)

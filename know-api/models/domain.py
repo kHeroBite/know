@@ -4,7 +4,7 @@ from sqlalchemy import Table, Column, String, Integer, DateTime, MetaData
 메타데이터 = MetaData()
 
 도메인테이블 = Table(
-    "DOMAIN_MNG",
+    "domains",
     메타데이터,
     Column("_SITE", String(128), primary_key=True),
     Column("_MEMO", String(128)),

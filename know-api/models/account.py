@@ -4,7 +4,7 @@ from sqlalchemy import Table, Column, String, DateTime, MetaData
 메타데이터 = MetaData()
 
 계정테이블 = Table(
-    "ACCOUNT_MNG",
+    "accounts",
     메타데이터,
     Column("_USER_ID", String(32), primary_key=True),
     Column("_NAME", String(10)),
