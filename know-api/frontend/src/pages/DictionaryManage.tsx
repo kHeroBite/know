@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox } from 'antd'
-import { PlusOutlined, DeleteOutlined, ImportOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, ImportOutlined, SearchOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
@@ -31,7 +31,8 @@ function 사전컬럼(dicType: DicType) {
 
 function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도메인: string }) {
   const [데이터, set데이터] = useState<any[]>([])
-  const [검색어, set검색어] = useState('')
+  const [검색어, set검색어] = useState('')        // 입력값 (즉시 반영)
+  const [검색쿼리, set검색쿼리] = useState('')    // API 호출용 (debounce 후)
   const [로딩, set로딩] = useState(false)
   const [모달열림, set모달열림] = useState(false)
   const [저장중, set저장중] = useState(false)
@@ -46,7 +47,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     try {
       const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
       const res = await 클라이언트.get(`/dictionaries/${선택도메인}/${경로}`, {
-        params: { page: 현재페이지, size: 50, ...(검색어 ? { search: 검색어 } : {}) },
+        params: { page: 현재페이지, size: 50, ...(검색쿼리 ? { search: 검색쿼리 } : {}) },
       })
       set데이터(res.data?.items || [])
       set총건수(res.data?.total || 0)
@@ -55,7 +56,16 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     } finally {
       set로딩(false)
     }
-  }, [선택도메인, dicType, 현재페이지, 검색어])
+  }, [선택도메인, dicType, 현재페이지, 검색쿼리])
+
+  // debounce: 검색어 변경 후 100ms 뒤에 검색쿼리 업데이트 → 데이터조회 트리거
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      set검색쿼리(검색어)
+      set현재페이지(1)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [검색어])
 
   useEffect(() => {
     if (선택도메인) 데이터조회()
@@ -132,12 +142,13 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
         </Button>
       }
     >
-      <Input.Search
+      <Input
         placeholder="검색..."
-        onSearch={v => { set현재페이지(1); set검색어(v) }}
-        onChange={e => { if (!e.target.value) { set현재페이지(1); set검색어('') } }}
+        value={검색어}
+        onChange={e => set검색어(e.target.value)}
         allowClear
         size="small"
+        prefix={<SearchOutlined />}
         style={{ marginBottom: 8 }}
       />
       <Table
