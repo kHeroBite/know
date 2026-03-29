@@ -26,9 +26,29 @@ from services.dictionary_service import (
     유의어수정,
     유의어삭제,
     유의어일괄추가,
+    파일에서사전임포트,
 )
 
 라우터 = APIRouter(prefix="/api/dictionaries", tags=["사전"])
+
+
+# ─── 파일 임포트 ──────────────────────────────────────────────────
+
+
+@라우터.post("/{domain}/import-from-files", response_model=성공응답)
+def 파일사전임포트(
+    domain: str,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """도메인 디렉토리의 사전 파일을 읽어 DB에 임포트 (기존 데이터 초기화 후 재등록)."""
+    if current.get("auth") not in ("W", "A"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
+    결과 = 파일에서사전임포트(db, domain, user_id=current.get("user_id"))
+    return 성공응답(
+        message=f"파일 임포트 완료 — udic: {결과['udic']}건, cndic: {결과['cndic']}건, thesaurus: {결과['thesaurus']}건"
+    )
+
 
 # ─── UDIC / CNDIC ─────────────────────────────────────────────────
 
