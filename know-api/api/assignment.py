@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
 from services import assignment_service
@@ -32,3 +33,13 @@ def 할당(workspace: str = Query(...), domain: str = Query(...),
 def 완료(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
     return assignment_service.완료처리(db, workspace, domain, current["user_id"])
+
+@라우터.post("/reset")
+def 초기화(workspace: str = Query(...), domain: str = Query(...),
+          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
+    """keyword_assignments 데이터 삭제 + 프리징 상태 해제."""
+    db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
+               {"ws": workspace, "dom": domain})
+    db.commit()
+    deleted = db.execute(text("SELECT changes()")).scalar() or 0
+    return {"reset": True, "deleted": deleted, "workspace": workspace, "domain": domain}

@@ -27,8 +27,10 @@ import {
   BgColorsOutlined,
   EditOutlined,
   FolderOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
+import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
@@ -269,6 +271,17 @@ export default function Workspace() {
   const 선택해제핸들러 = () => {
     clearWorkspace()
     message.success('워크스페이스 선택 해제')
+  }
+
+  const 초기화핸들러 = async (wsName: string, domain: string) => {
+    try {
+      await assignmentApi.초기화(wsName, domain)
+      message.success('초기화 완료')
+      useWorkspaceStore.getState().setFrozen(false)
+      useWorkspaceStore.getState().setAssigned(false)
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '초기화 실패')
+    }
   }
 
   const 색상변경핸들러 = async (wsName: string, color: string) => {
@@ -557,6 +570,19 @@ export default function Workspace() {
                             연결해제
                           </Button>
                         </Popconfirm>
+                        {ws.domain && (
+                          <Popconfirm
+                            title="프리징 상태를 해제하고 작업 데이터를 삭제합니다. 계속하시겠습니까?"
+                            onConfirm={() => 초기화핸들러(ws.name, ws.domain!)}
+                            okText="초기화"
+                            cancelText="취소"
+                            okButtonProps={{ danger: true }}
+                          >
+                            <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }}>
+                              초기화
+                            </Button>
+                          </Popconfirm>
+                        )}
                         {isSuper && (
                           <Button size="small" danger icon={<DeleteOutlined />} disabled>
                             삭제

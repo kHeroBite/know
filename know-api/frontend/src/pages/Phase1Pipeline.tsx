@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Row, Col, Card, Button, message, Typography, Result } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
@@ -15,6 +16,7 @@ const { Title } = Typography
 export default function Phase1Pipeline() {
   const [runId, setRunId] = useState<string | null>(null)
   const ws = usePhase1WebSocket(runId)
+  const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
   const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
@@ -127,6 +129,7 @@ export default function Phase1Pipeline() {
       setFreezeStatus('completed')
       useWorkspaceStore.getState().setFrozen(true)
       message.success(`프리징 완료: ${data.total || 0}건`)
+      navigate('/assignment')
     } catch (e: any) {
       setFreezeStatus('failed')
       message.error(e.response?.data?.detail || '프리징 실패')

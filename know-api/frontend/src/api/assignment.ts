@@ -29,4 +29,6 @@ export const assignmentApi = {
     클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line } }),
   완료: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/complete', null, { params: { workspace, domain } }),
+  초기화: (workspace: string, domain: string) =>
+    클라이언트.post('/assignments/reset', null, { params: { workspace, domain } }),
 }
