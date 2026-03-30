@@ -35,7 +35,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
         }).catch(() => {})
       },
-      clearWorkspace: () => set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false }),
+      clearWorkspace: () => {
+        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false })
+        // 서버 설정도 초기화 — 재로그인 시 이전 워크스페이스 복원 방지
+        클라이언트.put('/workspaces/preference', { workspace: '', domain: null, color: null }).catch(() => {})
+      },
       setFrozen: (v) => set({ isFrozen: v }),
       setAssigned: (v) => set({ isAssigned: v }),
       loadPreference: async () => {

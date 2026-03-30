@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+import { useWorkspaceStore } from './stores/workspaceStore'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import DomainList from './pages/DomainList'
@@ -17,6 +18,17 @@ import Assignment from './pages/Assignment'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
+function DefaultRoute() {
+  const selectedWorkspace = useWorkspaceStore(s => s.selectedWorkspace)
+  const isFrozen = useWorkspaceStore(s => s.isFrozen)
+  const isAssigned = useWorkspaceStore(s => s.isAssigned)
+
+  if (!selectedWorkspace) return <Navigate to="/workspace" replace />
+  if (isAssigned) return <Navigate to="/dictionary" replace />
+  if (isFrozen) return <Navigate to="/assignment" replace />
+  return <Navigate to="/preprocess" replace />
+}
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token)
   return token ? <>{children}</> : <Navigate to="/login" replace />
@@ -27,7 +39,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/preprocess" replace />} />
+        <Route index element={<DefaultRoute />} />
         <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />
         <Route path="preprocess" element={<Phase1Pipeline />} />
         <Route path="assignment" element={<Assignment />} />
