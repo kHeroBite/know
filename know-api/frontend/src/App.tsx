@@ -13,6 +13,7 @@ import BuildHistory from './pages/BuildHistory'
 import AccountManagement from './pages/AccountManagement'
 import Phase1Pipeline from './pages/Phase1Pipeline'
 import Manual from './pages/Manual'
+import Assignment from './pages/Assignment'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -29,6 +30,7 @@ export default function App() {
         <Route index element={<Navigate to="/preprocess" replace />} />
         <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />
         <Route path="preprocess" element={<Phase1Pipeline />} />
+        <Route path="assignment" element={<Assignment />} />
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="category" element={<CategoryManage />} />

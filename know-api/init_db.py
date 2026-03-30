@@ -75,8 +75,28 @@ def 테이블생성():
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_logs_run ON phase1_logs(run_id)"))
+        
+        # 4. keyword_assignments (데이터 할당)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS keyword_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                line_num INTEGER NOT NULL,
+                keyword TEXT NOT NULL,
+                analysis TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                assigned_to TEXT,
+                assigned_at TEXT,
+                completed_at TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_workspace ON keyword_assignments(workspace, domain)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_status ON keyword_assignments(status)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_unique ON keyword_assignments(workspace, domain, line_num)"))
         conn.commit()
-    print("  [OK] phase1_runs, phase1_logs 테이블 생성")
+    print("  [OK] phase1_runs, phase1_logs, keyword_assignments 테이블 생성")
 
 
 def 도메인사전테이블생성(도메인목록: list[str]):

@@ -20,6 +20,7 @@ PHASE1_STEPS = {
     3: {"name": "형태소분석", "type": "python", "func": "analyze"},
     4: {"name": "결과변환",   "type": "python", "func": "convert"},
     5: {"name": "유사어체크", "type": "python", "func": "synonym"},
+    6: {"name": "프리징", "type": "python", "func": "freeze"},
 }
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,19 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
     return f"{result} ({kw_cnt}건, 유사어 {syn_cnt}건)"
 
 
+def _sync_freeze(domain: str, workspace_dir: str) -> str:
+    """프리징: synonym.txt → keyword_assignments DB INSERT"""
+    from core.database import 세션팩토리
+    from services.assignment_service import 프리징
+    ws_name = Path(workspace_dir).name  # "A", "B" 등
+    db = 세션팩토리()
+    try:
+        result = 프리징(db, ws_name, domain)
+        return f"{result['total']}건"
+    finally:
+        db.close()
+
+
 async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str) -> None:
     """python 단계 — run_in_executor로 비동기 처리"""
     loop = asyncio.get_event_loop()
@@ -253,6 +267,10 @@ async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_
         result = await loop.run_in_executor(None, _sync_synonym, file_path, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
         _publish_phase1(run_id, step_num, step["name"], 100, f"유사어체크 완료: {result}", "running", elapsed)
+    elif func == "freeze":
+        result = await loop.run_in_executor(None, _sync_freeze, domain, workspace_dir)
+        elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
+        _publish_phase1(run_id, step_num, step["name"], 100, f"프리징 완료: {result}", "running", elapsed)
 
 
 def _sync_register(domain: str, file_path: str) -> int:
