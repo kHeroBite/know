@@ -7,9 +7,11 @@ interface WorkspaceState {
   selectedDomain: string | null
   selectedColor: string | null
   isFrozen: boolean
+  isAssigned: boolean
   setWorkspace: (name: string, domain: string, color: string | null) => void
   clearWorkspace: () => void
   setFrozen: (v: boolean) => void
+  setAssigned: (v: boolean) => void
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
 }
@@ -21,13 +23,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       selectedDomain: null,
       selectedColor: null,
       isFrozen: false,
+      isAssigned: false,
       setWorkspace: (name, domain, color) => {
-        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false })
+        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false, isAssigned: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
       },
-      clearWorkspace: () => set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false }),
+      clearWorkspace: () => set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false }),
       setFrozen: (v) => set({ isFrozen: v }),
+      setAssigned: (v) => set({ isAssigned: v }),
       loadPreference: async () => {
         try {
           const { data } = await 클라이언트.get('/workspaces/preference')

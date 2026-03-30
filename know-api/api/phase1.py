@@ -74,11 +74,77 @@ async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundT
     background_tasks.add_task(Phase1서비스.실행, run_id, 요청)
     return {"run_id": run_id}
 
+@라우터.get("/preprocess/view-file")
+async def 파일보기(path: str = Query("")):
+    """서버 파일 내용 읽기 (work 디렉토리 내 파일만)"""
+    if not path or "/work/" not in path:
+        raise HTTPException(status_code=400, detail="work 디렉토리 파일만 조회 가능")
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+            content = f.read(100000)  # 최대 100KB
+        return {"content": content, "path": path}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"파일 없음: {path}")
+
+
+@라우터.get("/preprocess/step-status")
+async def 단계상태확인(workspace: str = Query("")):
+    """각 단계별 결과 파일 존재 여부 반환."""
+    WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+    work_dir = os.path.join(WORKSPACE_BASE, workspace, "build", "work")
+    return {
+        "keywords": os.path.isfile(os.path.join(work_dir, "keywords.txt")),
+        "refine": os.path.isfile(os.path.join(work_dir, "refine.txt")),
+        "analyzed": os.path.isfile(os.path.join(work_dir, "analyzed.txt")),
+        "transform": os.path.isfile(os.path.join(work_dir, "transform.txt")),
+        "synonym": os.path.isfile(os.path.join(work_dir, "synonym.txt")),
+    }
+
+
+@라우터.get("/preprocess/logs/{run_id}")
+async def 실행로그조회(run_id: str):
+    """과거 실행 로그 DB에서 조회"""
+    from core.database import 세션팩토리
+    from sqlalchemy import text
+    db = 세션팩토리()
+    try:
+        rows = db.execute(text(
+            "SELECT step_num, step_name, percent, message, status, elapsed_sec, ts "
+            "FROM phase1_logs WHERE run_id = :run_id ORDER BY id ASC"
+        ), {"run_id": run_id}).fetchall()
+        return [
+            {"run_id": run_id, "step_num": r[0], "step_name": r[1], "percent": r[2],
+             "message": r[3], "status": r[4], "elapsed_sec": r[5], "ts": str(r[6])}
+            for r in rows
+        ]
+    finally:
+        db.close()
+
+
+@라우터.get("/preprocess/latest-run")
+async def 최근실행조회(workspace: str = Query("")):
+    """워크스페이스의 가장 최근 실행 정보 조회"""
+    from core.database import 세션팩토리
+    from sqlalchemy import text
+    db = 세션팩토리()
+    try:
+        row = db.execute(text(
+            "SELECT run_id, status, domain, category, start_step, end_step "
+            "FROM phase1_runs ORDER BY id DESC LIMIT 1"
+        )).fetchone()
+        if row:
+            return {"run_id": row[0], "status": row[1], "domain": row[2],
+                    "category": row[3], "start_step": row[4], "end_step": row[5]}
+        return {"run_id": None}
+    finally:
+        db.close()
+
+
 @ws라우터.websocket("/ws/preprocess/{run_id}")
 async def phase1_ws(websocket: WebSocket, run_id: str):
     await websocket.accept()
     try:
-        import aioredis
+        import redis.asyncio as aioredis
         r = aioredis.from_url(_redis_url(), encoding="utf-8", decode_responses=True)
         pubsub = r.pubsub()
         await pubsub.subscribe(f"phase1:{run_id}")
@@ -87,7 +153,7 @@ async def phase1_ws(websocket: WebSocket, run_id: str):
                 await websocket.send_text(msg["data"])
                 try:
                     data = json.loads(msg["data"])
-                    if data.get("status") in ("completed", "failed"):
+                    if data.get("step_num") == -1 or data.get("status") == "failed":
                         break
                 except Exception:
                     pass

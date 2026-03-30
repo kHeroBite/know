@@ -12,7 +12,7 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen, isAssigned } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
 
   useEffect(() => {
@@ -39,18 +39,18 @@ export default function Layout() {
         { key: '/workspace', label: '워크스페이스' },
         { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected },
         { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen },
-        { key: '/dictionary', label: '사전 관리', disabled: !wsSelected || !isFrozen },
-        { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isFrozen },
-        { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isFrozen },
-        { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isFrozen },
+        { key: '/dictionary', label: '사전 관리', disabled: !wsSelected || !isAssigned },
+        { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
+        { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
+        { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isAssigned },
       ],
     },
     {
       key: 'admin-group',
       label: '관리',
       children: [
-        { key: '/statistics', label: '통계', disabled: !wsSelected || !isFrozen },
-        { key: '/build-history', label: '빌드이력', disabled: !wsSelected || !isFrozen },
+        { key: '/statistics', label: '통계', disabled: !wsSelected || !isAssigned },
+        { key: '/build-history', label: '빌드이력', disabled: !wsSelected || !isAssigned },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },

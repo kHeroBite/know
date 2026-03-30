@@ -13,12 +13,17 @@ export const phase1API = {
   파일목록: (folder: string, workspace?: string) =>
     클라이언트.get(`/preprocess/files/${folder}`, { params: { workspace: workspace || '' } }),
 
-  파일업로드: (folder: string, file: File, workspace?: string) => {
+  파일업로드: (folder: string, file: File, workspace?: string, onProgress?: (percent: number) => void) => {
     const formData = new FormData()
     formData.append('file', file)
     return 클라이언트.post(`/preprocess/files/${folder}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params: { workspace: workspace || '' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
     })
   },
 
@@ -27,4 +32,7 @@ export const phase1API = {
 
   실행: (params: RunParams) =>
     클라이언트.post('/preprocess/run', params),
+
+  단계상태: (workspace?: string) =>
+    클라이언트.get('/preprocess/step-status', { params: { workspace: workspace || '' } }),
 }

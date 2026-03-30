@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Row, Col, Card, Button, message, Typography, Result } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
@@ -19,6 +19,7 @@ export default function Phase1Pipeline() {
   const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
   const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
   const [hasFiles, setHasFiles] = useState(false)
+  const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
 
   // 파일 존재 여부 체크
   useEffect(() => {
@@ -35,6 +36,18 @@ export default function Phase1Pipeline() {
     }
     checkFiles()
   }, [selectedWorkspace])
+
+  // 단계별 결과 파일 존재 여부 확인
+  useEffect(() => {
+    const checkStepStatus = async () => {
+      if (!selectedWorkspace) { setFileStatus({}); return }
+      try {
+        const { data } = await phase1API.단계상태(selectedWorkspace)
+        setFileStatus(data)
+      } catch { setFileStatus({}) }
+    }
+    checkStepStatus()
+  }, [selectedWorkspace, ws.isCompleted])
 
   // 단계별 경과시간 + output 경로 집계 (이전 run 정보 보존)
   const [stepElapsed, setStepElapsed] = useState<Record<number, number>>({})
@@ -93,6 +106,7 @@ export default function Phase1Pipeline() {
       if (params.start_step === 1 && params.end_step === 5) {
         setFileTabs({})
         setActiveViewTab(null)
+        setFileStatus({})
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
@@ -137,6 +151,20 @@ export default function Phase1Pipeline() {
     }
   }
 
+  // 파일 존재 기반으로 stepStatuses 보정
+  const 유효단계상태 = useMemo(() => {
+    const fileToStep: Record<string, number> = { keywords: 1, refine: 2, analyzed: 3, transform: 4, synonym: 5 }
+    const result = { ...ws.stepStatuses }
+    if (Object.keys(fileStatus).length > 0) {
+      for (const [file, stepNum] of Object.entries(fileToStep)) {
+        if (result[stepNum] === 'completed' && !fileStatus[file]) {
+          delete result[stepNum]
+        }
+      }
+    }
+    return result
+  }, [ws.stepStatuses, fileStatus])
+
   const 실행중 = runId !== null && !ws.isCompleted
 
   if (!selectedWorkspace) {
@@ -180,7 +208,7 @@ export default function Phase1Pipeline() {
                 onStop={중지핸들러}
                 onViewFile={파일보기}
                 isRunning={실행중}
-                stepStatuses={ws.stepStatuses}
+                stepStatuses={유효단계상태}
                 stepElapsed={stepElapsed}
                 stepOutputs={stepOutputs}
                 onFreeze={프리징핸들러}

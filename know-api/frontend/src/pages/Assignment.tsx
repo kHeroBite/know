@@ -90,6 +90,7 @@ export default function Assignment() {
     try {
       const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine)
       message.success(data.message || `${fromLine}~${toLine} 할당 완료`)
+      useWorkspaceStore.getState().setAssigned(true)
       navigate('/dictionary')
       통계조회()
       목록조회(1)
