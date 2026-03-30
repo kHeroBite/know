@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message, Popconfirm } from 'antd'
-import { SyncOutlined, UserAddOutlined, CheckOutlined } from '@ant-design/icons'
+import { UserAddOutlined, CheckOutlined } from '@ant-design/icons'
 import { assignmentApi, KeywordItem, AssignmentStats } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
@@ -78,19 +78,6 @@ export default function Assignment() {
   useEffect(() => {
     목록조회(page)
   }, [selectedWorkspace, selectedDomain, filter, page])
-
-  const 프리징실행 = async () => {
-    if (!selectedWorkspace || !selectedDomain) return
-    try {
-      await assignmentApi.프리징(selectedWorkspace, selectedDomain)
-      message.success('프리징 완료')
-      통계조회()
-      목록조회(1)
-      setPage(1)
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '프리징 실패')
-    }
-  }
 
   const 할당실행 = async () => {
     if (!selectedWorkspace || !selectedDomain) return
@@ -192,16 +179,6 @@ export default function Assignment() {
             <Statistic title="완료" value={stats.completed} valueStyle={{ color: '#52c41a' }} />
           </Col>
           <Col flex="auto" />
-          <Col>
-            <Space>
-              <Popconfirm title="프리징을 실행하시겠습니까?" onConfirm={프리징실행} okText="실행" cancelText="취소">
-                <Button icon={<SyncOutlined />}>프리징</Button>
-              </Popconfirm>
-              <Popconfirm title="할당된 키워드를 완료 처리하시겠습니까?" onConfirm={완료처리} okText="실행" cancelText="취소">
-                <Button icon={<CheckOutlined />} type="primary" ghost>완료 처리</Button>
-              </Popconfirm>
-            </Space>
-          </Col>
         </Row>
       </Card>
 
@@ -231,7 +208,10 @@ export default function Assignment() {
                 onChange={건수선택처리}
                 allowClear
               />
-              <Button type="primary" icon={<UserAddOutlined />} onClick={할당실행}>할당받기</Button>
+              <Button type="primary" icon={<UserAddOutlined />} onClick={할당실행} disabled={filter !== 'pending'}>할당받기</Button>
+              <Popconfirm title="할당된 키워드를 완료 처리하시겠습니까?" onConfirm={완료처리} okText="실행" cancelText="취소">
+                <Button icon={<CheckOutlined />}>완료처리</Button>
+              </Popconfirm>
             </Space>
           </Col>
         </Row>
