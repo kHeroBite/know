@@ -7,6 +7,24 @@ from services import assignment_service
 
 라우터 = APIRouter()
 
+@라우터.get("/status")
+def 작업상태(workspace: str = Query(...), domain: str = Query(...),
+            db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
+    """현재 워크스페이스의 프리징/할당 상태 반환."""
+    stats = assignment_service.통계(db, workspace, domain)
+    user_id = current["user_id"]
+
+    # 프리징 여부: keyword_assignments에 데이터가 1건 이상 존재
+    is_frozen = stats["total"] > 0
+
+    # 할당 여부: 현재 사용자에게 assigned 상태인 키워드가 1건 이상
+    assigned_count = db.execute(text(
+        "SELECT COUNT(*) FROM keyword_assignments WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'"
+    ), {"ws": workspace, "dom": domain, "uid": user_id}).scalar() or 0
+    is_assigned = assigned_count > 0
+
+    return {"is_frozen": is_frozen, "is_assigned": is_assigned, "stats": stats}
+
 @라우터.post("/freeze")
 def 프리징(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):

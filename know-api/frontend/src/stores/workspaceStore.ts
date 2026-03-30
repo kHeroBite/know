@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import 클라이언트 from '../api/client'
+import { assignmentApi } from '../api/assignment'
 
 interface WorkspaceState {
   selectedWorkspace: string | null
@@ -14,6 +15,7 @@ interface WorkspaceState {
   setAssigned: (v: boolean) => void
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
+  loadWorkspaceStatus: () => Promise<void>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -28,6 +30,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false, isAssigned: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
+        // 프리징/할당 상태 복원
+        assignmentApi.작업상태(name, domain).then(res => {
+          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+        }).catch(() => {})
       },
       clearWorkspace: () => set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false }),
       setFrozen: (v) => set({ isFrozen: v }),
@@ -37,6 +43,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const { data } = await 클라이언트.get('/workspaces/preference')
           if (data.workspace) {
             set({ selectedWorkspace: data.workspace, selectedDomain: data.domain, selectedColor: data.color })
+            // 프리징/할당 상태 복원
+            try {
+              const res = await assignmentApi.작업상태(data.workspace, data.domain)
+              set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+            } catch {
+              // 상태 조회 실패 시 기본값 유지
+            }
           }
         } catch {
           // 서버 설정 없으면 무시
@@ -50,6 +63,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             domain: selectedDomain,
             color: selectedColor,
           }).catch(() => {})
+        }
+      },
+      loadWorkspaceStatus: async () => {
+        const { selectedWorkspace, selectedDomain } = get()
+        if (!selectedWorkspace || !selectedDomain) return
+        try {
+          const res = await assignmentApi.작업상태(selectedWorkspace, selectedDomain)
+          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+        } catch {
+          // 실패 시 기본값 유지
         }
       },
     }),

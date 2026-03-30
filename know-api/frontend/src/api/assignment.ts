@@ -31,4 +31,6 @@ export const assignmentApi = {
     클라이언트.post('/assignments/complete', null, { params: { workspace, domain } }),
   초기화: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/reset', null, { params: { workspace, domain } }),
+  작업상태: (workspace: string, domain: string) =>
+    클라이언트.get('/assignments/status', { params: { workspace, domain } }),
 }

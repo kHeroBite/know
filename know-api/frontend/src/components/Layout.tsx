@@ -16,6 +16,12 @@ export default function Layout() {
   const wsSelected = !!selectedWorkspace
 
   useEffect(() => {
+    if (selectedWorkspace && selectedDomain) {
+      useWorkspaceStore.getState().loadWorkspaceStatus()
+    }
+  }, [selectedWorkspace, selectedDomain])
+
+  useEffect(() => {
     const color = selectedColor || '#1a1a2e'
     document.documentElement.style.setProperty('--theme-color', color)
     if (selectedColor) {
