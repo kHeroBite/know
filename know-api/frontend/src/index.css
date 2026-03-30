@@ -121,6 +121,19 @@ body {
   transform: scaleY(1);
 }
 
+/* disabled 메뉴 아이템 */
+.app-sider .ant-menu-dark .ant-menu-item-disabled {
+  color: rgba(255,255,255,0.25) !important;
+  cursor: not-allowed !important;
+}
+.app-sider .ant-menu-dark .ant-menu-item-disabled:hover {
+  background: transparent !important;
+  padding-left: 16px !important;
+}
+.app-sider .ant-menu-dark .ant-menu-item-disabled:hover::before {
+  transform: scaleY(0) !important;
+}
+
 .app-sider .ant-menu-dark .ant-menu-item-selected {
   background: rgba(255, 255, 255, 0.22) !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);

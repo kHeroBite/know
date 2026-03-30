@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Row, Col, Card, Button, message, Typography } from 'antd'
+import { Row, Col, Card, Button, message, Typography, Result } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
@@ -111,6 +111,7 @@ export default function Phase1Pipeline() {
     try {
       const { data } = await assignmentApi.프리징(selectedWorkspace, selectedDomain)
       setFreezeStatus('completed')
+      useWorkspaceStore.getState().setFrozen(true)
       message.success(`프리징 완료: ${data.total || 0}건`)
     } catch (e: any) {
       setFreezeStatus('failed')
@@ -137,6 +138,10 @@ export default function Phase1Pipeline() {
   }
 
   const 실행중 = runId !== null && !ws.isCompleted
+
+  if (!selectedWorkspace) {
+    return <Result status="warning" title="워크스페이스와 도메인을 먼저 선택하세요." />
+  }
 
   return (
     <div style={{ padding: '0 0 24px' }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message, Popconfirm } from 'antd'
 import { UserAddOutlined, CheckOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { assignmentApi, KeywordItem, AssignmentStats } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
@@ -31,6 +32,7 @@ const 분석결과렌더 = (analysis: string) => {
 }
 
 export default function Assignment() {
+  const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [stats, setStats] = useState<AssignmentStats>({ total: 0, pending: 0, assigned: 0, completed: 0 })
   const [filter, setFilter] = useState<string>('pending')
@@ -88,6 +90,7 @@ export default function Assignment() {
     try {
       const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine)
       message.success(data.message || `${fromLine}~${toLine} 할당 완료`)
+      navigate('/dictionary')
       통계조회()
       목록조회(1)
       setPage(1)

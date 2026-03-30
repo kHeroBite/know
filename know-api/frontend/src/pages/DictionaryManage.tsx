@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox, Radio, Space } from 'antd'
+import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox, Radio, Space, Result } from 'antd'
 import { PlusOutlined, DeleteOutlined, ImportOutlined, SearchOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -9,15 +9,15 @@ type DicType = 'udic' | 'cndic' | 'thesaurus'
 const 사전설정: Record<DicType, { title: string; label: string }> = {
   udic: { title: '사용자사전', label: '사용자사전(udic)' },
   cndic: { title: '복합명사사전', label: '복합명사사전(cndic)' },
-  thesaurus: { title: '유의어사전', label: '유의어사전(thesaurus)' },
+  thesaurus: { title: '유사어사전', label: '유사어사전(thesaurus)' },
 }
 
 function 사전컬럼(dicType: DicType) {
   return (삭제버튼: (r: any) => React.ReactNode) => {
     if (dicType === 'thesaurus') {
       return [
-        { title: '기준 단어', dataIndex: 'head_word', key: 'head_word', ellipsis: true },
-        { title: '유의어', dataIndex: 'tail_word', key: 'tail_word', ellipsis: true },
+        { title: '키워드', dataIndex: 'head_word', key: 'head_word', ellipsis: true },
+        { title: '유사어', dataIndex: 'tail_word', key: 'tail_word', ellipsis: true },
         { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
       ]
     }
@@ -111,10 +111,10 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     if (dicType === 'thesaurus') {
       return (
         <>
-          <Form.Item name="head_word" label="기준 단어" rules={[{ required: true }]}>
+          <Form.Item name="head_word" label="키워드" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="tail_word" label="유의어" rules={[{ required: true }]}>
+          <Form.Item name="tail_word" label="유사어" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
         </>
@@ -186,7 +186,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 }
 
 export default function DictionaryManage() {
-  const { selectedDomain: 선택도메인 } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain: 선택도메인 } = useWorkspaceStore()
   const [임포트모달, set임포트모달] = useState(false)
   const [파일건수, set파일건수] = useState<{udic: number; cndic: number; thesaurus: number} | null>(null)
   const [임포트중, set임포트중] = useState(false)
@@ -194,6 +194,10 @@ export default function DictionaryManage() {
   const [key, setKey] = useState(0)
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
   const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('create')
+
+  if (!selectedWorkspace) {
+    return <Result status="warning" title="워크스페이스와 도메인을 먼저 선택하세요." />
+  }
 
   const 임포트모달열기 = async () => {
     set임포트모달(true)
@@ -231,7 +235,7 @@ export default function DictionaryManage() {
                 if (d.skipped) parts.push(`스킵 ${d.skipped}`)
                 return parts.length ? parts.join('/') : '0건'
               }
-              message.success(`임포트 완료: 사용자사전(${fmt(r.udic)}), 복합명사(${fmt(r.cndic)}), 유의어(${fmt(r.thesaurus)})`)
+              message.success(`임포트 완료: 사용자사전(${fmt(r.udic)}), 복합명사(${fmt(r.cndic)}), 유사어(${fmt(r.thesaurus)})`)
               setKey(k => k + 1)
               setTimeout(() => set임포트모달(false), 1500)
             }
@@ -251,7 +255,7 @@ export default function DictionaryManage() {
     switch (stage) {
       case 'udic': return '사용자사전'
       case 'cndic': return '복합명사사전'
-      case 'thesaurus': return '유의어사전'
+      case 'thesaurus': return '유사어사전'
       default: return '준비 중'
     }
   }
@@ -319,7 +323,7 @@ export default function DictionaryManage() {
               }>{파일건수.cndic.toLocaleString()} 건</Descriptions.Item>
               <Descriptions.Item label={
                 <Checkbox checked={임포트옵션.thesaurus} disabled={파일건수.thesaurus === 0} onChange={e => set임포트옵션({...임포트옵션, thesaurus: e.target.checked})}>
-                  유의어사전
+                  유사어사전
                 </Checkbox>
               }>{파일건수.thesaurus.toLocaleString()} 건</Descriptions.Item>
               <Descriptions.Item label="합계">

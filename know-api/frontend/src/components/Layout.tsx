@@ -12,7 +12,8 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen } = useWorkspaceStore()
+  const wsSelected = !!selectedWorkspace
 
   useEffect(() => {
     const color = selectedColor || '#1a1a2e'
@@ -36,20 +37,20 @@ export default function Layout() {
       label: '지식작업',
       children: [
         { key: '/workspace', label: '워크스페이스' },
-        { key: '/preprocess', label: '데이터 전처리' },
-        { key: '/assignment', label: '데이터 할당' },
-        { key: '/dictionary', label: '사전 관리' },
-        { key: '/category', label: '카테고리 관리' },
-        { key: '/pipeline', label: '파이프라인' },
-        { key: '/knowledge', label: '지식작업' },
+        { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected },
+        { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen },
+        { key: '/dictionary', label: '사전 관리', disabled: !wsSelected || !isFrozen },
+        { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isFrozen },
+        { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isFrozen },
+        { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isFrozen },
       ],
     },
     {
       key: 'admin-group',
       label: '관리',
       children: [
-        { key: '/statistics', label: '통계' },
-        { key: '/build-history', label: '빌드이력' },
+        { key: '/statistics', label: '통계', disabled: !wsSelected || !isFrozen },
+        { key: '/build-history', label: '빌드이력', disabled: !wsSelected || !isFrozen },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },
@@ -61,6 +62,11 @@ export default function Layout() {
       ],
     },
   ]
+
+  // disabled 판정용 flat 맵
+  const disabledKeys = new Set(
+    menuItems.flatMap(g => (g.children || []).filter((c: any) => c.disabled).map((c: any) => c.key))
+  )
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
@@ -106,7 +112,7 @@ export default function Layout() {
             selectedKeys={[location.pathname]}
             defaultOpenKeys={['knowledge-group', 'admin-group', 'help-group']}
             items={menuItems}
-            onClick={({ key }) => navigate(key)}
+            onClick={({ key }) => { if (!disabledKeys.has(key)) navigate(key) }}
           />
         </div>
         {/* 사용자 정보 + 로그아웃 — 항상 최하단 고정 */}
