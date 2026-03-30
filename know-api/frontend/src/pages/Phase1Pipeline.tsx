@@ -104,11 +104,13 @@ export default function Phase1Pipeline() {
         domain: selectedDomain ?? '',
       })
       setRunId(data.run_id)
-      // 전체실행 시에만 파일 탭 초기화, 개별실행 시 기존 탭 유지
+      // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
       if (params.start_step === 1 && params.end_step === 5) {
         setFileTabs({})
         setActiveViewTab(null)
         setFileStatus({})
+        setStepElapsed({})
+        setStepOutputs({})
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
@@ -156,8 +158,18 @@ export default function Phase1Pipeline() {
 
   // 파일 존재 기반으로 stepStatuses 보정
   const 유효단계상태 = useMemo(() => {
-    // 실행 중이면 WebSocket 실시간 상태를 그대로 사용
-    if (runId !== null && !ws.isCompleted) return ws.stepStatuses
+    // 실행 중이면 WebSocket 실시간 상태 + 이전 단계 자동 완료 처리
+    if (runId !== null && !ws.isCompleted) {
+      const statuses = { ...ws.stepStatuses }
+      const runningEntry = Object.entries(statuses).find(([, s]) => s === 'running')
+      const runningStepNum = runningEntry ? parseInt(runningEntry[0]) : -1
+      if (runningStepNum > 0) {
+        for (let i = 1; i < runningStepNum; i++) {
+          statuses[i] = 'completed'
+        }
+      }
+      return statuses
+    }
 
     // 실행 중이 아닐 때만 fileStatus로 검증
     const fileToStep: Record<string, number> = { keywords: 1, refine: 2, analyzed: 3, transform: 4, synonym: 5 }

@@ -38,7 +38,7 @@ export default function Layout() {
       children: [
         { key: '/workspace', label: '워크스페이스' },
         { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected || isFrozen },
-        { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen },
+        { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen || isAssigned },
         { key: '/dictionary', label: '사전 관리', disabled: !wsSelected || !isAssigned },
         { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
         { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
