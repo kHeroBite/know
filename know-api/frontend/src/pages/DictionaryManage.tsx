@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox } from 'antd'
+import { Row, Col, Card, Table, Input, Button, Modal, Form, Popconfirm, message, Typography, Descriptions, Progress, Alert, Checkbox, Radio, Space } from 'antd'
 import { PlusOutlined, DeleteOutlined, ImportOutlined, SearchOutlined } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -193,12 +193,14 @@ export default function DictionaryManage() {
   const [진행률, set진행률] = useState<{percent: number; stage: string; status: string; current: number} | null>(null)
   const [key, setKey] = useState(0)
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
+  const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('create')
 
   const 임포트모달열기 = async () => {
     set임포트모달(true)
     set파일건수(null)
     set진행률(null)
     set임포트옵션({udic: true, cndic: true, thesaurus: true})
+    set임포트모드('create')
     try {
       const res = await 클라이언트.get(`/dictionaries/${선택도메인}/file-preview`)
       set파일건수(res.data)
@@ -211,7 +213,7 @@ export default function DictionaryManage() {
     set임포트중(true)
     set진행률({ percent: 0, stage: 'preparing', status: 'running', current: 0 })
     try {
-      await 클라이언트.post(`/dictionaries/${선택도메인}/import-from-files?udic=${임포트옵션.udic}&cndic=${임포트옵션.cndic}&thesaurus=${임포트옵션.thesaurus}`)
+      await 클라이언트.post(`/dictionaries/${선택도메인}/import-from-files?udic=${임포트옵션.udic}&cndic=${임포트옵션.cndic}&thesaurus=${임포트옵션.thesaurus}&mode=${임포트모드}`)
       const poll = setInterval(async () => {
         try {
           const res = await 클라이언트.get(`/dictionaries/${선택도메인}/import-progress`)
@@ -221,7 +223,15 @@ export default function DictionaryManage() {
             set임포트중(false)
             if (res.data.status === 'done') {
               const r = res.data.result
-              message.success(`임포트 완료: 사용자사전 ${r.udic}건, 복합명사 ${r.cndic}건, 유의어 ${r.thesaurus}건`)
+              const fmt = (d: any) => {
+                if (typeof d === 'number') return `${d}건`
+                const parts = []
+                if (d.inserted) parts.push(`추가 ${d.inserted}`)
+                if (d.updated) parts.push(`수정 ${d.updated}`)
+                if (d.skipped) parts.push(`스킵 ${d.skipped}`)
+                return parts.length ? parts.join('/') : '0건'
+              }
+              message.success(`임포트 완료: 사용자사전(${fmt(r.udic)}), 복합명사(${fmt(r.cndic)}), 유의어(${fmt(r.thesaurus)})`)
               setKey(k => k + 1)
               setTimeout(() => set임포트모달(false), 1500)
             }
@@ -273,7 +283,9 @@ export default function DictionaryManage() {
         onCancel={() => !임포트중 && set임포트모달(false)}
         footer={임포트중 ? null : [
           <Button key="cancel" onClick={() => set임포트모달(false)}>취소</Button>,
-          <Button key="ok" type="primary" danger onClick={임포트실행} disabled={!파일건수 || (!임포트옵션.udic && !임포트옵션.cndic && !임포트옵션.thesaurus)}>선택 사전 가져오기</Button>,
+          <Button key="ok" type="primary" danger={임포트모드 === 'create'} onClick={임포트실행} disabled={!파일건수 || (!임포트옵션.udic && !임포트옵션.cndic && !임포트옵션.thesaurus)}>
+            {{ create: '새로 생성', overwrite: '덮어쓰기', append: '추가하기' }[임포트모드]}
+          </Button>,
         ]}
         width={600}
         closable={!임포트중}
@@ -281,7 +293,19 @@ export default function DictionaryManage() {
       >
         {!임포트중 && 파일건수 && (
           <div>
-            <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />
+            <div style={{ marginBottom: 16 }}>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>임포트 방식</Typography.Text>
+              <Radio.Group value={임포트모드} onChange={e => set임포트모드(e.target.value)}>
+                <Space direction="vertical">
+                  <Radio value="create">새로생성 — 기존 데이터 삭제 후 새로 등록</Radio>
+                  <Radio value="overwrite">덮어쓰기 — 기존 데이터 유지, 동일 키워드 업데이트</Radio>
+                  <Radio value="append">추가하기 — 기존 데이터 유지, 새 키워드만 추가</Radio>
+                </Space>
+              </Radio.Group>
+            </div>
+            {임포트모드 === 'create' && <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />}
+            {임포트모드 === 'overwrite' && <Alert message="기존 데이터를 유지하면서 파일의 동일 키워드를 업데이트합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
+            {임포트모드 === 'append' && <Alert message="기존 데이터를 유지하면서 새로운 키워드만 추가합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label={
                 <Checkbox checked={임포트옵션.udic} disabled={파일건수.udic === 0} onChange={e => set임포트옵션({...임포트옵션, udic: e.target.checked})}>

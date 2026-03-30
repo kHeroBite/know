@@ -315,7 +315,8 @@ _임포트진행률: dict = {}
 
 
 def 비동기파일임포트시작(site: str, user_id: str = None,
-                      import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True) -> str:
+                      import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True,
+                      mode: str = "create") -> str:
     """백그라운드 스레드에서 임포트 시작. run_id 반환."""
     import uuid as uuid_mod
     run_id = uuid_mod.uuid4().hex[:8]
@@ -337,7 +338,8 @@ def 비동기파일임포트시작(site: str, user_id: str = None,
         try:
             db = 세션팩토리()
             결과 = _동기파일임포트(db, site, user_id=user_id, progress_site=site,
-                              import_udic=import_udic, import_cndic=import_cndic, import_thesaurus=import_thesaurus)
+                              import_udic=import_udic, import_cndic=import_cndic, import_thesaurus=import_thesaurus,
+                              mode=mode)
             _임포트진행률[site]["status"] = "done"
             _임포트진행률[site]["percent"] = 100
             _임포트진행률[site]["result"] = 결과
@@ -370,14 +372,19 @@ def _udic_cndic_파일임포트(
     db: Session, site: str, dic_type: str, 파일경로: str,
     user_id: Optional[str] = None,
     progress_site: Optional[str] = None, progress_offset: int = 0,
-) -> int:
-    """udic/cndic .ks 파일을 읽어 DB에 INSERT (기존 데이터 DELETE 후)."""
+    mode: str = "create",
+) -> dict:
+    """udic/cndic .ks 파일을 읽어 DB에 INSERT.
+    mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE)."""
     tbl = _사전테이블(db, site, dic_type)
-    db.execute(delete(tbl))
+
+    if mode == "create":
+        db.execute(delete(tbl))
 
     줄목록 = _파일읽기(파일경로)
-    삽입수 = 0
+    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
     중복set: set = set()
+    처리수 = 0
     for 줄 in 줄목록:
         parts = 줄.split("\t", 1)
         word = 단어정규화(parts[0].strip())
@@ -385,32 +392,63 @@ def _udic_cndic_파일임포트(
         if not word or word in 중복set:
             continue
         중복set.add(word)
-        db.execute(insert(tbl).values(
-            _WORD=word, _MEMO=memo,
-            _USER_ID=user_id, _UPDATED=datetime.now(),
-        ))
-        삽입수 += 1
-        if progress_site and 삽입수 % 1000 == 0:
-            _진행률갱신(progress_site, progress_offset + 삽입수)
+
+        if mode == "create":
+            db.execute(insert(tbl).values(
+                _WORD=word, _MEMO=memo,
+                _USER_ID=user_id, _UPDATED=datetime.now(),
+            ))
+            삽입수 += 1
+        elif mode == "overwrite":
+            존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
+            if 존재:
+                db.execute(update(tbl).where(tbl.c._WORD == word).values(
+                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                업데이트수 += 1
+            else:
+                db.execute(insert(tbl).values(
+                    _WORD=word, _MEMO=memo,
+                    _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                삽입수 += 1
+        elif mode == "append":
+            존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
+            if 존재:
+                스킵수 += 1
+            else:
+                db.execute(insert(tbl).values(
+                    _WORD=word, _MEMO=memo,
+                    _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                삽입수 += 1
+
+        처리수 += 1
+        if progress_site and 처리수 % 1000 == 0:
+            _진행률갱신(progress_site, progress_offset + 처리수)
     if progress_site:
-        _진행률갱신(progress_site, progress_offset + 삽입수)
+        _진행률갱신(progress_site, progress_offset + 처리수)
     db.commit()
-    return 삽입수
+    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
 
 def _thesaurus_파일임포트(
     db: Session, site: str, 파일경로: str,
     user_id: Optional[str] = None,
     progress_site: Optional[str] = None, progress_offset: int = 0,
-) -> int:
-    """addedsyn 파일을 읽어 thesaurus DB에 INSERT (기존 데이터 DELETE 후).
+    mode: str = "create",
+) -> dict:
+    """addedsyn 파일을 읽어 thesaurus DB에 INSERT.
+    mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE).
 
     지원 형식:
     1) 탭 구분: head_word\\ttail_word[\\tmemo]
     2) 그룹 형식: 빈줄로 구분된 단어 그룹 (첫 단어=head, 나머지=tail 쉼표 결합)
     """
     tbl = _사전테이블(db, site, "thesaurus")
-    db.execute(delete(tbl))
+
+    if mode == "create":
+        db.execute(delete(tbl))
 
     빈줄포함목록 = []
     for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
@@ -428,8 +466,44 @@ def _thesaurus_파일임포트(
     탭형식 = any("\t" in l for l in 비공백줄[:10])
     쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
 
-    삽입수 = 0
+    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
     중복set: set = set()
+    처리수 = 0
+
+    def _thesaurus_행처리(head: str, tail: str, memo: Optional[str] = None):
+        nonlocal 삽입수, 업데이트수, 스킵수, 처리수
+        if mode == "create":
+            db.execute(insert(tbl).values(
+                _HEAD_WORD=head, _TAIL_WORD=tail,
+                _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
+            ))
+            삽입수 += 1
+        elif mode == "overwrite":
+            존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == head)).first()
+            if 존재:
+                db.execute(update(tbl).where(tbl.c._HEAD_WORD == head).values(
+                    _TAIL_WORD=tail, _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                업데이트수 += 1
+            else:
+                db.execute(insert(tbl).values(
+                    _HEAD_WORD=head, _TAIL_WORD=tail,
+                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                삽입수 += 1
+        elif mode == "append":
+            존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == head)).first()
+            if 존재:
+                스킵수 += 1
+            else:
+                db.execute(insert(tbl).values(
+                    _HEAD_WORD=head, _TAIL_WORD=tail,
+                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
+                ))
+                삽입수 += 1
+        처리수 += 1
+        if progress_site and 처리수 % 1000 == 0:
+            _진행률갱신(progress_site, progress_offset + 처리수)
 
     if 쉼표형식:
         # 쉼표 구분: 대표어,유의어1,유의어2,... (quasisynonym 형식)
@@ -441,13 +515,7 @@ def _thesaurus_파일임포트(
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            db.execute(insert(tbl).values(
-                _HEAD_WORD=head, _TAIL_WORD=tail,
-                _USER_ID=user_id, _UPDATED=datetime.now(),
-            ))
-            삽입수 += 1
-            if progress_site and 삽입수 % 1000 == 0:
-                _진행률갱신(progress_site, progress_offset + 삽입수)
+            _thesaurus_행처리(head, tail)
     elif 탭형식:
         for 줄 in 비공백줄:
             parts = 줄.split("\t")
@@ -459,13 +527,7 @@ def _thesaurus_파일임포트(
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            db.execute(insert(tbl).values(
-                _HEAD_WORD=head, _TAIL_WORD=tail,
-                _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-            ))
-            삽입수 += 1
-            if progress_site and 삽입수 % 1000 == 0:
-                _진행률갱신(progress_site, progress_offset + 삽입수)
+            _thesaurus_행처리(head, tail, memo)
     else:
         # 그룹 형식: 빈줄로 구분
         빈줄있음 = any(l == "" for l in 빈줄포함목록)
@@ -487,14 +549,7 @@ def _thesaurus_파일임포트(
                 if not head or head in 중복set:
                     continue
                 중복set.add(head)
-                db.execute(insert(tbl).values(
-                    _HEAD_WORD=head,
-                    _TAIL_WORD=",".join(tail_words) if tail_words else "",
-                    _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
-                if progress_site and 삽입수 % 1000 == 0:
-                    _진행률갱신(progress_site, progress_offset + 삽입수)
+                _thesaurus_행처리(head, ",".join(tail_words) if tail_words else "")
         else:
             # 빈줄 없는 그룹 형식: 각 단어를 개별 head_word로 등록
             for 줄 in 비공백줄:
@@ -502,26 +557,21 @@ def _thesaurus_파일임포트(
                 if not word or word in 중복set:
                     continue
                 중복set.add(word)
-                db.execute(insert(tbl).values(
-                    _HEAD_WORD=word, _TAIL_WORD="",
-                    _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
-                if progress_site and 삽입수 % 1000 == 0:
-                    _진행률갱신(progress_site, progress_offset + 삽입수)
+                _thesaurus_행처리(word, "")
 
     if progress_site:
-        _진행률갱신(progress_site, progress_offset + 삽입수)
+        _진행률갱신(progress_site, progress_offset + 처리수)
     db.commit()
-    return 삽입수
+    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
 
 def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None,
-                   import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True) -> dict:
+                   import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True,
+                   mode: str = "create") -> dict:
     """도메인 디렉토리에서 사전 파일을 읽어 DB에 임포트.
 
-    기존 DB 데이터 전체 DELETE 후 새로 INSERT.
-    반환: {"udic": N, "cndic": N, "thesaurus": N}
+    mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE).
+    반환: {"udic": {...}, "cndic": {...}, "thesaurus": {...}}
     """
     사이트명검증(site)
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
@@ -529,7 +579,8 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
     if not os.path.isdir(도메인경로) and not 추가경로:
         raise HTTPException(status_code=404, detail=f"도메인 디렉토리를 찾을 수 없음: {site}")
 
-    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    _빈결과 = {"inserted": 0, "updated": 0, "skipped": 0}
+    결과 = {"udic": dict(_빈결과), "cndic": dict(_빈결과), "thesaurus": dict(_빈결과)}
     누적 = 0
 
     # UDIC: user.ks 또는 user*.ks
@@ -538,8 +589,8 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
             _진행률갱신(progress_site, 누적, "udic")
         udic파일 = _사전파일찾기(도메인경로, ["user.ks", "user*.ks"], 추가경로=추가경로)
         if udic파일:
-            결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적)
-            누적 += 결과["udic"]
+            결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적, mode=mode)
+            누적 += 결과["udic"]["inserted"] + 결과["udic"]["updated"] + 결과["udic"]["skipped"]
 
     # CNDIC: cnlist.ks 또는 cnlist*.ks
     if import_cndic:
@@ -547,8 +598,8 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
             _진행률갱신(progress_site, 누적, "cndic")
         cndic파일 = _사전파일찾기(도메인경로, ["cnlist.ks", "cnlist*.ks"], 추가경로=추가경로)
         if cndic파일:
-            결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적)
-            누적 += 결과["cndic"]
+            결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적, mode=mode)
+            누적 += 결과["cndic"]["inserted"] + 결과["cndic"]["updated"] + 결과["cndic"]["skipped"]
 
     # THESAURUS: quasisynonym 또는 addedsyn
     if import_thesaurus:
@@ -556,7 +607,7 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
             _진행률갱신(progress_site, 누적, "thesaurus")
         thesaurus파일 = _사전파일찾기(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
         if thesaurus파일:
-            결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적)
+            결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적, mode=mode)
 
     return 결과
 

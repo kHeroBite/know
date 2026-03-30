@@ -49,14 +49,19 @@ def 파일사전임포트(
     udic: bool = Query(True),
     cndic: bool = Query(True),
     thesaurus: bool = Query(True),
+    mode: str = Query("create"),
     current: dict = Depends(현재사용자가져오기),
 ):
-    """백그라운드에서 사전 파일 임포트 시작 (비동기). 사전별 선택 가능."""
+    """백그라운드에서 사전 파일 임포트 시작 (비동기). 사전별 선택 가능.
+    mode: create(새로생성), overwrite(덮어쓰기), append(추가하기)."""
     if current.get("auth") not in ("W", "A"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
+    if mode not in ("create", "overwrite", "append"):
+        raise HTTPException(status_code=400, detail="mode는 create/overwrite/append 중 하나")
     run_id = 비동기파일임포트시작(
         domain.upper(), user_id=current.get("user_id"),
         import_udic=udic, import_cndic=cndic, import_thesaurus=thesaurus,
+        mode=mode,
     )
     return {"status": "started", "run_id": run_id, "message": "임포트가 시작되었습니다."}
 
