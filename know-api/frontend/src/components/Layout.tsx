@@ -108,7 +108,7 @@ export default function Layout() {
               ? selectedDomain
                 ? `${selectedWorkspace}-${selectedDomain}`
                 : selectedWorkspace
-              : 'A-epost'}
+              : '미선택'}
           </div>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>
