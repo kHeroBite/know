@@ -153,6 +153,10 @@ export default function Phase1Pipeline() {
 
   // 파일 존재 기반으로 stepStatuses 보정
   const 유효단계상태 = useMemo(() => {
+    // 실행 중이면 WebSocket 실시간 상태를 그대로 사용
+    if (runId !== null && !ws.isCompleted) return ws.stepStatuses
+
+    // 실행 중이 아닐 때만 fileStatus로 검증
     const fileToStep: Record<string, number> = { keywords: 1, refine: 2, analyzed: 3, transform: 4, synonym: 5 }
     const result = { ...ws.stepStatuses }
     if (Object.keys(fileStatus).length > 0) {
@@ -163,7 +167,7 @@ export default function Phase1Pipeline() {
       }
     }
     return result
-  }, [ws.stepStatuses, fileStatus])
+  }, [ws.stepStatuses, ws.isCompleted, runId, fileStatus])
 
   const 실행중 = runId !== null && !ws.isCompleted
 
