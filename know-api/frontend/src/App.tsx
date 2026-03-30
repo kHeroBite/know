@@ -19,13 +19,17 @@ import Assignment from './pages/Assignment'
 const Workspace = lazy(() => import('./pages/Workspace'))
 
 function DefaultRoute() {
-  const selectedWorkspace = useWorkspaceStore(s => s.selectedWorkspace)
-  const isFrozen = useWorkspaceStore(s => s.isFrozen)
-  const isAssigned = useWorkspaceStore(s => s.isAssigned)
+  const { selectedWorkspace, isFrozen, isAssigned, _statusLoaded } = useWorkspaceStore()
 
+  // 워크스페이스 미선택 → workspace
   if (!selectedWorkspace) return <Navigate to="/workspace" replace />
+  // 서버 상태 로드 미완료 → workspace에서 대기 (비동기 로드 후 리렌더)
+  if (!_statusLoaded) return <Navigate to="/workspace" replace />
+  // 할당 완료 → dictionary
   if (isAssigned) return <Navigate to="/dictionary" replace />
+  // 프리징 완료 → assignment
   if (isFrozen) return <Navigate to="/assignment" replace />
+  // 기본 → preprocess
   return <Navigate to="/preprocess" replace />
 }
 

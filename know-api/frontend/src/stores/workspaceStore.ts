@@ -9,6 +9,7 @@ interface WorkspaceState {
   selectedColor: string | null
   isFrozen: boolean
   isAssigned: boolean
+  _statusLoaded: boolean
   setWorkspace: (name: string, domain: string, color: string | null) => void
   clearWorkspace: () => void
   setFrozen: (v: boolean) => void
@@ -26,8 +27,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       selectedColor: null,
       isFrozen: false,
       isAssigned: false,
+      _statusLoaded: false,
       setWorkspace: (name, domain, color) => {
-        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false, isAssigned: false })
+        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false, isAssigned: false, _statusLoaded: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
         // 프리징/할당 상태 복원
@@ -36,7 +38,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }).catch(() => {})
       },
       clearWorkspace: () => {
-        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false })
+        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false, _statusLoaded: false })
         // 서버 설정도 초기화 — 재로그인 시 이전 워크스페이스 복원 방지
         클라이언트.put('/workspaces/preference', { workspace: '', domain: null, color: null }).catch(() => {})
       },
@@ -71,12 +73,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
       loadWorkspaceStatus: async () => {
         const { selectedWorkspace, selectedDomain } = get()
-        if (!selectedWorkspace || !selectedDomain) return
+        if (!selectedWorkspace || !selectedDomain) {
+          set({ _statusLoaded: true })
+          return
+        }
         try {
           const res = await assignmentApi.작업상태(selectedWorkspace, selectedDomain)
-          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned, _statusLoaded: true })
         } catch {
-          // 실패 시 기본값 유지
+          set({ _statusLoaded: true })
         }
       },
     }),
