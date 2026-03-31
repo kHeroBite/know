@@ -41,6 +41,7 @@ def 형태소분석(keyword: str, domain: Optional[str] = None) -> dict:
             proc = subprocess.run(
                 [
                     f"{JAVA_HOME}/bin/java",
+                    "-Dfile.encoding=EUC-KR",
                     "-classpath", CLASSPATH,
                     "test.LiteTest",
                     f"{JIANA_HOME}/",
@@ -49,17 +50,18 @@ def 형태소분석(keyword: str, domain: Optional[str] = None) -> dict:
                     str(output_file),
                 ],
                 capture_output=True,
-                text=True,
+                text=False,  # bytes 모드 — locale 독립적
                 timeout=MORPHEME_TIMEOUT,
                 env=env,
                 cwd=JIANA_HOME,
             )
 
             if proc.returncode != 0:
-                logger.warning("cotton_test.sh 실패 (rc=%d): %s", proc.returncode, proc.stderr[:500])
+                stderr_txt = proc.stderr.decode("utf-8", errors="replace")[:500]
+                logger.warning("jiana 실패 (rc=%d): %s", proc.returncode, stderr_txt)
                 return {
                     "keyword": keyword,
-                    "result": f"분석 실패: {proc.stderr[:200]}",
+                    "result": f"분석 실패: {stderr_txt[:200]}",
                     "tokens": [],
                 }
 

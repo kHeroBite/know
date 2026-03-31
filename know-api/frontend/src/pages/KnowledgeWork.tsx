@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Table, Typography, Card, Tabs, Input, Button, Space, Form, Modal,
-  Popconfirm, message,
+  Table, Typography, Card, Tabs, Input, Button, Form, Modal,
+  Popconfirm, message, Spin,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, SearchOutlined,
@@ -11,7 +11,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
 import 클라이언트 from '../api/client'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const PAGE_SIZE = 10
 
 // ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
@@ -207,31 +207,92 @@ export default function KnowledgeWork() {
   const user = useAuthStore(s => s.user)
   const [items, setItems] = useState<KeywordItem[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingPrev, setLoadingPrev] = useState(false)
+  const [minPage, setMinPage] = useState(1)
+  const [maxPage, setMaxPage] = useState(1)
   const [selected, setSelected] = useState<KeywordItem | null>(null)
+  const [isCenterFocused, setIsCenterFocused] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
 
-  const 목록조회 = useCallback(async (p = page) => {
+  const 목록초기화 = useCallback(async () => {
     if (!selectedWorkspace || !selectedDomain || !user) return
     setLoading(true)
     try {
       const { data } = await assignmentApi.목록(
-        selectedWorkspace, selectedDomain, 'assigned', p, PAGE_SIZE, user.user_id,
+        selectedWorkspace, selectedDomain, 'assigned', 1, PAGE_SIZE, user.user_id,
       )
       setItems(data.items || [])
       setTotal(data.total || 0)
+      setMinPage(1)
+      setMaxPage(1)
     } catch {
       setItems([])
       setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [selectedWorkspace, selectedDomain, page, user])
+  }, [selectedWorkspace, selectedDomain, user])
+
+  const 다음페이지로드 = useCallback(async () => {
+    if (loadingMore || loading) return
+    if (items.length >= total) return
+    const nextPage = maxPage + 1
+    setLoadingMore(true)
+    try {
+      const { data } = await assignmentApi.목록(
+        selectedWorkspace!, selectedDomain!, 'assigned', nextPage, PAGE_SIZE, user!.user_id,
+      )
+      if ((data.items || []).length > 0) {
+        setItems(prev => [...prev, ...(data.items || [])])
+        setMaxPage(nextPage)
+        setTotal(data.total || 0)
+      }
+    } catch { /* 무시 */ } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, loading, items.length, total, maxPage, selectedWorkspace, selectedDomain, user])
+
+  const 이전페이지로드 = useCallback(async () => {
+    if (loadingPrev || loading || minPage <= 1) return
+    const prevPage = minPage - 1
+    const prevScrollHeight = listRef.current?.scrollHeight || 0
+    setLoadingPrev(true)
+    try {
+      const { data } = await assignmentApi.목록(
+        selectedWorkspace!, selectedDomain!, 'assigned', prevPage, PAGE_SIZE, user!.user_id,
+      )
+      if ((data.items || []).length > 0) {
+        setItems(prev => [...(data.items || []), ...prev])
+        setMinPage(prevPage)
+        // 상단 prepend 후 스크롤 위치 보정
+        requestAnimationFrame(() => {
+          if (listRef.current) {
+            const newScrollHeight = listRef.current.scrollHeight
+            listRef.current.scrollTop += newScrollHeight - prevScrollHeight
+          }
+        })
+      }
+    } catch { /* 무시 */ } finally {
+      setLoadingPrev(false)
+    }
+  }, [loadingPrev, loading, minPage, selectedWorkspace, selectedDomain, user])
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    if (scrollHeight - scrollTop - clientHeight < 80) {
+      다음페이지로드()
+    }
+    if (scrollTop < 80 && minPage > 1) {
+      이전페이지로드()
+    }
+  }, [다음페이지로드, 이전페이지로드, minPage])
 
   useEffect(() => {
-    목록조회(page)
+    목록초기화()
     setSelected(null)
-  }, [selectedWorkspace, selectedDomain, page])
+  }, [selectedWorkspace, selectedDomain])
 
   if (!selectedWorkspace || !selectedDomain) {
     return (
@@ -241,58 +302,75 @@ export default function KnowledgeWork() {
     )
   }
 
-  // 좌측 키워드 목록 컬럼
-  const keywordColumns = [
-    {
-      title: '키워드',
-      dataIndex: 'keyword',
-      key: 'keyword',
-      ellipsis: true,
-    },
-  ]
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }} onClick={() => setIsCenterFocused(false)}>
       {/* 상단 3파티션 영역 */}
-      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0, marginBottom: 12 }}>
-        {/* 좌: 키워드 목록 */}
+      <div style={{ display: 'flex', gap: 12, height: 340, flexShrink: 0, marginBottom: 12 }}>
+        {/* 좌: 키워드 목록 (인피니티 스크롤) */}
         <Card
-          title="키워드 목록"
+          title={`키워드(${total}건)`}
           size="small"
           style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px' } }}
+          styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
         >
-          <Table
-            dataSource={items}
-            columns={keywordColumns}
-            rowKey="id"
-            size="small"
-            loading={loading}
-            onRow={(record) => ({
-              onClick: () => setSelected(record),
-              style: {
-                cursor: 'pointer',
-                background: selected?.id === record.id ? '#e6f4ff' : undefined,
-              },
-            })}
-            pagination={{
-              current: page,
-              pageSize: PAGE_SIZE,
-              total,
-              showTotal: t => `${t}건`,
-              showSizeChanger: false,
-              size: 'small',
-              onChange: p => setPage(p),
-            }}
-          />
+          <div
+            ref={listRef}
+            onScroll={handleScroll}
+            style={{ flex: 1, overflowY: 'auto' }}
+          >
+            {loadingPrev && (
+              <div style={{ textAlign: 'center', padding: 8 }}>
+                <Spin size="small" />
+              </div>
+            )}
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 20 }}>
+                <Spin />
+              </div>
+            ) : items.map(record => (
+              <div
+                key={record.id}
+                onClick={(e) => { e.stopPropagation(); setSelected(record) }}
+                style={{
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  background: selected?.id === record.id ? '#e6f4ff' : undefined,
+                  borderBottom: '1px solid #f0f0f0',
+                  fontSize: 13,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {record.keyword}
+              </div>
+            ))}
+            {loadingMore && (
+              <div style={{ textAlign: 'center', padding: 8 }}>
+                <Spin size="small" />
+              </div>
+            )}
+
+          </div>
         </Card>
 
         {/* 중: 분석결과 */}
         <Card
           title={selected ? `분석결과 — ${selected.keyword}` : '분석결과'}
           size="small"
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+          style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            cursor: 'default',
+            transition: 'all 0.3s ease',
+            ...(isCenterFocused ? {
+              boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+              background: '#f0f5ff',
+              border: '2px solid #1890ff',
+              transform: 'translateY(-2px)',
+            } : {}),
+          }}
           styles={{ body: { flex: 1, overflow: 'auto', padding: 16 } }}
+          onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
         >
           {selected ? (
             <pre style={{
@@ -320,7 +398,7 @@ export default function KnowledgeWork() {
       </div>
 
       {/* 하단 탭 영역 */}
-      <Card size="small" style={{ flexShrink: 0 }} styles={{ body: { padding: '4px 12px 12px' } }}>
+      <Card size="small" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}>
         <Tabs
           defaultActiveKey="morpheme"
           items={[

@@ -102,6 +102,12 @@
 **재발방지**: jiana 호출 시 반드시 Java 직접 호출 방식 사용 (쉘 스크립트 경유 금지). 입출력 파일 인코딩은 EUC-KR 필수 (`encoding="euc-kr"`). JAVA_HOME, CLASSPATH를 `env` dict로 명시적 전달. cwd는 JIANA_HOME으로 지정.
 **Level**: 2 (LESSONS.md 기록)
 
+### L-315: 에이전트 무응답 타임아웃 즉시 강제 (2026-04-01)
+- 문제: kstatus에서 30초 타임아웃을 선언하고도 실제로는 무한 대기하여 사용자가 재촉해야 행동
+- 원인: "대기합니다"라는 텍스트 출력만으로 타임아웃을 이행했다고 착각
+- 해결: ko SKILL.md 에이전트 운영 규칙에 "무응답_타임아웃" 절차 추가
+- 규칙: 다음 턴이 곧 타임아웃 — SendMessage 후 다음 턴에 응답 없으면 즉시 강제종료+재spawn
+
 ---
 
 ## 반영 추적 테이블
@@ -116,3 +122,4 @@
 | L-008 | ktest_done 증거파일 미생성 | MEMORY | MEMORY.md | 2026-03-26 | ✅ |
 | L-009 | ktest_done_guard silent pass | hook | ktest_done_guard.sh | 2026-03-26 | ✅ |
 | L-014 | jiana Java 직접 호출 (EUC-KR 필수) | LESSONS | LESSONS.md | 2026-03-31 | ✅ |
+| L-315 | 에이전트 무응답 타임아웃 즉시 강제 | ko SKILL | ko/SKILL.md | 2026-04-01 | ✅ |
