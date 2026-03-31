@@ -40,12 +40,12 @@ export default function Layout() {
   const menuItems = [
     {
       key: 'knowledge-group',
-      label: '지식작업',
+      label: '지식 작업',
       children: [
         { key: '/workspace', label: '워크스페이스' },
         { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected || isFrozen },
         { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen || isAssigned },
-        { key: '/dictionary', label: '도메인 사전관리', disabled: !wsSelected || !isAssigned },
+        { key: '/knowledge-work', label: '지식 작업실', disabled: !wsSelected || !isAssigned },
         { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
         { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
         { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isAssigned },
@@ -55,8 +55,9 @@ export default function Layout() {
       key: 'admin-group',
       label: '관리',
       children: [
+        { key: '/domain-manage', label: '도메인 관리' },
         { key: '/statistics', label: '통계' },
-        { key: '/build-history', label: '빌드이력' },
+        { key: '/build-history', label: '빌드 이력' },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },

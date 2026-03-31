@@ -16,7 +16,6 @@ import {
   Empty,
   Spin,
   ColorPicker,
-  Radio,
 } from 'antd'
 import {
   PlusOutlined,
@@ -24,9 +23,9 @@ import {
   DisconnectOutlined,
   DeleteOutlined,
   CheckCircleOutlined,
+  CloseCircleOutlined,
   BgColorsOutlined,
-  EditOutlined,
-  FolderOutlined,
+
   ReloadOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
@@ -67,21 +66,8 @@ export default function Workspace() {
 
   const isSuper = currentUser?.auth === 'A'
 
-  // 도메인 관리 상태
-  const [도메인추가팝업, set도메인추가팝업] = useState(false)
-  const [도메인신규이름, set도메인신규이름] = useState('')
-  const [도메인소스타입, set도메인소스타입] = useState<'domain' | 'old'>('domain')
-  const [도메인소스이름, set도메인소스이름] = useState<string | null>(null)
-  const [old소스목록, setOld소스목록] = useState<string[]>([])
-  const [도메인추가로딩, set도메인추가로딩] = useState(false)
-  const [도메인복사진행중, set도메인복사진행중] = useState<Record<string, number>>({})
-  const 도메인폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
-  const [이름변경대상, set이름변경대상] = useState<string | null>(null)
-  const [변경후이름, set변경후이름] = useState('')
-  // 사전 복사 옵션
-  const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
-  const [사전복사소스, set사전복사소스] = useState<string | null>(null)
-  const [mysql소스목록, setMysql소스목록] = useState<string[]>([])
+
+
 
   const 목록조회 = async () => {
     set로딩(true)
@@ -171,51 +157,6 @@ export default function Workspace() {
     } finally {
       set생성로딩(false)
     }
-  }
-
-  const 도메인폴링시작 = (dmName: string) => {
-    if (도메인폴링ref.current[dmName]) return
-    도메인폴링ref.current[dmName] = setInterval(async () => {
-      try {
-        const res = await workspaceAPI.도메인추가진행률(dmName)
-        const st = res.data?.status
-        if (!st || st === 'idle') {
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          await 목록조회()
-          return
-        }
-        if (st === 'dict_copying') {
-          set도메인복사진행중(prev => ({ ...prev, [dmName]: 92 }))
-          return
-        }
-        if (st === 'done') {
-          const elapsed = res.data?.elapsed
-          const fc = res.data?.file_count
-          const dictResult = res.data?.dict_result
-          const dictMsg = dictResult ? ` + 사전 ${Object.values(dictResult).filter(v => typeof v === 'number').reduce((a: number, b) => a + (b as number), 0)}건` : ''
-          message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일${dictMsg}, ${elapsed}초`)
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          await 목록조회()
-          return
-        }
-        if (st === 'error') {
-          message.error(`도메인 추가 실패: ${res.data?.message}`)
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          return
-        }
-        set도메인복사진행중(prev => ({ ...prev, [dmName]: res.data?.percent ?? 0 }))
-      } catch {
-        clearInterval(도메인폴링ref.current[dmName])
-        delete 도메인폴링ref.current[dmName]
-        set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-      }
-    }, 1500)
   }
 
   const 삭제핸들러 = async (name: string) => {
@@ -407,7 +348,7 @@ export default function Workspace() {
             const isInProgress = progressPercent !== undefined || ws.status === 'CONNECTING'
 
             return (
-              <Col xs={24} sm={12} lg={8} key={ws.name}>
+              <Col xs={24} sm={12} key={ws.name}>
                 <Card style={getCardStyle(ws)} styles={{ body: { padding: 16 } }}>
                   {/* 복사 진행률 오버레이 */}
                   {isInProgress && (
@@ -512,7 +453,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e' }}>
                             색상
                           </Button>
                         </ColorPicker>
@@ -536,6 +477,7 @@ export default function Workspace() {
                         {isSelected ? (
                           <Button
                             size="small"
+                            icon={<CloseCircleOutlined />}
                             onClick={선택해제핸들러}
                           >
                             선택해제
@@ -544,6 +486,7 @@ export default function Workspace() {
                           <Button
                             type="primary"
                             size="small"
+                            icon={<CheckCircleOutlined />}
                             disabled={!currentUser}
                             onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
                           >
@@ -556,14 +499,15 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e' }}>
                             색상
                           </Button>
                         </ColorPicker>
                         <Popconfirm
-                          title={`"${ws.name}" 도메인 연결을 해제하시겠습니까?`}
+                          title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
                           onConfirm={() => 해제핸들러(ws.name)}
                           okText="연결해제"
+                          okButtonProps={{ danger: true }}
                           cancelText="취소"
                         >
                           <Button size="small" icon={<DisconnectOutlined />}>
@@ -635,204 +579,6 @@ export default function Workspace() {
         />
       </Modal>
 
-      {/* 이름 변경 모달 */}
-      <Modal
-        title={`도메인 이름 변경 — ${이름변경대상}`}
-        open={!!이름변경대상}
-        onOk={async () => {
-          if (!이름변경대상 || !변경후이름.trim()) return
-          try {
-            await workspaceAPI.도메인이름변경(이름변경대상, 변경후이름.trim())
-            message.success('이름 변경 완료')
-            set이름변경대상(null)
-            set변경후이름('')
-            await 목록조회()
-          } catch (err: any) {
-            message.error(err.response?.data?.detail || '이름 변경 실패')
-          }
-        }}
-        onCancel={() => { set이름변경대상(null); set변경후이름('') }}
-        okText="변경"
-        cancelText="취소"
-        okButtonProps={{ disabled: !변경후이름.trim() }}
-      >
-        <Input
-          placeholder="새 도메인 이름"
-          value={변경후이름}
-          onChange={e => set변경후이름(e.target.value)}
-          style={{ marginTop: 8 }}
-        />
-      </Modal>
-
-      {/* 도메인 관리 영역 (super 전용) */}
-      {isSuper && (
-        <Card
-          title={<><FolderOutlined /> 도메인 관리</>}
-          style={{ marginTop: 24 }}
-          extra={
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={async () => {
-                set도메인추가팝업(true)
-                set사전복사모드('none')
-                set사전복사소스(null)
-                try {
-                  const [oldRes, mysqlRes] = await Promise.all([
-                    workspaceAPI.old도메인소스목록(),
-                    workspaceAPI.mysql도메인소스목록(),
-                  ])
-                  setOld소스목록(oldRes.data)
-                  setMysql소스목록(mysqlRes.data)
-                } catch { /* ignore */ }
-              }}
-            >
-              도메인 추가
-            </Button>
-          }
-        >
-          {/* 도메인 복사 진행률 */}
-          {Object.entries(도메인복사진행중).map(([dm, pct]) => (
-            <div key={dm} style={{ marginBottom: 8 }}>
-              <Text style={{ fontSize: 12, marginRight: 8 }}>{dm} 복사 중</Text>
-              <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block' }} />
-            </div>
-          ))}
-
-          <Row gutter={[8, 8]}>
-            {도메인목록.map(dm => {
-              const 연결됨 = 목록.some(ws => ws.domain === dm && (ws.status === 'USED' || ws.status === 'CONNECTING'))
-              return (
-                <Col key={dm}>
-                  <Card size="small" style={{ minWidth: 140 }} styles={{ body: { padding: '8px 12px' } }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <Text strong>{dm}</Text>
-                      <Space size={4}>
-                        <Button
-                          size="small"
-                          icon={<EditOutlined />}
-                          disabled={연결됨}
-                          onClick={() => { set이름변경대상(dm); set변경후이름(dm) }}
-                        />
-                        <Popconfirm
-                          title={`도메인 "${dm}"을 삭제하시겠습니까?`}
-                          onConfirm={async () => {
-                            try {
-                              await workspaceAPI.도메인삭제(dm)
-                              message.success(`도메인 "${dm}" 삭제 완료`)
-                              await 목록조회()
-                            } catch (err: any) {
-                              message.error(err.response?.data?.detail || '삭제 실패')
-                            }
-                          }}
-                          okText="삭제"
-                          cancelText="취소"
-                        >
-                          <Button size="small" danger icon={<DeleteOutlined />} disabled={연결됨} />
-                        </Popconfirm>
-                      </Space>
-                    </div>
-                    {연결됨 && <Text type="secondary" style={{ fontSize: 11 }}>연결 중</Text>}
-                  </Card>
-                </Col>
-              )
-            })}
-            {도메인목록.length === 0 && <Col><Text type="secondary">도메인이 없습니다</Text></Col>}
-          </Row>
-        </Card>
-      )}
-
-      {/* 도메인 추가 모달 */}
-      <Modal
-        title="도메인 추가"
-        open={도메인추가팝업}
-        onOk={async () => {
-          if (!도메인신규이름.trim() || !도메인소스이름) {
-            message.warning('이름과 소스를 모두 입력하세요')
-            return
-          }
-          set도메인추가로딩(true)
-          const dmName = 도메인신규이름.trim()
-          try {
-            const copyDictFrom = 사전복사모드 === 'sqlite' ? 사전복사소스 : null
-            const mysqlDictFrom = 사전복사모드 === 'mysql' ? 사전복사소스 : null
-            await workspaceAPI.도메인추가(dmName, 도메인소스타입, 도메인소스이름, copyDictFrom, mysqlDictFrom)
-            message.info(`도메인 "${dmName}" 복사 시작${사전복사모드 !== 'none' ? ' (사전 포함)' : ''}`)
-            set도메인추가팝업(false)
-            set도메인신규이름('')
-            set도메인소스이름(null)
-            set사전복사모드('none')
-            set사전복사소스(null)
-            set도메인복사진행중(prev => ({ ...prev, [dmName]: 0 }))
-            도메인폴링시작(dmName)
-          } catch (err: any) {
-            message.error(err.response?.data?.detail || '추가 실패')
-          } finally {
-            set도메인추가로딩(false)
-          }
-        }}
-        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null) }}
-        okText="추가"
-        cancelText="취소"
-        confirmLoading={도메인추가로딩}
-        okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 }}
-      >
-        <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
-          <Input
-            placeholder="새 도메인 이름"
-            value={도메인신규이름}
-            onChange={e => set도메인신규이름(e.target.value)}
-          />
-          <Select
-            style={{ width: '100%' }}
-            value={도메인소스타입}
-            onChange={v => { set도메인소스타입(v); set도메인소스이름(null) }}
-            options={[
-              { label: '기존 도메인에서 복사', value: 'domain' },
-              { label: 'Old 영역에서 복사', value: 'old' },
-            ]}
-          />
-          <Select
-            style={{ width: '100%' }}
-            placeholder="소스 선택"
-            options={(도메인소스타입 === 'old' ? (old소스목록 || []) : 도메인목록).map(d => ({ label: d, value: d }))}
-            onChange={v => set도메인소스이름(v)}
-            value={도메인소스이름}
-          />
-          <div>
-            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>사전 복사 옵션</Text>
-            <Radio.Group
-              value={사전복사모드}
-              onChange={e => { set사전복사모드(e.target.value); set사전복사소스(null) }}
-              size="small"
-            >
-              <Radio value="none">복사 안 함</Radio>
-              <Radio value="sqlite">기존 도메인에서</Radio>
-              <Radio value="mysql">MySQL에서</Radio>
-            </Radio.Group>
-          </div>
-          {사전복사모드 === 'sqlite' && (
-            <Select
-              style={{ width: '100%' }}
-              placeholder="사전 복사할 기존 도메인 선택"
-              options={도메인목록.map(d => ({ label: d, value: d }))}
-              onChange={v => set사전복사소스(v)}
-              value={사전복사소스}
-            />
-          )}
-          {사전복사모드 === 'mysql' && (
-            <Select
-              style={{ width: '100%' }}
-              placeholder="MySQL 도메인 선택"
-              showSearch
-              options={mysql소스목록.map(d => ({ label: d, value: d }))}
-              onChange={v => set사전복사소스(v)}
-              value={사전복사소스}
-            />
-          )}
-        </Space>
-      </Modal>
     </div>
   )
 }

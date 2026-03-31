@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Layout from './components/Layout'
 import DomainList from './pages/DomainList'
 import DictionaryManage from './pages/DictionaryManage'
+import DomainManage from './pages/DomainManage'
 import CategoryManage from './pages/CategoryManage'
 import Statistics from './pages/Statistics'
 import Pipeline from './pages/Pipeline'
@@ -15,6 +16,7 @@ import AccountManagement from './pages/AccountManagement'
 import Phase1Pipeline from './pages/Phase1Pipeline'
 import Manual from './pages/Manual'
 import Assignment from './pages/Assignment'
+import KnowledgeWork from './pages/KnowledgeWork'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -25,8 +27,8 @@ function DefaultRoute() {
   if (!selectedWorkspace) return <Navigate to="/workspace" replace />
   // 서버 상태 로드 미완료 → null 반환 (빈 화면으로 대기, re-render 시 올바른 경로로)
   if (!_statusLoaded) return null
-  // 할당 완료 → dictionary
-  if (isAssigned) return <Navigate to="/dictionary" replace />
+  // 할당 완료 → knowledge-work
+  if (isAssigned) return <Navigate to="/knowledge-work" replace />
   // 프리징 완료 → assignment
   if (isFrozen) return <Navigate to="/assignment" replace />
   // 워크스페이스만 선택됨 → preprocess
@@ -47,8 +49,10 @@ export default function App() {
         <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />
         <Route path="preprocess" element={<Phase1Pipeline />} />
         <Route path="assignment" element={<Assignment />} />
+        <Route path="knowledge-work" element={<KnowledgeWork />} />
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />
+        <Route path="domain-manage" element={<DomainManage />} />
         <Route path="category" element={<CategoryManage />} />
         <Route path="statistics" element={<Statistics />} />
         <Route path="pipeline" element={<Pipeline />} />
