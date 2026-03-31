@@ -176,7 +176,6 @@ function MorphemeTab({ domain }: { domain: string }) {
   return (
     <div>
       <Input.Search
-        placeholder="분석할 키워드를 입력하세요"
         enterButton="분석"
         value={keyword}
         onChange={e => setKeyword(e.target.value)}
@@ -193,9 +192,7 @@ function MorphemeTab({ domain }: { domain: string }) {
           {result}
         </pre>
       )}
-      {result === null && (
-        <Text type="secondary">키워드를 입력하고 분석 버튼을 클릭하세요.</Text>
-      )}
+
     </div>
   )
 }
