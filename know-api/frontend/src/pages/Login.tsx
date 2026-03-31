@@ -105,6 +105,7 @@ export default function Login() {
               placeholder="아이디"
               size="large"
               className="login-input"
+              autoFocus
             />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true, message: '비밀번호를 입력하세요.' }]}>

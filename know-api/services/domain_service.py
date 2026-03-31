@@ -2,10 +2,10 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import select, insert, update, delete, func
+from sqlalchemy import select, insert, update, delete, func, text
 from fastapi import HTTPException
 from models.domain import 도메인테이블
-from models.dictionary import 사이트명검증, 도메인테이블생성, 도메인테이블삭제
+from models.dictionary import 사이트명검증, 도메인테이블생성
 from core.database import 엔진
 
 
@@ -117,9 +117,11 @@ def 도메인삭제(db: Session, site: str) -> None:
     # 존재 확인
     도메인조회(db, site_upper)
 
-    # 동적 사전 테이블 4개 DROP
+    # 동적 사전 테이블 4개 DROP (db 세션 경유)
     try:
-        도메인테이블삭제(site_upper, 엔진)
+        for suffix in ('_UDIC', '_CNDIC', '_THESAURUS', '_CATEGORY'):
+            db.execute(text(f"DROP TABLE IF EXISTS `{site_upper}{suffix}`"))
+        db.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"사전 테이블 삭제 실패: {e}")
 

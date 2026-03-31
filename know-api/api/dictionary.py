@@ -158,11 +158,12 @@ def 유의어목록(
     domain: str,
     page: int = 1,
     size: int = 50,
+    search: Optional[str] = None,
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 목록 조회."""
-    결과 = 유의어목록조회(db, domain, page=page, size=size)
+    결과 = 유의어목록조회(db, domain, page=page, size=size, search=search)
     return 페이지응답[유의어항목응답](
         items=[유의어항목응답(**item) for item in 결과["items"]],
         total=결과["total"],

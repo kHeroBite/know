@@ -158,14 +158,26 @@ def 일괄항목추가(
 
 # ─── THESAURUS (_HEAD_WORD PK, _TAIL_WORD = 쉼표 구분 목록) ────────
 
-def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50) -> dict:
+def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50, search: Optional[str] = None) -> dict:
     """유의어 목록 페이지네이션 조회."""
     사이트명검증(site)
     tbl = _사전테이블(db, site, "thesaurus")
     offset = (page - 1) * size
+
+    where_clause = []
+    if search:
+        키워드 = 단어정규화(search)
+        where_clause.append(tbl.c._HEAD_WORD.like(f"%{키워드}%"))
+
+    cnt_stmt = select(func.count()).select_from(tbl)
+    lst_stmt = select(tbl).offset(offset).limit(size)
+    if where_clause:
+        cnt_stmt = cnt_stmt.where(*where_clause)
+        lst_stmt = lst_stmt.where(*where_clause)
+
     try:
-        total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
-        rows = db.execute(select(tbl).offset(offset).limit(size)).mappings().all()
+        total = db.execute(cnt_stmt).scalar() or 0
+        rows = db.execute(lst_stmt).mappings().all()
         items = [{"head_word": r["_HEAD_WORD"], "tail_word": r["_TAIL_WORD"], "memo": r.get("_MEMO")} for r in rows]
     except (OperationalError, ProgrammingError):
         return {"items": [], "total": 0, "page": page, "size": size}
@@ -281,7 +293,7 @@ def _파일읽기(파일경로: str) -> List[str]:
 _사전파일패턴 = {
     "udic": ["user.ks", "user*.ks"],
     "cndic": ["cnlist.ks", "cnlist*.ks"],
-    "thesaurus": ["quasisynonym.*.UTF-8", "quasisynonym.*", "addedsyn", "addsyn*"],
+    "thesaurus": ["txt_resrc/synonym.UTF-8"],
 }
 
 
