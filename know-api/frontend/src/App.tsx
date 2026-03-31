@@ -23,13 +23,13 @@ function DefaultRoute() {
 
   // 워크스페이스 미선택 → workspace
   if (!selectedWorkspace) return <Navigate to="/workspace" replace />
-  // 서버 상태 로드 미완료 → workspace에서 대기 (비동기 로드 후 리렌더)
-  if (!_statusLoaded) return <Navigate to="/workspace" replace />
+  // 서버 상태 로드 미완료 → null 반환 (빈 화면으로 대기, re-render 시 올바른 경로로)
+  if (!_statusLoaded) return null
   // 할당 완료 → dictionary
   if (isAssigned) return <Navigate to="/dictionary" replace />
   // 프리징 완료 → assignment
   if (isFrozen) return <Navigate to="/assignment" replace />
-  // 기본 → preprocess
+  // 워크스페이스만 선택됨 → preprocess
   return <Navigate to="/preprocess" replace />
 }
 
