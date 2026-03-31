@@ -4,8 +4,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from api.auth import 현재사용자가져오기
+from core.database import DB세션
 from services.workspace_service import (
     도메인목록,
     도메인연결,
@@ -45,6 +48,7 @@ class 워크스페이스설정요청(BaseModel):
     workspace: str
     domain: Optional[str] = None
     color: Optional[str] = None
+    last_menu: Optional[str] = None
 
 
 class 도메인추가요청(BaseModel):
@@ -83,7 +87,7 @@ def 워크스페이스설정저장처리(
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
     """사용자 워크스페이스 설정 저장."""
-    return 사용자설정저장(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color)
+    return 사용자설정저장(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color, 요청.last_menu)
 
 
 @라우터.get("/domains")
@@ -140,10 +144,14 @@ def 도메인추가진행률조회(
 @도메인관리라우터.delete("/{name}")
 def 도메인삭제처리(
     name: str,
+    db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, str]:
     """도메인 삭제 (super 전용, 연결 중 차단)."""
     _super권한확인(current)
+    # 잔존 keyword_assignments 정리
+    db.execute(text("DELETE FROM keyword_assignments WHERE domain=:dom"), {"dom": name})
+    db.commit()
     도메인삭제(name)
     return {"message": f"도메인 삭제 완료: {name}"}
 
@@ -205,9 +213,22 @@ def 도메인연결처리(
 @라우터.post("/{name}/release")
 def 워크스페이스해제처리(
     name: str,
+    db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """워크스페이스 해제."""
+    """워크스페이스 해제 + keyword_assignments 자동 초기화."""
+    from services.workspace_service import _상태읽기
+    상태 = _상태읽기()
+    도메인 = 상태.get(name, {}).get("domain")
+    if 도메인:
+        db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
+                   {"ws": name, "dom": 도메인})
+        # 전처리 실행 로그 정리
+        db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom)"),
+                   {"dom": 도메인})
+        db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"),
+                   {"dom": 도메인})
+        db.commit()
     return 워크스페이스해제(name)
 
 

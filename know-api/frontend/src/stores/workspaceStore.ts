@@ -7,6 +7,7 @@ interface WorkspaceState {
   selectedWorkspace: string | null
   selectedDomain: string | null
   selectedColor: string | null
+  lastMenu: string | null
   isFrozen: boolean
   isAssigned: boolean
   _statusLoaded: boolean
@@ -14,6 +15,7 @@ interface WorkspaceState {
   clearWorkspace: () => void
   setFrozen: (v: boolean) => void
   setAssigned: (v: boolean) => void
+  setLastMenu: (path: string) => void
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
   loadWorkspaceStatus: () => Promise<void>
@@ -25,6 +27,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       selectedWorkspace: null,
       selectedDomain: null,
       selectedColor: null,
+      lastMenu: null,
       isFrozen: false,
       isAssigned: false,
       _statusLoaded: false,
@@ -44,11 +47,22 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
       setFrozen: (v) => set({ isFrozen: v }),
       setAssigned: (v) => set({ isAssigned: v }),
+      setLastMenu: (path) => {
+        const prev = get().lastMenu
+        if (prev === path) return
+        set({ lastMenu: path })
+        const { selectedWorkspace, selectedDomain, selectedColor } = get()
+        if (selectedWorkspace) {
+          클라이언트.put('/workspaces/preference', {
+            workspace: selectedWorkspace, domain: selectedDomain, color: selectedColor, last_menu: path,
+          }).catch(() => {})
+        }
+      },
       loadPreference: async () => {
         try {
           const { data } = await 클라이언트.get('/workspaces/preference')
           if (data.workspace) {
-            set({ selectedWorkspace: data.workspace, selectedDomain: data.domain, selectedColor: data.color })
+            set({ selectedWorkspace: data.workspace, selectedDomain: data.domain, selectedColor: data.color, lastMenu: data.last_menu || null })
             // 프리징/할당 상태 복원
             try {
               const res = await assignmentApi.작업상태(data.workspace, data.domain)
@@ -62,12 +76,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
       },
       savePreference: async () => {
-        const { selectedWorkspace, selectedDomain, selectedColor } = get()
+        const { selectedWorkspace, selectedDomain, selectedColor, lastMenu } = get()
         if (selectedWorkspace) {
           await 클라이언트.put('/workspaces/preference', {
             workspace: selectedWorkspace,
             domain: selectedDomain,
             color: selectedColor,
+            last_menu: lastMenu,
           }).catch(() => {})
         }
       },
@@ -85,6 +100,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
       },
     }),
-    { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedColor: s.selectedColor }) }
+    { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedColor: s.selectedColor, lastMenu: s.lastMenu }) }
   )
 )

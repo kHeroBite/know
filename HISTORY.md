@@ -1,5 +1,27 @@
 # HISTORY.md — 작업 이력
 
+## 2026-03-31 — 지식작업실 3파티션+하단4탭 재설계 + 형태소분석 API + 마지막메뉴 저장
+
+### 수정 내용
+- **[신규] know-api/services/morpheme_service.py**: jiana 1.5.12 Java 직접 호출 기반 형태소분석 서비스 (EUC-KR 인코딩, cotton_test.sh 경유 방식 불채택)
+- **[신규] know-api/api/morpheme.py**: 형태소분석 REST 엔드포인트 (`POST /api/morpheme/analyze`)
+- **know-api/main.py**: morpheme 라우터 등록
+- **know-api/services/assignment_service.py**: `assigned_to` 필터 추가 (로그인 사용자별 키워드 목록 조회)
+- **know-api/api/assignment.py**: `assigned_to` 쿼리파라미터 수신
+- **know-api/services/workspace_service.py**: `last_menu` 필드 추가 (워크스페이스 preference 확장)
+- **know-api/api/workspace.py**: preference API 확장 (last_menu 저장/조회)
+- **know-api/frontend/src/pages/KnowledgeWork.tsx**: 전면 재작성 — 3파티션(좌:키워드목록/중:분석결과/우:AI placeholder) + 하단 4탭(형태소/사용자사전/복합명사사전/유사어사전)
+- **know-api/frontend/src/api/assignment.ts**: `assigned_to` 파라미터 추가
+- **know-api/frontend/src/stores/workspaceStore.ts**: `lastMenu` 상태 추가
+- **know-api/frontend/src/components/Layout.tsx**: 메뉴 변경 시 lastMenu 추적
+- **know-api/frontend/src/App.tsx**: DefaultRoute에서 lastMenu 복원 로직
+
+### 배경
+- 지식작업실을 단순 목록에서 분석 도구 중심으로 전면 재설계
+- 형태소분석은 jiana 1.5.12 기반 Java 직접 호출 방식 채택 (cotton_test.sh 경유 실패 — L-014)
+- 마지막 방문 메뉴 저장으로 새로고침 후에도 마지막 메뉴 유지
+- assigned_to 필터로 로그인 사용자에게 할당된 키워드만 노출
+
 ## 2026-03-27 — 설계안 갭 전면 해소: executor CLI 통합 + 워크스페이스 경로 + 미구현 모듈 4개 추가
 
 ### 수정 내용

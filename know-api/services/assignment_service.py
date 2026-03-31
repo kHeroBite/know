@@ -65,8 +65,8 @@ def 프리징(db: Session, workspace: str, domain: str) -> dict:
 
 
 def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pending",
-              page: int = 1, size: int = 50) -> dict:
-    """키워드 목록 조회 (페이지네이션 + 필터)."""
+              page: int = 1, size: int = 50, assigned_to: Optional[str] = None) -> dict:
+    """키워드 목록 조회 (페이지네이션 + 필터 + assigned_to)."""
     where = "workspace=:ws AND domain=:dom"
     params = {"ws": workspace, "dom": domain}
     
@@ -77,6 +77,10 @@ def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pen
     elif filter == "completed":
         where += " AND status='completed'"
     # filter == "all" → 조건 없음
+    
+    if assigned_to:
+        where += " AND assigned_to=:uid"
+        params["uid"] = assigned_to
     
     total = db.execute(text(f"SELECT COUNT(*) FROM keyword_assignments WHERE {where}"), params).scalar() or 0
     

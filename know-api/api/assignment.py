@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -33,8 +34,9 @@ def 프리징(workspace: str = Query(...), domain: str = Query(...),
 @라우터.get("/list")
 def 목록(workspace: str = Query(...), domain: str = Query(...),
          filter: str = Query("pending"), page: int = Query(1), size: int = Query(50),
+         assigned_to: Optional[str] = Query(None),
          db: Session = Depends(DB세션), _: dict = Depends(현재사용자가져오기)):
-    return assignment_service.키워드목록(db, workspace, domain, filter, page, size)
+    return assignment_service.키워드목록(db, workspace, domain, filter, page, size, assigned_to=assigned_to)
 
 @라우터.get("/stats")
 def 통계(workspace: str = Query(...), domain: str = Query(...),

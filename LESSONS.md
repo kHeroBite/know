@@ -95,6 +95,13 @@
 **재발방지**: Python 모듈 호출부(executor.py 등) 작성 전 반드시 실제 모듈 소스에서 함수 시그니처(인수명·타입·반환값) 확인 후 작성.
 **Level**: 1 (1회 발생, ktest에서 발견하여 즉시 수정)
 
+### L-014: jiana 형태소분석 — cotton_test.sh 경유 실패, Java 직접 호출 성공 (2026-03-31)
+
+**현상**: cotton_test.sh를 subprocess로 경유하여 jiana를 호출하면 JAVA_HOME·PATH 환경변수 문제로 실패. Java 바이너리 직접 호출(subprocess.run with full java path)은 성공.
+**원인**: cotton_test.sh는 쉘 환경 의존성이 강해 Python subprocess 실행 시 JAVA_HOME·PATH가 올바르게 전달되지 않음. java 바이너리 경로를 절대경로로 직접 지정하면 환경 의존성 제거.
+**재발방지**: jiana 호출 시 반드시 Java 직접 호출 방식 사용 (쉘 스크립트 경유 금지). 입출력 파일 인코딩은 EUC-KR 필수 (`encoding="euc-kr"`). JAVA_HOME, CLASSPATH를 `env` dict로 명시적 전달. cwd는 JIANA_HOME으로 지정.
+**Level**: 2 (LESSONS.md 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -108,3 +115,4 @@
 | L-007 | API baseURL 이중 접두사 버그 | LESSONS | LESSONS.md | 2026-03-26 | ✅ |
 | L-008 | ktest_done 증거파일 미생성 | MEMORY | MEMORY.md | 2026-03-26 | ✅ |
 | L-009 | ktest_done_guard silent pass | hook | ktest_done_guard.sh | 2026-03-26 | ✅ |
+| L-014 | jiana Java 직접 호출 (EUC-KR 필수) | LESSONS | LESSONS.md | 2026-03-31 | ✅ |

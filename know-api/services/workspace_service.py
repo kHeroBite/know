@@ -177,7 +177,7 @@ def 진행률조회(ws_name: str) -> dict[str, Any] | None:
 
 
 def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
-    """상태 IDLE + domain/connected_by null로 변경. color는 유지. 업로드 파일 삭제."""
+    """상태 IDLE + domain/connected_by null로 변경. color는 유지. 디렉토리 전체 정리 후 기본 구조 재생성."""
     상태 = _상태읽기()
     if ws_name not in 상태:
         raise HTTPException(
@@ -187,12 +187,17 @@ def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
     기존색상 = 상태[ws_name].get("color")
     상태[ws_name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": 기존색상}
     _상태쓰기(상태)
-    # 업로드 파일 정리 (build/popular, build/fails)
-    for folder in ("popular", "fails"):
-        folder_path = os.path.join(WORKSPACE_DIR, ws_name, "build", folder)
-        if os.path.isdir(folder_path):
-            shutil.rmtree(folder_path)
-            os.makedirs(folder_path, exist_ok=True)
+    # 워크스페이스 디렉토리 전체 정리 후 기본 구조 재생성
+    ws경로 = os.path.join(WORKSPACE_DIR, ws_name)
+    if os.path.isdir(ws경로):
+        for 항목 in os.listdir(ws경로):
+            항목경로 = os.path.join(ws경로, 항목)
+            if os.path.isdir(항목경로):
+                shutil.rmtree(항목경로)
+            else:
+                os.remove(항목경로)
+        for 하위 in ["build/fail_log", "build/pop_log", "work"]:
+            os.makedirs(os.path.join(ws경로, 하위), exist_ok=True)
     return {"name": ws_name, "status": "IDLE", "domain": None, "connected_by": None, "color": 기존색상}
 
 
@@ -230,14 +235,21 @@ def 사용자설정읽기(user_id: str) -> dict[str, Any] | None:
         return None
 
 
-def 사용자설정저장(user_id: str, workspace: str, domain: str | None, color: str | None) -> dict[str, Any]:
+def 사용자설정저장(user_id: str, workspace: str, domain: str | None, color: str | None,
+                  last_menu: str | None = None) -> dict[str, Any]:
     """사용자 워크스페이스 설정 저장."""
     try:
         with open(USER_PREF_FILE, "r", encoding="utf-8") as f:
             prefs = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         prefs = {}
-    prefs[user_id] = {"workspace": workspace, "domain": domain, "color": color}
+    existing = prefs.get(user_id, {})
+    prefs[user_id] = {
+        "workspace": workspace,
+        "domain": domain,
+        "color": color,
+        "last_menu": last_menu if last_menu is not None else existing.get("last_menu"),
+    }
     os.makedirs(os.path.dirname(USER_PREF_FILE), exist_ok=True)
     with open(USER_PREF_FILE, "w", encoding="utf-8") as f:
         json.dump(prefs, f, ensure_ascii=False, indent=2)

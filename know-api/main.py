@@ -18,6 +18,7 @@ from api.phase1 import 라우터 as phase1라우터, ws라우터 as phase1_ws라
 from api.workspace import 라우터 as 워크스페이스라우터, 도메인관리라우터
 from api.account import 라우터 as 계정라우터
 from api.assignment import 라우터 as 할당라우터
+from api.morpheme import 라우터 as 형태소라우터
 
 
 앱 = FastAPI(
@@ -51,6 +52,7 @@ from api.assignment import 라우터 as 할당라우터
 앱.include_router(도메인관리라우터, prefix="/api", tags=["도메인관리"])
 앱.include_router(계정라우터, prefix="/api", tags=["계정관리"])
 앱.include_router(할당라우터, prefix="/api/assignments", tags=["데이터할당"])
+앱.include_router(형태소라우터, prefix="/api", tags=["형태소분석"])
 
 
 

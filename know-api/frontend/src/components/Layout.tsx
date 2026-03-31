@@ -119,7 +119,12 @@ export default function Layout() {
             selectedKeys={[location.pathname]}
             defaultOpenKeys={['knowledge-group', 'admin-group', 'help-group']}
             items={menuItems}
-            onClick={({ key }) => { if (!disabledKeys.has(key)) navigate(key) }}
+            onClick={({ key }) => {
+              if (!disabledKeys.has(key)) {
+                navigate(key)
+                useWorkspaceStore.getState().setLastMenu(key)
+              }
+            }}
           />
         </div>
         {/* 사용자 정보 + 로그아웃 — 항상 최하단 고정 */}
