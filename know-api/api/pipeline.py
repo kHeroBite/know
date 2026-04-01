@@ -1,6 +1,7 @@
 """api/pipeline.py — 파이프라인 REST API 라우터"""
 from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from api.auth import 현재사용자가져오기
 from core.database import DB세션
@@ -8,11 +9,15 @@ from services.pipeline_service import pipeline_service
 
 라우터 = APIRouter(prefix="/api/pipeline", tags=["파이프라인"])
 
+class 파이프라인시작요청(BaseModel):
+    domain: str
+    file_path: str
+
 @라우터.post("/start")
-def 파이프라인시작(domain: str, file_path: str, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def 파이프라인시작(req: 파이프라인시작요청, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
     """파이프라인 시작"""
     started_by = current_user.get("id") or current_user.get("user_id")
-    return pipeline_service.파이프라인시작(db, domain, file_path, started_by=started_by)
+    return pipeline_service.파이프라인시작(db, req.domain, req.file_path, started_by=started_by)
 
 @라우터.get("/{pipeline_id}/status")
 def 파이프라인상태조회(pipeline_id: int, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):

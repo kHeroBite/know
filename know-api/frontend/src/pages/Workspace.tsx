@@ -453,7 +453,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e' }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>
@@ -483,15 +483,28 @@ export default function Workspace() {
                             선택해제
                           </Button>
                         ) : (
-                          <Button
-                            type="primary"
-                            size="small"
-                            icon={<CheckCircleOutlined />}
-                            disabled={!currentUser}
-                            onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
-                          >
-                            선택
-                          </Button>
+                          <>
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<CheckCircleOutlined />}
+                              disabled={!currentUser}
+                              onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
+                            >
+                              선택
+                            </Button>
+                            <Popconfirm
+                              title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
+                              onConfirm={() => 해제핸들러(ws.name)}
+                              okText="연결해제"
+                              okButtonProps={{ danger: true }}
+                              cancelText="취소"
+                            >
+                              <Button size="small" icon={<DisconnectOutlined />}>
+                                연결해제
+                              </Button>
+                            </Popconfirm>
+                          </>
                         )}
                         <ColorPicker
                           value={ws.color || '#1a1a2e'}
@@ -499,21 +512,10 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e' }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>
-                        <Popconfirm
-                          title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
-                          onConfirm={() => 해제핸들러(ws.name)}
-                          okText="연결해제"
-                          okButtonProps={{ danger: true }}
-                          cancelText="취소"
-                        >
-                          <Button size="small" icon={<DisconnectOutlined />}>
-                            연결해제
-                          </Button>
-                        </Popconfirm>
                         {ws.domain && (
                           <Popconfirm
                             title="프리징 상태를 해제하고 작업 데이터를 삭제합니다. 계속하시겠습니까?"

@@ -207,7 +207,7 @@ def 도메인연결처리(
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
     """도메인 연결."""
-    return 도메인연결(name, 요청.domain, current.get("user_id"))
+    return 도메인연결(name, 요청.domain, current.get("name"))
 
 
 @라우터.post("/{name}/release")

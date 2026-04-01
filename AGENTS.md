@@ -70,20 +70,20 @@ WSL에서_실행 (기본):
   - WSL에서 최대한 리눅스 도구 사용, Windows 도구(.exe)는 최소화
   - Windows 도구 사용 시: 반드시 사유 명시 + Fallback으로만 사용
 
-파일_수정 (/mnt/c/ 경로 — 절대 규칙):
-  - NTFS(/mnt/c/)에서 Edit/Write 도구 직접 사용 절대 금지 [COMPACT]
-    - drvfs 캐시 불일치로 ENOENT statx 발생 → 파일 손상 (복구 불가)
-    - "한 번만 괜찮겠지" 예외 없음 — .cs, .md, .json, .xml 모든 파일 유형 해당
-  - 필수 절차 (rsync 방식 — 유일한 안전 경로):
-      1. cp "/mnt/c/.../파일" /home/rioky/work/{project}-ntfs/파일  (ext4로 복사)
-      2. Read /home/rioky/work/{project}-ntfs/파일  (ext4 파일 읽기)
-      3. Edit /home/rioky/work/{project}-ntfs/파일  (ext4에서 부분 수정)
-      4. rsync -a --inplace /home/rioky/work/{project}-ntfs/파일 "/mnt/c/.../파일"  (NTFS에 동기화)
-  - --inplace 필수 (없으면 임시파일 rename 시 NTFS metadata 오류)
-  - BOM 처리: cp가 바이너리 복사이므로 기존 BOM 자동 보존 (신규 파일은 BOM 없이 생성)
-  - 작업 디렉토리: /home/rioky/work/{project}-ntfs/ (세션 공통 — ~/는 Edit/Write/Read 도구에서 확장 불가, 절대경로 필수)
-  - 예외_Serena_심볼편집만: LSP 경유이므로 rsync 불필요 (유일한 예외)
-  - 위반_감지: /mnt/c/ 경로에 Edit/Write 도구 직접 호출 시 즉시 중단 + 경고
+파일시스템_변경 (fio MCP 독점 — 절대 규칙):
+  - 모든 파일/디렉토리 변경은 반드시 fio MCP 경유 (유일한 변경 경로)
+    - 파일: mcp__fio__file_edit / file_write / file_delete / file_rename / file_move / file_copy
+    - 디렉토리: mcp__fio__dir_create / dir_delete / dir_move / dir_rename
+    - 모든 경로 동일 처리 (NTFS/EXT4 구분 없음 — fio가 내부에서 자동 처리)
+    - BOM/CRLF: fio 내부에서 자동 보존
+    - Intent Lock: fio 내부에서 세션 간 충돌 방지 (SQLite FIFO 대기열)
+    - File Lock: fio 내부에서 자동 acquire/release (try/finally)
+  - C# 심볼 수정: Serena (replace_symbol_body / insert_after_symbol) — LSP 경유
+  - Fallback: fio/Serena 모두 불가 시에만 Claude Code Edit
+  - Bash 파일시스템 변경 명령 금지: mkdir/rmdir/rm/mv/cp/touch/sed -i/rsync 등 → fio 도구 사용
+    - 예외: git, dotnet/npm 빌드, /tmp/ 경로, session-env 상태파일
+  - Edit/Write 도구 직접 사용 금지 → fio 사용
+  - 위반_감지: write_guard.sh가 Edit/Write + Bash 변경 명령 모두 차단
 
 ```
 
@@ -93,15 +93,8 @@ WSL에서_실행 (기본):
 
 | 문서 | 내용 | 범위 |
 |------|------|------|
-| **[PROJECT.md](./PROJECT.md)** | 프로젝트 구조, 파일 인벤토리, **프로젝트스킬 상세** | 프로젝트 고유 |
-| **[ADVANCED.md](./ADVANCED.md)** | 새 폼, 메뉴 등록, 권한, 람다식, 리팩토링 | 프로젝트 고유 |
-| **[DATABASE.md](./DATABASE.md)** | 테이블, 스키마, FK, MCP 설정 | 프로젝트 고유 |
-| **[MCP.md](./MCP.md)** | MCP 서버 통합 문서 | 프로젝트 고유 |
-| **[RESTAPI.md](./restapi.md)** | REST API 엔드포인트 | 프로젝트 고유 |
 | **[HISTORY.md](./HISTORY.md)** | 버그 수정 및 작업 이력 | 프로젝트 고유 |
 | **[LESSONS.md](./LESSONS.md)** | 자기 개선 교훈 로그 | 프로젝트 고유 |
-
-> 프로젝트스킬(`_{project}`) 상세 설명은 **PROJECT.md** 참조.
 
 ---
 
@@ -125,6 +118,26 @@ WSL에서_실행 (기본):
 - "이미 방법을 알고 있으니 스킬 없이 진행하겠다"
 
 **원칙**: 1%라도 스킬 적용 가능성이 있으면 먼저 스킬을 확인하라. 스킬이 작업에 해당하면 반드시 사용해야 하며 예외는 없다. (우선순위: 사용자 명시 지시 > 스킬 > 기본 동작)
+
+## k시리즈 파이프라인 프로세스 (절대 규칙)
+
+사용자가 k시리즈 스킬(/ko, /k1, /k2, /k3, /k4, /k5, /kplan, /kplan_dual, /kdev, /ktest, /kdone 등)을 **명시적으로 요구**하면:
+- 해당 스킬의 프로세스를 **예외 없이 100% 따라야** 함
+- "요구사항이 명확하니 스킬 프로세스 생략" 금지
+- "이미 답을 알고 있으니 바로 구현" 금지
+- 스킬이 토론(kplan_dual)을 요구하면 반드시 토론 수행
+- 스킬이 팀에이전트 spawn을 요구하면 반드시 spawn
+
+**위반 시**: 사용자 신뢰 손상. 스킬 프로세스는 품질 보증 절차이며 생략 불가.
+
+코드 수정 작업 분류 (5-tier, 7-way):
+- k1 (Instant): 비코드만 또는 코드 ≤2개, ≤20줄 → kdev → kfinish
+- k2 (Simple): 코드 1~3개, 20~50줄 → kplan_simple → kdev → kpop → kfinish
+- k3 (Normal): 코드 4개+ 또는 50~500줄 또는 DB변경/인터페이스변경/비즈니스로직 → kplan_normal → kdev → ktest → kdone → kfinish
+- k4 (Heavy): 500줄+ 또는 아키텍처 변경 → kplan_deep → kdev → ktest → kdone → kfinish
+- k5 (Massive): 1500줄+ 또는 전면 변경 → kplan_dual → kdev → ktest → kdone → kfinish
+- 사용자가 `/ko`로 직접 호출 시: 자동 7-way 분류 (질문/계획/k1/k2/k3/k4/k5)
+- 레거시: /kq→k1, /kl→k2, /km→k3, /kf→k4 (deprecated, 3개월 후 제거)
 
 ---
 
@@ -161,9 +174,3 @@ WSL에서_실행 (기본):
 | Designer.cs, 비코드 파일, 주석/문자열 | Claude Code Edit |
 | Serena 오류 시 | Claude Code Edit (Fallback) |
 
----
-
-## 프로젝트 정보
-
-- **구조**: [PROJECT.md](./PROJECT.md) - 파일 추가/삭제 시 즉시 업데이트, **프로젝트스킬 상세 포함**
-- **DB**: [DATABASE.md](./DATABASE.md) - 테이블 변경 시 즉시 업데이트

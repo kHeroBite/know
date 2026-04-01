@@ -1,4 +1,6 @@
 from __future__ import annotations
+import os
+import shutil
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -112,7 +114,7 @@ def 도메인수정(
 
 
 def 도메인삭제(db: Session, site: str) -> None:
-    """도메인 삭제 + 4개 사전 테이블 DROP."""
+    """도메인 삭제 + 4개 사전 테이블 DROP + 서버 디렉토리 삭제."""
     site_upper = site.upper()
     # 존재 확인
     도메인조회(db, site_upper)
@@ -125,9 +127,17 @@ def 도메인삭제(db: Session, site: str) -> None:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"사전 테이블 삭제 실패: {e}")
 
+    # keyword_assignments 정리
+    db.execute(text(f"DELETE FROM keyword_assignments WHERE domain=:dom"), {"dom": site_upper})
+
     # DOMAIN_MNG DELETE
     db.execute(delete(도메인테이블).where(도메인테이블.c._SITE == site_upper))
     db.commit()
+
+    # 서버 디렉토리 삭제
+    도메인경로 = f"/home/know/apps/know-ops/domain/{site_upper.lower()}"
+    if os.path.isdir(도메인경로):
+        shutil.rmtree(도메인경로, ignore_errors=True)
 
 
 def _행to도메인(row) -> dict:

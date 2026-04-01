@@ -102,6 +102,19 @@
 **재발방지**: jiana 호출 시 반드시 Java 직접 호출 방식 사용 (쉘 스크립트 경유 금지). 입출력 파일 인코딩은 EUC-KR 필수 (`encoding="euc-kr"`). JAVA_HOME, CLASSPATH를 `env` dict로 명시적 전달. cwd는 JIANA_HOME으로 지정.
 **Level**: 2 (LESSONS.md 기록)
 
+### L-016: Python shutil.rmtree + symlink 디렉토리 OSError (2026-04-01)
+
+**현상**: 워크스페이스 연결 해제 시 `shutil.rmtree(linked_path)`가 symlink 디렉토리에서 OSError 발생 — symlink를 실제 디렉토리처럼 재귀 삭제 시도.
+**원인**: `shutil.rmtree`는 symlink가 가리키는 대상을 삭제하며, 대상 없거나 권한 문제 시 OSError 발생.
+**재발방지**: 디렉토리 삭제 전 `os.path.islink()` 체크 필수. symlink면 `os.unlink()` 사용, 일반 디렉토리면 `shutil.rmtree()` 사용.
+```python
+if os.path.islink(path):
+    os.unlink(path)
+elif os.path.isdir(path):
+    shutil.rmtree(path)
+```
+**Level**: 1 (1회 발생, docs 기록)
+
 ### L-315: 에이전트 무응답 타임아웃 즉시 강제 (2026-04-01)
 - 문제: kstatus에서 30초 타임아웃을 선언하고도 실제로는 무한 대기하여 사용자가 재촉해야 행동
 - 원인: "대기합니다"라는 텍스트 출력만으로 타임아웃을 이행했다고 착각

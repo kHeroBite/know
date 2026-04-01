@@ -108,6 +108,13 @@ def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str
             상대경로 = os.path.relpath(dirpath, 도메인경로)
             대상디렉토리 = os.path.join(ws경로, 상대경로) if 상대경로 != "." else ws경로
             os.makedirs(대상디렉토리, exist_ok=True)
+            for dirname in dirnames:
+                원본_항목 = os.path.join(dirpath, dirname)
+                if os.path.islink(원본_항목):
+                    링크_대상 = os.readlink(원본_항목)
+                    대상_링크 = os.path.join(대상디렉토리, dirname)
+                    if not os.path.lexists(대상_링크):
+                        os.symlink(링크_대상, 대상_링크)
             for 파일명 in filenames:
                 원본 = os.path.join(dirpath, 파일명)
                 대상 = os.path.join(대상디렉토리, 파일명)
@@ -200,7 +207,9 @@ def 워크스페이스해제(ws_name: str) -> dict[str, Any]:
     if os.path.isdir(ws경로):
         for 항목 in os.listdir(ws경로):
             항목경로 = os.path.join(ws경로, 항목)
-            if os.path.isdir(항목경로):
+            if os.path.islink(항목경로):
+                os.unlink(항목경로)
+            elif os.path.isdir(항목경로):
                 shutil.rmtree(항목경로)
             else:
                 os.remove(항목경로)

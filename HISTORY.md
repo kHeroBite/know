@@ -1,5 +1,17 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-01 — 워크스페이스 연결 해제 symlink 안전 처리 + UI 개선
+
+### 수정 내용
+- **know-api/services/workspace_service.py**: 연결 해제 시 `shutil.rmtree` → `islink()` 체크 후 `os.unlink()` 안전 처리 (L-016); `_복사작업` 내 dirnames symlink 재현 로직 추가 (재발방지)
+- **know-api/api/workspace.py**: `connected_by` 응답 필드에 `user_id` 대신 `name` 전달 (사용자 이름 표시)
+- **know-api/frontend/src/pages/Workspace.tsx**: 연결 해제 버튼 `!isSelected` 조건 추가 (미선택 시에만 활성화); 색상 버튼 선택 시 흰색 outline 추가
+
+### 배경
+- symlink 디렉토리에 `shutil.rmtree` 사용 시 OSError 발생 → `os.path.islink()` 체크로 안전 처리
+- 복사 작업 시 symlink가 일반 디렉토리로 복사되던 버그 수정 — `os.symlink()` 재현 로직 추가
+- `connected_by`에 사용자 ID 대신 이름을 표시하여 가독성 향상
+
 ## 2026-03-31 — 지식작업실 3파티션+하단4탭 재설계 + 형태소분석 API + 마지막메뉴 저장
 
 ### 수정 내용
