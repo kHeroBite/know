@@ -1,5 +1,46 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-01 — 작업실(Workspace) 8대 기능 구현
+
+### 수정 내용
+
+**Backend (신규)**
+- **[신규] know-api/services/work_history_service.py**: 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
+- **[신규] know-api/api/work_history.py**: 작업이력 REST API (`GET/POST /api/work-history`, `POST /api/work-history/undo/{id}`)
+- **[신규] know-api/services/ai_analysis_service.py**: Google/Perplexity 웹스크래핑 AI 분석 서비스
+- **[신규] know-api/api/ai_analysis.py**: AI 분석 REST API (`GET /api/ai-analysis/search`)
+
+**Backend (수정)**
+- **know-api/init_db.py**: work_history 테이블 생성 추가 (12컬럼 + 인덱스)
+- **know-api/services/workspace_service.py**: 핫키 설정 저장/조회 (hotkeys JSON), workspace preference 확장
+- **know-api/api/workspace.py**: 핫키 API 추가 (`GET/PUT /api/workspaces/hotkeys`)
+- **know-api/main.py**: work_history, ai_analysis 라우터 등록
+- **know-api/requirements.txt**: requests, beautifulsoup4 의존성 추가
+
+**Frontend (신규)**
+- **[신규] know-api/frontend/src/components/workspace/AIAnalysis.tsx**: AI 분석 패널 (Google+Perplexity 결과 탭)
+- **[신규] know-api/frontend/src/components/workspace/WorkHistory.tsx**: 작업이력 패널 + undo 버튼
+- **[신규] know-api/frontend/src/components/workspace/HotkeySettings.tsx**: 핫키 설정 모달 (15개 단축키)
+
+**Frontend (수정)**
+- **know-api/frontend/src/pages/Workspace.tsx**: 전면 재구성 — 상단 배너+⚙아이콘, 3컬럼 레이아웃(키워드|분석결과|AI분석+작업이력), 포스트잇 포커스 스타일, 키보드 단축키 15개
+- **know-api/frontend/src/api/workspace.ts**: 작업이력/AI분석/핫키 API 클라이언트 추가
+
+### 구현된 8대 기능
+1. 상단 배너/타이틀바 (⚙ 핫키설정 버튼)
+2. 분석결과 포스트잇 노란색 포커스 스타일 + 깊은 그림자
+3. 분석결과 타이틀 단순화
+4. 3컬럼 레이아웃 재구성 (키워드 | 분석결과 | AI분석+작업이력)
+5. AI분석 웹스크래핑 (Google+Perplexity 병렬 검색)
+6. 작업이력 + undo/rollback (DB 영구 저장)
+7. 키보드 단축키 15개 (vi-like: j/k 이동, /, gg, G, Ctrl+D/U 등)
+8. 개인별 핫키 설정 모달
+
+### 버그 수정
+- AC-004: work_history_service.py 이력취소() OperationalError 미처리 → `except OperationalError` 추가 (L-018)
+
+---
+
 ## 2026-04-01 — 워크스페이스 연결 해제 symlink 안전 처리 + UI 개선
 
 ### 수정 내용

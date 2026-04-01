@@ -25,6 +25,8 @@ from services.workspace_service import (
     워크스페이스생성,
     워크스페이스해제,
     진행률조회,
+    핫키설정읽기,
+    핫키설정저장,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -49,6 +51,10 @@ class 워크스페이스설정요청(BaseModel):
     domain: Optional[str] = None
     color: Optional[str] = None
     last_menu: Optional[str] = None
+
+
+class 핫키설정요청(BaseModel):
+    hotkeys: Dict[str, str]
 
 
 class 도메인추가요청(BaseModel):
@@ -88,6 +94,24 @@ def 워크스페이스설정저장처리(
 ) -> Dict[str, Any]:
     """사용자 워크스페이스 설정 저장."""
     return 사용자설정저장(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color, 요청.last_menu)
+
+
+@라우터.get("/hotkeys")
+def 핫키설정조회(
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """현재 사용자의 핫키 설정 조회."""
+    hotkeys = 핫키설정읽기(current.get("user_id", ""))
+    return {"hotkeys": hotkeys}
+
+
+@라우터.put("/hotkeys")
+def 핫키설정저장처리(
+    요청: 핫키설정요청,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, str]:
+    """핫키 설정 저장."""
+    return 핫키설정저장(current.get("user_id", ""), 요청.hotkeys)
 
 
 @라우터.get("/domains")

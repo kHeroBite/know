@@ -266,6 +266,52 @@ def 사용자설정저장(user_id: str, workspace: str, domain: str | None, colo
     return prefs[user_id]
 
 
+_기본핫키 = {
+    "prevKeyword": "ArrowUp",
+    "nextKeyword": "ArrowDown",
+    "prevAnalysis": "ArrowLeft",
+    "nextAnalysis": "ArrowRight",
+    "registerUdic": "1",
+    "registerCndic": "2",
+    "registerThesaurus": "3",
+    "analyzeKeyword": "0",
+    "focusAnalysis": "Home",
+    "tabUdic": "Alt+1",
+    "tabCndic": "Alt+2",
+    "tabThesaurus": "Alt+3",
+    "tabMorpheme": "Alt+0",
+    "aiAnalysis": "/",
+    "undoHistory": "Escape",
+}
+
+
+def 핫키설정읽기(user_id: str) -> dict[str, Any]:
+    """사용자 핫키 설정 읽기. 없으면 기본값 반환."""
+    try:
+        with open(USER_PREF_FILE, "r", encoding="utf-8") as f:
+            prefs = json.load(f)
+        user_pref = prefs.get(user_id, {})
+        return user_pref.get("hotkeys", _기본핫키.copy())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _기본핫키.copy()
+
+
+def 핫키설정저장(user_id: str, hotkeys: dict[str, str]) -> dict[str, Any]:
+    """사용자 핫키 설정 저장."""
+    try:
+        with open(USER_PREF_FILE, "r", encoding="utf-8") as f:
+            prefs = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        prefs = {}
+    if user_id not in prefs:
+        prefs[user_id] = {}
+    prefs[user_id]["hotkeys"] = hotkeys
+    os.makedirs(os.path.dirname(USER_PREF_FILE), exist_ok=True)
+    with open(USER_PREF_FILE, "w", encoding="utf-8") as f:
+        json.dump(prefs, f, ensure_ascii=False, indent=2)
+    return {"message": "저장 완료"}
+
+
 OLD_DOMAIN_DIR = "/home/know/apps/jiana_admin_server"
 
 

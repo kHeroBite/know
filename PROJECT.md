@@ -235,11 +235,15 @@ know-api/
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
-│   └── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반)
+│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정
+│   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
+│   └── ai_analysis_service.py # AI 분석 서비스 (Google+Perplexity 웹스크래핑)
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
-│   └── workspace.py           # 워크스페이스 엔드포인트 (GET/POST/DELETE /workspaces, POST/DELETE /workspaces/select)
+│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API (GET/PUT /api/workspaces/hotkeys)
+│   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
+│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — Google+Perplexity 스크래핑)
 ├── migrations/                # DB 마이그레이션 SQL
 │   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 ├── pipeline/                  # Celery 태스크 모듈
@@ -253,7 +257,11 @@ know-api/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (Card Grid + IDLE/USED 버튼 로직 + Progress 표시)
+    │   └── Workspace.tsx      # 작업실 페이지 (3컬럼+배너+포커스스타일+단축키15개+핫키설정모달)
+    ├── src/components/workspace/ # 작업실 컴포넌트
+    │   ├── AIAnalysis.tsx     # AI 분석 패널 (Google+Perplexity 탭)
+    │   ├── WorkHistory.tsx    # 작업이력 패널 (undo 버튼 포함)
+    │   └── HotkeySettings.tsx # 핫키 설정 모달 (15개 단축키)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
     │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)
     │   └── ControlPanel.tsx   # 파이프라인 제어 패널
@@ -284,3 +292,7 @@ know-api/
 | /preprocess/* | 데이터전처리 파이프라인 (파일 업로드/실행/로그) |
 | /workspaces | 워크스페이스 목록 조회 (GET) / 생성 (POST) / 삭제 (DELETE) |
 | /workspaces/select | 워크스페이스 선택 (POST) / 선택 해제 (DELETE) |
+| /workspaces/hotkeys | 핫키 설정 조회 (GET) / 저장 (PUT) |
+| /work-history | 작업이력 목록 (GET) / 기록 (POST) |
+| /work-history/undo/{id} | 작업이력 undo/rollback (POST) |
+| /ai-analysis/search | AI 분석 검색 — Google+Perplexity 스크래핑 (GET) |

@@ -15,6 +15,11 @@
 
 ## 에이전트 패턴
 
+### 팀에이전트 spawn 시 subagent_type 반드시 명시 (L-017)
+- `subagent_type` 빈 값 → no_team_agent_guard.sh 차단
+- **general-purpose 포함 모든 에이전트 spawn 시 subagent_type 명시 필수**
+- 차단 시 subagent_type 파라미터 확인 후 재시도
+
 ### kdone 에이전트 완료 보고 소멸 방지 (L-001)
 - kdone 에이전트는 작업 시작 직후 "시작됨" 메시지 발송
 - 각 단계 완료마다 중간 보고 발송 (소멸 시점 추적)

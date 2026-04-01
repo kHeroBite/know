@@ -48,4 +48,25 @@ export const workspaceAPI = {
 
   도메인이름변경: (name: string, new_name: string) =>
     클라이언트.put(`/workspace-domains/${name}/rename`, { new_name }),
+
+  // 작업이력
+  fetchWorkHistory: (workspace: string, domain: string) =>
+    클라이언트.get('/work-history', { params: { workspace, domain } }),
+
+  addWorkHistory: (data: { workspace: string; domain: string; action: string; keyword: string; detail?: string }) =>
+    클라이언트.post('/work-history', data),
+
+  undoWorkHistory: (id: number) =>
+    클라이언트.post(`/work-history/undo/${id}`),
+
+  // AI 분석
+  searchAI: (keyword: string) =>
+    클라이언트.get('/ai-analysis/search', { params: { keyword } }),
+
+  // 핫키
+  getHotkeys: () =>
+    클라이언트.get('/workspaces/hotkeys'),
+
+  saveHotkeys: (hotkeys: Record<string, string>) =>
+    클라이언트.put('/workspaces/hotkeys', hotkeys),
 }

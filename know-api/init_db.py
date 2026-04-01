@@ -95,8 +95,28 @@ def 테이블생성():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_workspace ON keyword_assignments(workspace, domain)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_status ON keyword_assignments(status)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_unique ON keyword_assignments(workspace, domain, line_num)"))
+
+        # 5. work_history (작업이력)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS work_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                dic_type TEXT NOT NULL,
+                word TEXT,
+                memo TEXT,
+                head_word TEXT,
+                tail_word TEXT,
+                undone INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_wh_ws ON work_history(workspace, domain, user_id)"))
+
         conn.commit()
-    print("  [OK] phase1_runs, phase1_logs, keyword_assignments 테이블 생성")
+    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history 테이블 생성")
 
 
 def 도메인사전테이블생성(도메인목록: list[str]):

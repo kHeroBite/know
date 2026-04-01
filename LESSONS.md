@@ -121,6 +121,20 @@ elif os.path.isdir(path):
 - 해결: ko SKILL.md 에이전트 운영 규칙에 "무응답_타임아웃" 절차 추가
 - 규칙: 다음 턴이 곧 타임아웃 — SendMessage 후 다음 턴에 응답 없으면 즉시 강제종료+재spawn
 
+### L-017: 팀에이전트 spawn 시 subagent_type 빈 값으로 2회 hook 차단 (2026-04-01)
+
+**현상**: kdev-fix 에이전트 spawn 시 subagent_type을 빈 문자열로 설정하여 no_team_agent_guard.sh에 2회 연속 차단됨 (ERR-1: TEST 상태, ERR-2: DEV 상태).
+**원인**: 팀에이전트(NAME= 파라미터) spawn 시 subagent_type을 명시하지 않아 빈 값으로 전달됨.
+**재발방지**: 팀에이전트 spawn 시 `subagent_type` 반드시 명시 (general-purpose 포함). 빈 값 금지. hook이 차단하면 subagent_type 파라미터 확인 후 재시도.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-018: 신규 DB 접근 함수에서 테이블 부재 예외 미처리 (2026-04-01)
+
+**현상**: work_history_service.py 이력취소() 함수가 사전 테이블(예: TEST_UDIC) 부재 시 sqlalchemy.exc.OperationalError를 발생시켜 500 에러 반환 — ktest AC-004에서 발견.
+**원인**: 신규 기능 구현 시 테이블이 존재하지 않는 케이스(테스트 도메인 등)에 대한 예외 처리 누락.
+**재발방지**: DB 테이블 직접 접근 코드(SQLAlchemy `db.execute(tbl...)`) 작성 시 `except OperationalError` 처리 필수. 테이블 없는 경우 graceful pass 또는 명시적 에러 메시지 반환.
+**Level**: 1 (1회 발생, ktest에서 발견·수정 완료)
+
 ---
 
 ## 반영 추적 테이블
@@ -136,3 +150,5 @@ elif os.path.isdir(path):
 | L-009 | ktest_done_guard silent pass | hook | ktest_done_guard.sh | 2026-03-26 | ✅ |
 | L-014 | jiana Java 직접 호출 (EUC-KR 필수) | LESSONS | LESSONS.md | 2026-03-31 | ✅ |
 | L-315 | 에이전트 무응답 타임아웃 즉시 강제 | ko SKILL | ko/SKILL.md | 2026-04-01 | ✅ |
+| L-017 | 팀에이전트 spawn subagent_type 빈 값 차단 | MEMORY | MEMORY.md | 2026-04-01 | ✅ |
+| L-018 | DB 테이블 부재 OperationalError 미처리 | LESSONS | LESSONS.md | 2026-04-01 | ✅ |
