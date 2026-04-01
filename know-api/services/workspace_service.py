@@ -122,13 +122,6 @@ def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str
                 복사완료 += 1
                 COPY_PROGRESS[ws_name]["percent"] = int(복사완료 / 전체파일수 * 100)
 
-        # spam_kwd.pat fallback — 도메인에 없으면 origin에서 복사
-        ORIGIN_DIR = "/home/know/apps/know-ops/origin"
-        spam_pat = os.path.join(ws경로, "spam_kwd.pat")
-        if not os.path.exists(spam_pat):
-            origin_pat = os.path.join(ORIGIN_DIR, "spam_kwd.pat")
-            if os.path.exists(origin_pat):
-                shutil.copy2(origin_pat, spam_pat)
 
         경과 = round(time.time() - 시작시간, 1)
         COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 전체파일수}

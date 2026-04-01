@@ -45,9 +45,8 @@ class 검색로그정제기:
         """spam_kwd.pat 파일에서 패턴 목록 로딩."""
         패턴목록 = []
         경로 = self.설정값.스팸패턴경로
-        # [수정4] 원본 sh: 파일 없으면 exit → FileNotFoundError
         if not 경로.exists():
-            raise FileNotFoundError(f"스팸 패턴 파일 없음: {경로}")
+            return []
         with 경로.open(encoding="utf-8", errors="ignore") as f:
             for 줄 in f:
                 줄 = 줄.strip()
@@ -97,9 +96,8 @@ class 검색로그정제기:
         if not 경로:
             return 패턴목록
         경로 = Path(경로)
-        # [수정4] 원본 sh: 파일 없으면 exit → FileNotFoundError
         if not 경로.exists():
-            raise FileNotFoundError(f"상품코드 패턴 파일 없음: {경로}")
+            return 패턴목록
         # [수정2] sed /^regex$/d 형식 파싱 (기존: re.escape로 잘못 처리)
         with 경로.open(encoding="utf-8", errors="ignore") as f:
             for 줄 in f:
