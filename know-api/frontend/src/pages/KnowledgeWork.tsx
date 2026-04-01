@@ -324,11 +324,17 @@ export default function KnowledgeWork() {
   const [activeTab, setActiveTab] = useState('morpheme')
   const [dicRefreshKey, setDicRefreshKey] = useState(0)
   const [thesaurusSearch, setThesaurusSearch] = useState('')
+  const [udicSearch, setUdicSearch] = useState('')
+  const [cndicSearch, setCndicSearch] = useState('')
   const [morphPrefillKw, setMorphPrefillKw] = useState('')
   const [morphTrigger, setMorphTrigger] = useState(0)
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
+
+  // 키워드 읽음/등록 추적
+  const [viewedKeywordIds, setViewedKeywordIds] = useState<Set<number>>(new Set())
+  const [registeredKeywordIds, setRegisteredKeywordIds] = useState<Set<number>>(new Set())
 
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
@@ -522,6 +528,7 @@ export default function KnowledgeWork() {
               setDicRefreshKey(prev => prev + 1)
               setActiveTab('thesaurus')
               setThesaurusSearch(selectedWord)
+              if (selected) setRegisteredKeywordIds(prev => new Set(prev).add(selected.id))
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
@@ -539,6 +546,10 @@ export default function KnowledgeWork() {
             .then(() => {
               message.success(`${사전설정[dicType].title}에 "${selectedWord}" 등록`)
               setDicRefreshKey(prev => prev + 1)
+              setActiveTab(dicType)
+              if (dicType === 'udic') setUdicSearch(selectedWord)
+              else if (dicType === 'cndic') setCndicSearch(selectedWord)
+              if (selected) setRegisteredKeywordIds(prev => new Set(prev).add(selected.id))
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
@@ -640,11 +651,12 @@ export default function KnowledgeWork() {
             ) : items.map(record => (
               <div
                 key={record.id}
-                onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true) }}
+                onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true); setViewedKeywordIds(prev => new Set(prev).add(record.id)) }}
                 style={{
                   padding: '6px 12px', cursor: 'pointer',
                   background: selected?.id === record.id ? '#e6f4ff'
-                    : record.status === 'completed' ? '#FFFDE7' : undefined,
+                    : registeredKeywordIds.has(record.id) ? '#FFE0E0'
+                    : viewedKeywordIds.has(record.id) || record.status === 'completed' ? '#FFFDE7' : undefined,
                   borderBottom: '1px solid #f0f0f0',
                   fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   fontWeight: record.status === 'completed' ? 'normal' : 600,
@@ -662,7 +674,7 @@ export default function KnowledgeWork() {
 
         {/* 중: 분석결과 */}
         <Card
-          title="분석결과"
+          title={`분석결과 (${displayKey(hotkeys.focusAnalysis)})`}
           size="small"
           style={{
             flex: 1, display: 'flex', flexDirection: 'column',
@@ -708,7 +720,7 @@ export default function KnowledgeWork() {
         {/* 우: AI분석 + 작업이력 */}
         <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Card
-            title="AI 분석"
+            title={`AI 분석 (${displayKey(hotkeys.aiAnalysis)})`}
             size="small"
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
@@ -716,7 +728,7 @@ export default function KnowledgeWork() {
             <AIAnalysis keyword={aiKeyword} />
           </Card>
           <Card
-            title="작업이력"
+            title={`작업이력 (${displayKey(hotkeys.undoHistory)})`}
             size="small"
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
@@ -748,12 +760,12 @@ export default function KnowledgeWork() {
             {
               key: 'udic',
               label: `사용자사전 (${displayKey(hotkeys.tabUdic)})`,
-              children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
+              children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
             },
             {
               key: 'cndic',
               label: `복합명사사전 (${displayKey(hotkeys.tabCndic)})`,
-              children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
+              children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
             },
             {
               key: 'thesaurus',
