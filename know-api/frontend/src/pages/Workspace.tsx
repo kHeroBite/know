@@ -54,7 +54,7 @@ export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace } = useWorkspaceStore()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
-  const [도메인목록, set도메인목록] = useState<string[]>([])
+  const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
   const [로딩, set로딩] = useState(false)
   const [새이름, set새이름] = useState('')
   const [새색상, set새색상] = useState<string | null>(null)
@@ -63,6 +63,7 @@ export default function Workspace() {
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
+  const [연결해제중, set연결해제중] = useState(false)
   const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
   const isSuper = currentUser?.auth === 'A'
@@ -197,6 +198,7 @@ export default function Workspace() {
   }
 
   const 해제핸들러 = async (wsName: string) => {
+    set연결해제중(true)
     try {
       await workspaceAPI.워크스페이스해제(wsName)
       // 선택된 워크스페이스를 연결해제하면 선택도 해제 + 테마 초기화
@@ -207,6 +209,8 @@ export default function Workspace() {
       await 목록조회()
     } catch (err: any) {
       message.error(err.response?.data?.detail || '연결해제 실패')
+    } finally {
+      set연결해제중(false)
     }
   }
 
@@ -440,7 +444,7 @@ export default function Workspace() {
                           type="primary"
                           size="small"
                           icon={<LinkOutlined />}
-                          disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING')}
+                          disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING')}
                           onClick={() => {
                             set연결팝업WS(ws.name)
                             set선택도메인(null)
@@ -454,7 +458,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>
@@ -490,7 +494,12 @@ export default function Workspace() {
                               size="small"
                               icon={<CheckCircleOutlined />}
                               disabled={!currentUser}
-                              onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
+                              onClick={() => {
+                                if (ws.domain) {
+                                  setWorkspace(ws.name, ws.domain, ws.color)
+                                  message.success(`워크스페이스 "${ws.name}" 선택됨`)
+                                }
+                              }}
                             >
                               선택
                             </Button>
@@ -501,7 +510,7 @@ export default function Workspace() {
                               okButtonProps={{ danger: true }}
                               cancelText="취소"
                             >
-                              <Button size="small" icon={<DisconnectOutlined />}>
+                              <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중}>
                                 연결해제
                               </Button>
                             </Popconfirm>
@@ -513,7 +522,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>
@@ -570,10 +579,11 @@ export default function Workspace() {
           style={{ width: '100%', marginTop: 8 }}
           placeholder="연결할 도메인 선택"
           options={도메인목록.map(d => {
-            const 연결됨WS = 목록.find(ws => ws.domain === d && ws.status === 'USED')
+            const 연결됨WS = 목록.find(ws => ws.domain === d.id && ws.status === 'USED')
+            const 표시명 = d.name ? `${d.name} (${d.id})` : d.id
             return {
-              label: 연결됨WS ? `${d} (${연결됨WS.name}에 연결됨)` : d,
-              value: d,
+              label: 연결됨WS ? `${표시명} (${연결됨WS.name}에 연결됨)` : 표시명,
+              value: d.id,
               disabled: !!연결됨WS,
             }
           })}

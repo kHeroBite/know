@@ -17,7 +17,7 @@ export const workspaceAPI = {
     클라이언트.post(`/workspaces/${wsName}/release`),
 
   도메인목록: () =>
-    클라이언트.get('/workspaces/domains'),
+    클라이언트.get<{id: string, name: string | null}[]>('/workspaces/domains'),
 
   진행률조회: (name: string) =>
     클라이언트.get(`/workspaces/${name}/progress`),
@@ -30,11 +30,13 @@ export const workspaceAPI = {
     클라이언트.get('/workspace-domains/old-sources'),
 
   도메인추가: (name: string, base_source: string, base_name: string,
-    copy_dict_from?: string | null, mysql_dict_from?: string | null) =>
+    copy_dict_from?: string | null, mysql_dict_from?: string | null,
+    display_name?: string | null) =>
     클라이언트.post('/workspace-domains', {
       name, base_source, base_name,
       ...(copy_dict_from ? { copy_dict_from } : {}),
       ...(mysql_dict_from ? { mysql_dict_from } : {}),
+      ...(display_name ? { display_name } : {}),
     }),
 
   mysql도메인소스목록: () =>

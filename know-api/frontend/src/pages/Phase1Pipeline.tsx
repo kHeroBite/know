@@ -230,8 +230,6 @@ export default function Phase1Pipeline() {
                 stepStatuses={유효단계상태}
                 stepElapsed={stepElapsed}
                 stepOutputs={stepOutputs}
-                onFreeze={프리징핸들러}
-                freezeStatus={freezeStatus}
               />
             </div>
           </Col>
@@ -251,6 +249,19 @@ export default function Phase1Pipeline() {
           </Col>
         </Row>
       </Card>
+
+      <div style={{ textAlign: 'center', marginTop: 32 }}>
+        <Button
+          type="primary"
+          size="large"
+          disabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
+          loading={freezeStatus === 'running'}
+          onClick={프리징핸들러}
+          style={{ minWidth: 200, height: 48, fontSize: 16 }}
+        >
+          다음단계로
+        </Button>
+      </div>
     </div>
   )
 }

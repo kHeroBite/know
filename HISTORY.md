@@ -1,5 +1,26 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-01 — 워크스페이스/도메인관리 UI 7건 개선 + BuildHistory 회귀 수정
+
+### 수정 내용
+
+**Backend**
+- **know-api/services/workspace_service.py**: 도메인 메타 JSON 관리 (`domains_meta.json`) — display_name 저장/조회
+- **know-api/api/workspace.py**: 도메인추가 요청에 `display_name` 필드 추가, 도메인목록 응답에 `{id, name}` 구조 반환
+
+**Frontend**
+- **workspace.ts**: `DomainItem {id, name}` 타입 추가, 도메인목록/도메인추가 API 타입 정의
+- **Workspace.tsx**: 색상버튼 표시, 도메인 선택 메시지 개선, 연결해제 비활성화 조건, 도메인 표시명 렌더링
+- **DomainManage.tsx**: 도메인 이름+ID 분리 표시, 텍스트 변경, 소스 자동입력
+- **Phase1Pipeline.tsx**: "다음 단계로" 버튼 추가
+- **ControlPanel.tsx**: 프리징 step6 제거
+- **BuildHistory.tsx**: 도메인목록 타입 회귀 수정 (`string[]` → `DomainItem[]`)
+
+### 특이사항
+- BuildHistory.tsx 호출처 누락 → 타입 회귀 수정 (L-020 교훈 기록)
+
+---
+
 ## 2026-04-01 — KnowledgeWork.tsx 작업실 8대 기능 이전 (파일 대상 오류 수정)
 
 ### 수정 내용

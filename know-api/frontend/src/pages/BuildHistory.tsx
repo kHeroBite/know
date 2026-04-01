@@ -32,7 +32,7 @@ export default function BuildHistory() {
 
   useEffect(() => {
     workspaceAPI.도메인목록().then(res => {
-      const list = res.data as string[]
+      const list = (res.data as {id: string, name: string | null}[]).map(d => d.id)
       set도메인목록(list)
       if (list.length > 0) set선택도메인(list[0])
     }).catch(() => message.error('도메인 목록 조회 실패'))

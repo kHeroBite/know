@@ -235,13 +235,13 @@ know-api/
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
-│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정
+│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   └── ai_analysis_service.py # AI 분석 서비스 (Google+Perplexity 웹스크래핑)
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
-│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API (GET/PUT /api/workspaces/hotkeys)
+│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — Google+Perplexity 스크래핑)
 ├── migrations/                # DB 마이그레이션 SQL
@@ -269,7 +269,7 @@ know-api/
     │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
-    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트
+    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)

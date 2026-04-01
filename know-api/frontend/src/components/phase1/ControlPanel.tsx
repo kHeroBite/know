@@ -9,7 +9,6 @@ const 단계목록 = [
   { num: 3, name: '형태소분석', color: '#722ed1', output: 'analyzed.txt' },
   { num: 4, name: '결과변환', color: '#fa8c16', output: 'transform.txt' },
   { num: 5, name: '유사어체크', color: '#eb2f96', output: 'synonym.txt' },
-  { num: 6, name: '프리징', color: '#13c2c2', output: '' },
 ]
 
 export const 단계색상맵: Record<string, string> = {
@@ -18,7 +17,6 @@ export const 단계색상맵: Record<string, string> = {
   '형태소분석': '#722ed1',
   '결과변환': '#fa8c16',
   '유사어체크': '#eb2f96',
-  '프리징': '#13c2c2',
 }
 
 interface RunParams {
@@ -36,8 +34,6 @@ interface ControlPanelProps {
   stepStatuses: Record<number, string>
   stepElapsed: Record<number, number>
   stepOutputs: Record<number, string>
-  onFreeze?: () => void
-  freezeStatus?: string
 }
 
 function 경과표시(sec: number): string {
@@ -47,17 +43,12 @@ function 경과표시(sec: number): string {
 
 export default function ControlPanel({
   folder, onRun, onStop, onViewFile, isRunning, stepStatuses, stepElapsed, stepOutputs,
-  onFreeze, freezeStatus,
 }: ControlPanelProps) {
   const 단계실행 = (stepNum: number) => {
     onRun({ category: folder, start_step: stepNum, end_step: stepNum })
   }
 
   const 실행가능 = (stepNum: number): boolean => {
-    if (stepNum === 6) {
-      // 프리징: 5단계 완료 + 현재 실행 중 아님 + 프리징 중 아님
-      return !isRunning && stepStatuses[5] === 'completed' && freezeStatus !== 'running'
-    }
     if (isRunning) return false
     if (stepNum === 1) return true
     // 이전 단계 완료이거나, 자기 이후 단계가 완료된 경우(이전 단계도 이미 완료된 것)
@@ -72,10 +63,9 @@ export default function ControlPanel({
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {단계목록.map(step => {
-          const isFreeze = step.num === 6
-          const status = isFreeze ? (freezeStatus || '') : stepStatuses[step.num]
-          const elapsed = isFreeze ? undefined : stepElapsed[step.num]
-          const output = isFreeze ? undefined : stepOutputs[step.num]
+          const status = stepStatuses[step.num]
+          const elapsed = stepElapsed[step.num]
+          const output = stepOutputs[step.num]
           const running = status === 'running'
           const completed = status === 'completed'
           const failed = status === 'failed'
@@ -86,7 +76,6 @@ export default function ControlPanel({
               padding: '8px 12px', borderRadius: 8,
               background: running ? `${step.color}08` : completed ? '#f6ffed' : failed ? '#fff2f0' : '#fafafa',
               border: `1px solid ${running ? step.color : completed ? '#b7eb8f' : failed ? '#ffa39e' : '#f0f0f0'}`,
-              ...(isFreeze ? { marginTop: 8, borderStyle: 'dashed' } : {}),
             }}>
               <Tag color={step.color} style={{ margin: 0, minWidth: 80, textAlign: 'center' }}>
                 {step.name}
@@ -101,15 +90,15 @@ export default function ControlPanel({
                 )}
                 {running && (
                   <div style={{ flex: 1 }}>
-                    <Text style={{ color: step.color }}><ClockCircleOutlined /> {isFreeze ? '프리징 중...' : '실행 중'}</Text>
-                    {!isFreeze && <Progress percent={50} size="small" status="active" showInfo={false} strokeColor={step.color} style={{ margin: '2px 0 0', maxWidth: 120 }} />}
+                    <Text style={{ color: step.color }}><ClockCircleOutlined /> 실행 중</Text>
+                    <Progress percent={50} size="small" status="active" showInfo={false} strokeColor={step.color} style={{ margin: '2px 0 0', maxWidth: 120 }} />
                   </div>
                 )}
                 {failed && <Text type="danger"><CloseCircleOutlined /> 실패</Text>}
-                {!status && <Text type="secondary">{isFreeze ? '별도 실행' : '대기'}</Text>}
+                {!status && <Text type="secondary">대기</Text>}
               </div>
               <Space size={4}>
-                {!isFreeze && completed && output && onViewFile && (
+                {completed && output && onViewFile && (
                   <Button size="small" icon={<EyeOutlined />} onClick={() => onViewFile(output)}>
                     보기
                   </Button>
@@ -120,9 +109,9 @@ export default function ControlPanel({
                   style={!completed && !running ? { background: step.color, borderColor: step.color } : {}}
                   icon={<PlayCircleOutlined />}
                   disabled={!실행가능(step.num)}
-                  onClick={() => isFreeze ? onFreeze?.() : 단계실행(step.num)}
+                  onClick={() => 단계실행(step.num)}
                 >
-                  {isFreeze ? '프리징' : '실행'}
+                  실행
                 </Button>
               </Space>
             </div>

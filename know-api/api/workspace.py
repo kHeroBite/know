@@ -63,6 +63,7 @@ class 도메인추가요청(BaseModel):
     base_name: str
     copy_dict_from: Optional[str] = None    # SQLite 기존 도메인에서 사전 복사
     mysql_dict_from: Optional[str] = None   # MySQL에서 사전 마이그레이션
+    display_name: Optional[str] = None      # 한글 표시명 (선택사항)
 
 
 class 도메인이름변경요청(BaseModel):
@@ -117,7 +118,7 @@ def 핫키설정저장처리(
 @라우터.get("/domains")
 def 도메인목록조회(
     _current: dict = Depends(현재사용자가져오기),
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     """도메인 목록 조회."""
     return 도메인목록()
 
@@ -150,7 +151,8 @@ def 도메인추가처리(
     _super권한확인(current)
     return 도메인추가(요청.name, 요청.base_source, 요청.base_name,
                      copy_dict_from=요청.copy_dict_from,
-                     mysql_dict_from=요청.mysql_dict_from)
+                     mysql_dict_from=요청.mysql_dict_from,
+                     display_name=요청.display_name)
 
 
 @도메인관리라우터.get("/{name}/progress")

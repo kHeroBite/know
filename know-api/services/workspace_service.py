@@ -17,6 +17,7 @@ WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
 DOMAIN_DIR = "/home/know/apps/know-ops/domain"
 STATE_FILE = "/home/know/apps/know-ops/workspace/.state.json"
 USER_PREF_FILE = "/home/know/apps/know-ops/workspace/.user_pref.json"
+DOMAIN_META_FILE = "/home/know/apps/know-ops/domain/.meta.json"
 
 
 def _상태읽기() -> dict[str, Any]:
@@ -32,6 +33,22 @@ def _상태쓰기(data: dict[str, Any]) -> None:
     """STATE_FILE에 JSON 저장."""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _도메인메타읽기() -> dict[str, str]:
+    """DOMAIN_META_FILE 읽어서 dict 반환 (없으면 {})."""
+    try:
+        with open(DOMAIN_META_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _도메인메타쓰기(data: dict[str, str]) -> None:
+    """DOMAIN_META_FILE에 JSON 저장."""
+    os.makedirs(os.path.dirname(DOMAIN_META_FILE), exist_ok=True)
+    with open(DOMAIN_META_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -401,7 +418,8 @@ def _도메인복사작업(name: str, 원본: str, 대상: str,
 
 def 도메인추가(name: str, base_source: str, base_name: str,
               copy_dict_from: str | None = None,
-              mysql_dict_from: str | None = None) -> dict[str, Any]:
+              mysql_dict_from: str | None = None,
+              display_name: str | None = None) -> dict[str, Any]:
     """도메인 추가 — 비동기 복사 시작 (즉시 반환). 사전 복사 옵션 포함."""
     대상 = os.path.join(DOMAIN_DIR, name)
     if os.path.exists(대상):
@@ -412,6 +430,10 @@ def 도메인추가(name: str, base_source: str, base_name: str,
         원본 = os.path.join(DOMAIN_DIR, base_name)
     if not os.path.isdir(원본):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"원본 폴더 없음: {원본}")
+    if display_name:
+        메타 = _도메인메타읽기()
+        메타[name] = display_name
+        _도메인메타쓰기(메타)
     _도메인진행률쓰기(name, {"percent": 0, "status": "copying", "file_count": 0})
     threading.Thread(
         target=_도메인복사작업,
@@ -436,6 +458,10 @@ def 도메인삭제(name: str) -> None:
     if not os.path.isdir(경로):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"도메인을 찾을 수 없습니다: {name}")
     shutil.rmtree(경로)
+    메타 = _도메인메타읽기()
+    if name in 메타:
+        del 메타[name]
+        _도메인메타쓰기(메타)
 
 
 def 도메인이름변경(old_name: str, new_name: str) -> dict[str, str]:
@@ -451,14 +477,19 @@ def 도메인이름변경(old_name: str, new_name: str) -> dict[str, str]:
     if os.path.exists(new_path):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이미 존재하는 이름: {new_name}")
     os.rename(old_path, new_path)
+    메타 = _도메인메타읽기()
+    if old_name in 메타:
+        메타[new_name] = 메타.pop(old_name)
+        _도메인메타쓰기(메타)
     return {"old_name": old_name, "new_name": new_name}
 
 
-def 도메인목록() -> list[str]:
-    """DOMAIN_DIR 폴더 목록 반환."""
+def 도메인목록() -> list[dict[str, str | None]]:
+    """DOMAIN_DIR 폴더 목록 반환 (id + display_name)."""
     os.makedirs(DOMAIN_DIR, exist_ok=True)
-    return sorted(
-        항목.name
-        for 항목 in Path(DOMAIN_DIR).iterdir()
+    메타 = _도메인메타읽기()
+    return [
+        {"id": 항목.name, "name": 메타.get(항목.name)}
+        for 항목 in sorted(Path(DOMAIN_DIR).iterdir())
         if 항목.is_dir()
-    )
+    ]
