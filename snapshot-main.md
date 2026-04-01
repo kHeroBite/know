@@ -1,0 +1,191 @@
+- generic [ref=e50]:
+  - complementary [ref=e51]:
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - img [ref=e54]
+        - generic [ref=e59]: 지식작업소
+        - generic [ref=e60]: A-epost
+      - menu [ref=e62]:
+        - menuitem "지식작업" [expanded] [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: 지식작업
+        - menu [ref=e65]:
+          - menuitem "워크스페이스" [ref=e66] [cursor=pointer]:
+            - generic [ref=e67]: 워크스페이스
+          - menuitem "데이터 전처리" [ref=e68] [cursor=pointer]:
+            - generic [ref=e69]: 데이터 전처리
+          - menuitem "사전 관리" [ref=e70] [cursor=pointer]:
+            - generic [ref=e71]: 사전 관리
+          - menuitem "카테고리 관리" [ref=e72] [cursor=pointer]:
+            - generic [ref=e73]: 카테고리 관리
+          - menuitem "파이프라인" [ref=e74] [cursor=pointer]:
+            - generic [ref=e75]: 파이프라인
+          - menuitem "지식작업" [ref=e76] [cursor=pointer]:
+            - generic [ref=e77]: 지식작업
+        - menuitem "관리" [expanded] [ref=e78] [cursor=pointer]:
+          - generic [ref=e79]: 관리
+        - menu [ref=e80]:
+          - menuitem "통계" [ref=e81] [cursor=pointer]:
+            - generic [ref=e82]: 통계
+          - menuitem "빌드이력" [ref=e83] [cursor=pointer]:
+            - generic [ref=e84]: 빌드이력
+          - menuitem "계정 관리" [ref=e85] [cursor=pointer]:
+            - generic [ref=e86]: 계정 관리
+      - generic [ref=e87]:
+        - generic [ref=e88]: 관리자 (A)
+        - button "logout 로그아웃" [ref=e89] [cursor=pointer]:
+          - img "logout" [ref=e91]:
+            - img [ref=e92]
+          - generic [ref=e94]: 로그아웃
+  - main [ref=e96]:
+    - generic [ref=e97]:
+      - heading "데이터 전처리" [level=3] [ref=e98]
+      - generic [ref=e99]:
+        - generic [ref=e102]: 파일관리
+        - generic [ref=e104]:
+          - generic [ref=e106]:
+            - generic [ref=e109]: 인기검색어
+            - generic [ref=e110]:
+              - button "inbox 파일을 드래그하거나 클릭하여 업로드 텍스트 형식 파일 (최대 500MB)" [ref=e113] [cursor=pointer]:
+                - generic [ref=e114]:
+                  - paragraph [ref=e115]:
+                    - img "inbox" [ref=e116]:
+                      - img [ref=e117]
+                  - paragraph [ref=e119]: 파일을 드래그하거나 클릭하여 업로드
+                  - paragraph [ref=e120]: 텍스트 형식 파일 (최대 500MB)
+              - generic [ref=e121]:
+                - generic [ref=e124]: 1개 파일
+                - button "reload 새로고침" [ref=e125] [cursor=pointer]:
+                  - img "reload" [ref=e127]:
+                    - img [ref=e128]
+                  - generic [ref=e130]: 새로고침
+              - generic [ref=e134]:
+                - table [ref=e138]:
+                  - rowgroup [ref=e141]:
+                    - row "파일" [ref=e142]:
+                      - columnheader [ref=e143]:
+                        - checkbox [ref=e146] [cursor=pointer]
+                      - columnheader "파일" [ref=e148]
+                  - rowgroup [ref=e149]:
+                    - row "popularKeyword.system.default.20240900.MONTH.UTF-8 151.7KB · 2026-03-27 10:41:34 delete" [ref=e150]:
+                      - cell [ref=e151]:
+                        - checkbox [ref=e154] [cursor=pointer]
+                      - cell "popularKeyword.system.default.20240900.MONTH.UTF-8 151.7KB · 2026-03-27 10:41:34 delete" [ref=e156]:
+                        - generic [ref=e157]:
+                          - generic [ref=e158]: popularKeyword.system.default.20240900.MONTH.UTF-8
+                          - generic [ref=e159]:
+                            - generic [ref=e160]: 151.7KB · 2026-03-27 10:41:34
+                            - button "delete" [ref=e161] [cursor=pointer]:
+                              - img "delete" [ref=e163]:
+                                - img [ref=e164]
+                - list [ref=e166]:
+                  - listitem "Previous Page" [ref=e167]:
+                    - button "left" [disabled] [ref=e168]:
+                      - img "left" [ref=e169]:
+                        - img [ref=e170]
+                  - listitem "1" [ref=e172] [cursor=pointer]:
+                    - generic [ref=e173]: "1"
+                  - listitem "Next Page" [ref=e174]:
+                    - button "right" [disabled] [ref=e175]:
+                      - img "right" [ref=e176]:
+                        - img [ref=e177]
+          - generic [ref=e180]:
+            - generic [ref=e183]: 실패검색어
+            - generic [ref=e184]:
+              - button "inbox 파일을 드래그하거나 클릭하여 업로드 텍스트 형식 파일 (최대 500MB)" [ref=e187] [cursor=pointer]:
+                - generic [ref=e188]:
+                  - paragraph [ref=e189]:
+                    - img "inbox" [ref=e190]:
+                      - img [ref=e191]
+                  - paragraph [ref=e193]: 파일을 드래그하거나 클릭하여 업로드
+                  - paragraph [ref=e194]: 텍스트 형식 파일 (최대 500MB)
+              - generic [ref=e195]:
+                - generic [ref=e198]: 1개 파일
+                - button "reload 새로고침" [ref=e199] [cursor=pointer]:
+                  - img "reload" [ref=e201]:
+                    - img [ref=e202]
+                  - generic [ref=e204]: 새로고침
+              - generic [ref=e208]:
+                - table [ref=e212]:
+                  - rowgroup [ref=e215]:
+                    - row "파일" [ref=e216]:
+                      - columnheader [ref=e217]:
+                        - checkbox [ref=e220] [cursor=pointer]
+                      - columnheader "파일" [ref=e222]
+                  - rowgroup [ref=e223]:
+                    - row "failureKeyword.system.default.20240900.MONTH.UTF-8 156.1KB · 2026-03-27 10:41:17 delete" [ref=e224]:
+                      - cell [ref=e225]:
+                        - checkbox [ref=e228] [cursor=pointer]
+                      - cell "failureKeyword.system.default.20240900.MONTH.UTF-8 156.1KB · 2026-03-27 10:41:17 delete" [ref=e230]:
+                        - generic [ref=e231]:
+                          - generic [ref=e232]: failureKeyword.system.default.20240900.MONTH.UTF-8
+                          - generic [ref=e233]:
+                            - generic [ref=e234]: 156.1KB · 2026-03-27 10:41:17
+                            - button "delete" [ref=e235] [cursor=pointer]:
+                              - img "delete" [ref=e237]:
+                                - img [ref=e238]
+                - list [ref=e240]:
+                  - listitem "Previous Page" [ref=e241]:
+                    - button "left" [disabled] [ref=e242]:
+                      - img "left" [ref=e243]:
+                        - img [ref=e244]
+                  - listitem "1" [ref=e246] [cursor=pointer]:
+                    - generic [ref=e247]: "1"
+                  - listitem "Next Page" [ref=e248]:
+                    - button "right" [disabled] [ref=e249]:
+                      - img "right" [ref=e250]:
+                        - img [ref=e251]
+      - generic [ref=e255]:
+        - generic [ref=e256]:
+          - generic [ref=e257]:
+            - generic [ref=e258]: 전처리 실행
+            - button "play-circle 전체 실행 (1→5)" [ref=e259] [cursor=pointer]:
+              - img "play-circle" [ref=e261]:
+                - img [ref=e262]
+              - generic [ref=e265]: 전체 실행 (1→5)
+          - generic [ref=e268]:
+            - generic [ref=e269]:
+              - generic [ref=e270]: 키워드추출
+              - generic [ref=e272]: 대기
+              - button "play-circle 실행" [ref=e275] [cursor=pointer]:
+                - img "play-circle" [ref=e277]:
+                  - img [ref=e278]
+                - generic [ref=e281]: 실행
+            - generic [ref=e282]:
+              - generic [ref=e283]: 정제
+              - generic [ref=e285]: 대기
+              - button "play-circle 실행" [disabled] [ref=e288]:
+                - generic:
+                  - img "play-circle":
+                    - img
+                - generic: 실행
+            - generic [ref=e289]:
+              - generic [ref=e290]: 형태소분석
+              - generic [ref=e292]: 대기
+              - button "play-circle 실행" [disabled] [ref=e295]:
+                - generic:
+                  - img "play-circle":
+                    - img
+                - generic: 실행
+            - generic [ref=e296]:
+              - generic [ref=e297]: 결과변환
+              - generic [ref=e299]: 대기
+              - button "play-circle 실행" [disabled] [ref=e302]:
+                - generic:
+                  - img "play-circle":
+                    - img
+                - generic: 실행
+            - generic [ref=e303]:
+              - generic [ref=e304]: 유사어체크
+              - generic [ref=e306]: 대기
+              - button "play-circle 실행" [disabled] [ref=e309]:
+                - generic:
+                  - img "play-circle":
+                    - img
+                - generic: 실행
+        - generic [ref=e310]:
+          - generic [ref=e311]: 실행 로그
+          - generic [ref=e313]:
+            - tablist [ref=e314]:
+              - tab "로그" [selected] [ref=e318] [cursor=pointer]
+            - tabpanel "로그" [ref=e321]:
+              - generic [ref=e322]: 실행 대기 중...

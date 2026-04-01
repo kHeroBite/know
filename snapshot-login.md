@@ -1,0 +1,19 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - img [ref=e6]
+    - heading "지식작업소" [level=1] [ref=e17]
+    - paragraph [ref=e18]: Knowledge Workspace
+  - generic [ref=e19]:
+    - generic [ref=e25]:
+      - img "user" [ref=e27]:
+        - img [ref=e28]
+      - textbox "아이디" [ref=e30]
+    - generic [ref=e36]:
+      - img "lock" [ref=e38]:
+        - img [ref=e39]
+      - textbox "비밀번호" [ref=e41]
+      - img "eye-invisible" [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+    - button "로그인" [ref=e47] [cursor=pointer]:
+      - generic [ref=e48]: 로그인
+  - generic [ref=e49]: © 2026 지식작업소

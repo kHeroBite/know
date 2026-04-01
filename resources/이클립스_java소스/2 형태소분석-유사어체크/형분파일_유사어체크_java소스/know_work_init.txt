@@ -1,0 +1,2 @@
+
+work_directory=D:\\work_tmp_new\\

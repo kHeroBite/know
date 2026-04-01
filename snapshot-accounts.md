@@ -1,0 +1,69 @@
+- generic [ref=e50]:
+  - complementary [ref=e51]:
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - img [ref=e54]
+        - generic [ref=e59]: 지식작업소
+        - generic [ref=e60]: A-epost
+      - menu [ref=e62]:
+        - menuitem "지식작업" [expanded] [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: 지식작업
+        - menu [ref=e65]:
+          - menuitem "워크스페이스" [ref=e66] [cursor=pointer]:
+            - generic [ref=e67]: 워크스페이스
+          - menuitem "데이터 전처리" [ref=e68] [cursor=pointer]:
+            - generic [ref=e69]: 데이터 전처리
+          - menuitem "사전 관리" [ref=e70] [cursor=pointer]:
+            - generic [ref=e71]: 사전 관리
+          - menuitem "카테고리 관리" [ref=e72] [cursor=pointer]:
+            - generic [ref=e73]: 카테고리 관리
+          - menuitem "파이프라인" [ref=e74] [cursor=pointer]:
+            - generic [ref=e75]: 파이프라인
+          - menuitem "지식작업" [ref=e76] [cursor=pointer]:
+            - generic [ref=e77]: 지식작업
+        - menuitem "관리" [expanded] [ref=e78] [cursor=pointer]:
+          - generic [ref=e79]: 관리
+        - menu [ref=e80]:
+          - menuitem "통계" [ref=e81] [cursor=pointer]:
+            - generic [ref=e82]: 통계
+          - menuitem "빌드이력" [ref=e83] [cursor=pointer]:
+            - generic [ref=e84]: 빌드이력
+          - menuitem "계정 관리" [active] [ref=e85] [cursor=pointer]:
+            - generic [ref=e86]: 계정 관리
+      - generic [ref=e87]:
+        - generic [ref=e88]: 관리자 (A)
+        - button "logout 로그아웃" [ref=e89] [cursor=pointer]:
+          - img "logout" [ref=e91]:
+            - img [ref=e92]
+          - generic [ref=e94]: 로그아웃
+  - main [ref=e96]:
+    - generic [ref=e323]:
+      - generic [ref=e324]:
+        - heading "계정 관리" [level=4] [ref=e325]
+        - button "plus 계정 추가" [ref=e326] [cursor=pointer]:
+          - img "plus" [ref=e328]:
+            - img [ref=e329]
+          - generic [ref=e332]: 계정 추가
+      - table [ref=e339]:
+        - rowgroup [ref=e340]:
+          - row "아이디 이름 권한 생성일 작업" [ref=e341]:
+            - columnheader "아이디" [ref=e342]
+            - columnheader "이름" [ref=e343]
+            - columnheader "권한" [ref=e344]
+            - columnheader "생성일" [ref=e345]
+            - columnheader "작업" [ref=e346]
+        - rowgroup [ref=e347]:
+          - row "user admin 관리자 관리자 2026-03-29 11:42:44 edit 수정" [ref=e348]:
+            - cell "user admin" [ref=e349]:
+              - img "user" [ref=e350]:
+                - img [ref=e351]
+              - text: admin
+            - cell "관리자" [ref=e353]
+            - cell "관리자" [ref=e354]:
+              - generic [ref=e355]: 관리자
+            - cell "2026-03-29 11:42:44" [ref=e356]
+            - cell "edit 수정" [ref=e357]:
+              - button "edit 수정" [ref=e360] [cursor=pointer]:
+                - img "edit" [ref=e362]:
+                  - img [ref=e363]
+                - generic [ref=e365]: 수정
