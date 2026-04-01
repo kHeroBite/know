@@ -17,16 +17,18 @@ interface AIResult {
 export default function AIAnalysis({ keyword, onSearch }: Props) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AIResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!keyword) { setResult(null); return }
+    if (!keyword) { setResult(null); setError(null); return }
     let cancelled = false
     setLoading(true)
+    setError(null)
     workspaceAPI.searchAI(keyword)
       .then(({ data }) => {
         if (!cancelled) { setResult(data); onSearch?.() }
       })
-      .catch(() => { if (!cancelled) setResult(null) })
+      .catch((err) => { if (!cancelled) { setResult(null); setError(err?.response?.data?.detail || 'AI 분석 실패') } })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [keyword])
@@ -43,6 +45,14 @@ export default function AIAnalysis({ keyword, onSearch }: Props) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <Spin tip="AI 분석 중..." />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Text type="danger">{error}</Text>
       </div>
     )
   }

@@ -80,6 +80,11 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
     e.preventDefault()
     e.stopPropagation()
     if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return
+    // Escape → 캡처 취소 (모달 닫기가 아닌 편집 취소)
+    if (e.key === 'Escape') {
+      setEditingId(null)
+      return
+    }
     const encoded = encodeKeyEvent(e)
     const conflict = hotkeys.find(h => h.id !== editingId && h.key === encoded)
     if (conflict) {

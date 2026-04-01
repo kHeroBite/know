@@ -64,6 +64,7 @@ export default function Workspace() {
   const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [연결해제중, set연결해제중] = useState(false)
+  const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
   const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
   const isSuper = currentUser?.auth === 'A'
@@ -86,6 +87,14 @@ export default function Workspace() {
         if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
           폴링시작(ws.name)
         }
+      })
+      // FAILED 워크스페이스 에러 메시지 조회
+      wsList.filter(ws => ws.status === 'FAILED').forEach(ws => {
+        workspaceAPI.진행률조회(ws.name).then(res => {
+          if (res.data?.message) {
+            set에러메시지(prev => ({ ...prev, [ws.name]: res.data.message }))
+          }
+        }).catch(() => {})
       })
     } catch {
       message.error('목록 조회 실패')
@@ -127,7 +136,11 @@ export default function Workspace() {
           return
         }
         if (st === 'idle' || st === 'error') {
-          if (st === 'error') message.error(`연결 실패: ${res.data?.message || '알 수 없는 오류'}`)
+          if (st === 'error') {
+            const errMsg = res.data?.message || '알 수 없는 오류'
+            set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
+            message.error(`연결 실패: ${errMsg}`)
+          }
           await 폴링종료(wsName)
           return
         }
@@ -193,7 +206,13 @@ export default function Workspace() {
         delete next[wsName]
         return next
       })
-      message.error(err.response?.data?.detail || '연결 실패')
+      const status = err.response?.status
+      const detail = err.response?.data?.detail || '연결 실패'
+      if (status === 404) {
+        message.error(`도메인 디렉토리를 찾을 수 없습니다: ${detail}`)
+      } else {
+        message.error(detail)
+      }
     }
   }
 
@@ -436,6 +455,13 @@ export default function Workspace() {
                     )}
                   </div>
 
+                  {/* FAILED 에러 메시지 표시 */}
+                  {ws.status === 'FAILED' && 에러메시지[ws.name] && (
+                    <div style={{ color: '#ff4d4f', fontSize: 12, marginBottom: 8, padding: '4px 8px', background: '#fff2f0', borderRadius: 4, border: '1px solid #ffccc7' }}>
+                      ⚠ {에러메시지[ws.name]}
+                    </div>
+                  )}
+
                   {/* 버튼 영역 */}
                   <Space size={6} wrap>
                     {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
@@ -458,7 +484,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '1px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>
@@ -469,7 +495,7 @@ export default function Workspace() {
                             okText="삭제"
                             cancelText="취소"
                           >
-                            <Button size="small" danger icon={<DeleteOutlined />}>
+                            <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
                               삭제
                             </Button>
                           </Popconfirm>
@@ -510,7 +536,7 @@ export default function Workspace() {
                               okButtonProps={{ danger: true }}
                               cancelText="취소"
                             >
-                              <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중}>
+                              <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
                                 연결해제
                               </Button>
                             </Popconfirm>
@@ -522,7 +548,7 @@ export default function Workspace() {
                           presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
                           size="small"
                         >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '1px solid #fff' } : {}) }}>
                             색상
                           </Button>
                         </ColorPicker>

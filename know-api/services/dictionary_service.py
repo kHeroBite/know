@@ -6,7 +6,7 @@ import threading
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import select, insert, update, delete, func, MetaData
+from sqlalchemy import select, insert, update, delete, func, case, MetaData
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
 from models.dictionary import 사이트명검증, 사전테이블가져오기
@@ -65,6 +65,13 @@ def 사전목록조회(
     if where_clause:
         cnt_stmt = cnt_stmt.where(*where_clause)
         lst_stmt = lst_stmt.where(*where_clause)
+        # 완전일치 최상위 정렬: exact match → 접두일치 → 나머지
+        lst_stmt = lst_stmt.order_by(
+            case((tbl.c._WORD == 키워드, 0), else_=1),
+            tbl.c._WORD.asc(),
+        )
+    else:
+        lst_stmt = lst_stmt.order_by(tbl.c._WORD.asc())
 
     try:
         total = db.execute(cnt_stmt).scalar() or 0
@@ -174,6 +181,13 @@ def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50,
     if where_clause:
         cnt_stmt = cnt_stmt.where(*where_clause)
         lst_stmt = lst_stmt.where(*where_clause)
+        # 완전일치 최상위 정렬: exact match → 접두일치 → 나머지
+        lst_stmt = lst_stmt.order_by(
+            case((tbl.c._HEAD_WORD == 키워드, 0), else_=1),
+            tbl.c._HEAD_WORD.asc(),
+        )
+    else:
+        lst_stmt = lst_stmt.order_by(tbl.c._HEAD_WORD.asc())
 
     try:
         total = db.execute(cnt_stmt).scalar() or 0

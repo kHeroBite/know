@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { LogoutOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { workspaceAPI } from '../api/workspace'
 
 const { Sider, Content } = AntLayout
 
@@ -14,6 +15,42 @@ export default function Layout() {
   const location = useLocation()
   const { selectedWorkspace, selectedDomain, selectedColor, isFrozen, isAssigned } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
+
+  // ─── 핫키 표시 (REQ-17) ─────────────────────────────
+  const 핫키기본값: Record<string, string> = {
+    focusAnalysis: 'Home', aiAnalysis: '/', undoHistory: 'Escape',
+  }
+  const [핫키맵, set핫키맵] = useState<Record<string, string>>(핫키기본값)
+
+  useEffect(() => {
+    if (!selectedWorkspace) return
+    workspaceAPI.getHotkeys()
+      .then(({ data }) => set핫키맵({ ...핫키기본값, ...(data || {}) }))
+      .catch(() => {})
+  }, [selectedWorkspace])
+
+  const keyDisplayMap: Record<string, string> = {
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+    Escape: 'Esc', Home: 'Home',
+  }
+  const displayKey = (key: string) => {
+    if (!key) return ''
+    if (key.includes('+')) return key.split('+').map(p => keyDisplayMap[p] || p).join('+')
+    return keyDisplayMap[key] || key
+  }
+
+  // 사이드바 메뉴 ↔ 핫키 매핑
+  const 메뉴핫키매핑: Record<string, string> = {
+    '/knowledge-work': 'focusAnalysis',
+  }
+  const 핫키라벨 = (label: string, menuKey: string) => {
+    if (!wsSelected) return label
+    const hotkeyId = 메뉴핫키매핑[menuKey]
+    if (!hotkeyId) return label
+    const key = 핫키맵[hotkeyId]
+    if (!key) return label
+    return <>{label} <span style={{ opacity: 0.45, fontSize: 10, fontWeight: 400 }}>({displayKey(key)})</span></>
+  }
 
   useEffect(() => {
     if (selectedWorkspace && selectedDomain) {
@@ -45,7 +82,7 @@ export default function Layout() {
         { key: '/workspace', label: '워크스페이스' },
         { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected || isFrozen },
         { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen || isAssigned },
-        { key: '/knowledge-work', label: '작업실', disabled: !wsSelected || !isAssigned },
+        { key: '/knowledge-work', label: 핫키라벨('작업실', '/knowledge-work'), disabled: !wsSelected || !isAssigned },
         { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
         { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
         { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isAssigned },
@@ -137,6 +174,7 @@ export default function Layout() {
             size="small"
             icon={<LogoutOutlined />}
             onClick={logout}
+            className="logout-btn"
             style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, padding: '0 4px' }}
           >
             로그아웃

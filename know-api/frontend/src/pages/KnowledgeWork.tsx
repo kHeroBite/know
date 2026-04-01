@@ -74,6 +74,21 @@ function parseAnalysisText(text: string): Token[] {
   return tokens
 }
 
+// ─── 토큰 필터 + 핫키 표시 ──────────────────────────────────────
+const keyDisplayMap: Record<string, string> = {
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+  Escape: 'Esc', Home: 'Home',
+}
+function displayKey(key: string): string {
+  if (key.includes('+')) {
+    return key.split('+').map(p => keyDisplayMap[p] || p).join('+')
+  }
+  return keyDisplayMap[key] || key
+}
+function isWordToken(text: string): boolean {
+  return /[가-힣a-zA-Z]/.test(text)
+}
+
 // ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
 
 type DicType = 'udic' | 'cndic' | 'thesaurus'
@@ -283,7 +298,7 @@ function MorphemeTab({ domain, prefillKeyword, prefillTrigger }: {
 // ─── 메인 페이지 ─────────────────────────────────────────────────
 
 export default function KnowledgeWork() {
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
   const user = useAuthStore(s => s.user)
 
   // 키워드 목록
@@ -331,6 +346,12 @@ export default function KnowledgeWork() {
       setTotal(data.total || 0)
       setMinPage(1)
       setMaxPage(1)
+      // REQ-12: 첫 안읽은 키워드 자동 선택
+      const firstUnread = (data.items || []).find((i: KeywordItem) => i.status !== 'completed')
+      if (firstUnread) {
+        setSelected(firstUnread)
+        setIsCenterFocused(true)
+      }
     } catch {
       setItems([])
       setTotal(0)
@@ -394,6 +415,17 @@ export default function KnowledgeWork() {
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
+  // REQ-20: 키워드 선택 시 자동포커스 + 첫 단어 선택
+  useEffect(() => {
+    if (selected?.analysis) {
+      const toks = parseAnalysisText(selected.analysis).filter(t => !t.lineBreak)
+      const firstWord = toks.findIndex(t => isWordToken(t.text))
+      setSelectedTokenIdx(firstWord >= 0 ? firstWord : 0)
+    } else {
+      setSelectedTokenIdx(-1)
+    }
+  }, [selected])
+
   // ─── 토큰 ───────────────────────────────────────────────────
 
   const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
@@ -444,7 +476,6 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx > 0 ? curIdx - 1 : 0
         setSelected(items[newIdx])
-        setSelectedTokenIdx(-1)
         break
       }
       case 'nextKeyword': {
@@ -452,19 +483,30 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
         setSelected(items[newIdx])
-        setSelectedTokenIdx(-1)
         break
       }
       case 'prevAnalysis': {
         if (!selectableTokens.length) break
-        setSelectedTokenIdx(prev => prev > 0 ? prev - 1 : 0)
+        let prevIdx = selectedTokenIdx - 1
+        while (prevIdx >= 0 && !isWordToken(selectableTokens[prevIdx].text)) prevIdx--
+        if (prevIdx >= 0) setSelectedTokenIdx(prevIdx)
         break
       }
       case 'nextAnalysis': {
         if (!selectableTokens.length) break
-        setSelectedTokenIdx(prev =>
-          prev < selectableTokens.length - 1 ? prev + 1 : selectableTokens.length - 1
-        )
+        let nextIdx = selectedTokenIdx + 1
+        while (nextIdx < selectableTokens.length && !isWordToken(selectableTokens[nextIdx].text)) nextIdx++
+        if (nextIdx >= selectableTokens.length) {
+          // REQ-21: 마지막 토큰 → 다음 키워드 자동 이동
+          const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+          if (curIdx >= 0 && curIdx < items.length - 1) {
+            setSelected(items[curIdx + 1])
+          } else {
+            message.info('모든 키워드를 완료했습니다')
+          }
+        } else {
+          setSelectedTokenIdx(nextIdx)
+        }
         break
       }
       case 'registerUdic':
@@ -474,8 +516,24 @@ export default function KnowledgeWork() {
         const dicType: DicType = action === 'registerUdic' ? 'udic'
           : action === 'registerCndic' ? 'cndic' : 'thesaurus'
         if (dicType === 'thesaurus') {
-          setActiveTab('thesaurus')
-          setThesaurusSearch(selectedWord)
+          클라이언트.post(`/dictionaries/${selectedDomain}/thesaurus`, { head_word: selectedWord, tail_word: '', memo: '' })
+            .then(() => {
+              message.success(`유사어사전에 "${selectedWord}" 등록`)
+              setDicRefreshKey(prev => prev + 1)
+              setActiveTab('thesaurus')
+              setThesaurusSearch(selectedWord)
+              if (selectedWorkspace && selectedDomain) {
+                workspaceAPI.addWorkHistory({
+                  workspace: selectedWorkspace, domain: selectedDomain,
+                  action: '유사어사전 등록', keyword: selectedWord,
+                })
+                historyRef.current?.reload()
+              }
+            })
+            .catch((err: any) => {
+              const detail = err?.response?.data?.detail || '등록 실패'
+              message.error(detail)
+            })
         } else {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
             .then(() => {
@@ -489,7 +547,7 @@ export default function KnowledgeWork() {
                 historyRef.current?.reload()
               }
             })
-            .catch(() => message.error('등록 실패'))
+            .catch((err: any) => { const detail = err?.response?.data?.detail || '등록 실패'; message.error(detail) })
         }
         break
       }
@@ -582,12 +640,15 @@ export default function KnowledgeWork() {
             ) : items.map(record => (
               <div
                 key={record.id}
-                onClick={(e) => { e.stopPropagation(); setSelected(record); setSelectedTokenIdx(-1) }}
+                onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true) }}
                 style={{
                   padding: '6px 12px', cursor: 'pointer',
-                  background: selected?.id === record.id ? '#e6f4ff' : undefined,
+                  background: selected?.id === record.id ? '#e6f4ff'
+                    : record.status === 'completed' ? '#FFFDE7' : undefined,
                   borderBottom: '1px solid #f0f0f0',
                   fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  fontWeight: record.status === 'completed' ? 'normal' : 600,
+                  color: record.status === 'completed' ? '#999' : '#333',
                 }}
               >
                 {record.keyword}
@@ -608,8 +669,8 @@ export default function KnowledgeWork() {
             cursor: 'default', transition: 'all 0.3s ease',
             ...(isCenterFocused ? {
               boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-              background: '#FFF9C4',
-              border: '2px solid #FFF176',
+              background: selectedColor ? `${selectedColor}18` : '#FFF9C4',
+              border: `2px solid ${selectedColor || '#FFF176'}`,
               transform: 'translateY(-2px)',
             } : {}),
           }}
@@ -629,7 +690,7 @@ export default function KnowledgeWork() {
                     style={{
                       cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
                       transition: 'background 0.15s',
-                      ...(isSelected ? { background: '#b3d9ff', fontWeight: 600 } : {}),
+                      ...(isSelected ? { background: '#b3d9ff' } : {}),
                     }}
                   >
                     {token.text}
@@ -681,22 +742,22 @@ export default function KnowledgeWork() {
           items={[
             {
               key: 'morpheme',
-              label: '키워드 분석',
+              label: `키워드 분석 (${displayKey(hotkeys.tabMorpheme)})`,
               children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
             },
             {
               key: 'udic',
-              label: '사용자사전',
+              label: `사용자사전 (${displayKey(hotkeys.tabUdic)})`,
               children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
             },
             {
               key: 'cndic',
-              label: '복합명사사전',
+              label: `복합명사사전 (${displayKey(hotkeys.tabCndic)})`,
               children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
             },
             {
               key: 'thesaurus',
-              label: '유사어사전',
+              label: `유사어사전 (${displayKey(hotkeys.tabThesaurus)})`,
               children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
             },
           ]}
