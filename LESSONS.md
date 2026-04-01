@@ -135,6 +135,13 @@ elif os.path.isdir(path):
 **재발방지**: DB 테이블 직접 접근 코드(SQLAlchemy `db.execute(tbl...)`) 작성 시 `except OperationalError` 처리 필수. 테이블 없는 경우 graceful pass 또는 명시적 에러 메시지 반환.
 **Level**: 1 (1회 발생, ktest에서 발견·수정 완료)
 
+### L-019: 파일 대상 오류 — kdev 전 컴포넌트 역할 사전 확인 필수 (2026-04-01)
+
+**현상**: 작업실 8대 기능(배너+포커스스타일+레이아웃+AI분석+작업이력+단축키+핫키설정)을 `KnowledgeWork.tsx`에 구현해야 했으나 `Workspace.tsx`에 잘못 적용 → 전체 재작업 필요.
+**원인**: kplan 단계에서 파일명 유사성(Workspace vs KnowledgeWork)으로 인해 대상 컴포넌트 역할 파악 없이 구현 파일 결정.
+**재발방지**: kdev 시작 전 구현 대상 파일의 컴포넌트 역할을 반드시 코드 또는 라우팅에서 확인. 파일명 유사 시 실제 역할(라우트 경로, 페이지 목적) 확인 후 구현 파일 결정.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블

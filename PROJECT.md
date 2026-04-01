@@ -257,7 +257,8 @@ know-api/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   └── Workspace.tsx      # 작업실 페이지 (3컬럼+배너+포커스스타일+단축키15개+핫키설정모달)
+    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3컬럼+배너+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력)
+    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (Google+Perplexity 탭)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (undo 버튼 포함)

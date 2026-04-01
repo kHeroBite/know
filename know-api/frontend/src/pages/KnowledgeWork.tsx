@@ -4,15 +4,75 @@ import {
   Popconfirm, message, Spin,
 } from 'antd'
 import {
-  PlusOutlined, DeleteOutlined, SearchOutlined,
+  PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
+import { workspaceAPI } from '../api/workspace'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
 import 클라이언트 from '../api/client'
+import AIAnalysis from '../components/workspace/AIAnalysis'
+import WorkHistory, { WorkHistoryRef } from '../components/workspace/WorkHistory'
+import HotkeySettings from '../components/workspace/HotkeySettings'
 
-const { Text } = Typography
+const { Text, Title } = Typography
 const PAGE_SIZE = 10
+
+// ─── 핫키 기본값 ────────────────────────────────────────────────
+
+const 기본핫키맵: Record<string, string> = {
+  prevKeyword: 'ArrowUp',
+  nextKeyword: 'ArrowDown',
+  prevAnalysis: 'ArrowLeft',
+  nextAnalysis: 'ArrowRight',
+  registerUdic: '1',
+  registerCndic: '2',
+  registerThesaurus: '3',
+  analyzeKeyword: '0',
+  focusAnalysis: 'Home',
+  tabUdic: 'Alt+1',
+  tabCndic: 'Alt+2',
+  tabThesaurus: 'Alt+3',
+  tabMorpheme: 'Alt+0',
+  aiAnalysis: '/',
+  undoHistory: 'Escape',
+}
+
+function encodeKeyEvent(e: KeyboardEvent): string {
+  const parts: string[] = []
+  if (e.altKey) parts.push('Alt')
+  if (e.ctrlKey) parts.push('Ctrl')
+  if (e.shiftKey) parts.push('Shift')
+  const k = e.key === ' ' ? 'Space' : e.key
+  if (!['Alt', 'Control', 'Shift', 'Meta'].includes(k)) parts.push(k)
+  return parts.join('+')
+}
+
+// ─── 분석결과 토큰 파싱 ─────────────────────────────────────────
+
+interface Token {
+  text: string
+  index: number
+  lineBreak?: boolean
+}
+
+function parseAnalysisText(text: string): Token[] {
+  if (!text) return []
+  const tokens: Token[] = []
+  let idx = 0
+  const lines = text.split('\n')
+  lines.forEach((line, li) => {
+    const words = line.split(/\s+/).filter(Boolean)
+    words.forEach(w => {
+      tokens.push({ text: w, index: idx })
+      idx++
+    })
+    if (li < lines.length - 1) {
+      tokens.push({ text: '\n', index: -1, lineBreak: true })
+    }
+  })
+  return tokens
+}
 
 // ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
 
@@ -41,7 +101,9 @@ function 사전컬럼(dicType: DicType) {
   }
 }
 
-function DicTab({ dicType, domain }: { dicType: DicType; domain: string }) {
+function DicTab({ dicType, domain, refreshKey, externalSearch }: {
+  dicType: DicType; domain: string; refreshKey?: number; externalSearch?: string
+}) {
   const [데이터, set데이터] = useState<any[]>([])
   const [검색어, set검색어] = useState('')
   const [검색쿼리, set검색쿼리] = useState('')
@@ -76,6 +138,18 @@ function DicTab({ dicType, domain }: { dicType: DicType; domain: string }) {
   }, [검색어])
 
   useEffect(() => { if (domain) 데이터조회() }, [domain, 데이터조회])
+
+  // refreshKey 변경 시 강제 리로드
+  useEffect(() => {
+    if (refreshKey && refreshKey > 0 && domain) 데이터조회()
+  }, [refreshKey])
+
+  // externalSearch: 외부에서 검색어 주입
+  useEffect(() => {
+    if (externalSearch !== undefined && externalSearch !== '') {
+      set검색어(externalSearch)
+    }
+  }, [externalSearch])
 
   const 삭제 = async (record: any) => {
     try {
@@ -153,7 +227,9 @@ function DicTab({ dicType, domain }: { dicType: DicType; domain: string }) {
 
 // ─── 형태소분석 탭 ───────────────────────────────────────────────
 
-function MorphemeTab({ domain }: { domain: string }) {
+function MorphemeTab({ domain, prefillKeyword, prefillTrigger }: {
+  domain: string; prefillKeyword?: string; prefillTrigger?: number
+}) {
   const [keyword, setKeyword] = useState('')
   const [result, setResult] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -172,6 +248,14 @@ function MorphemeTab({ domain }: { domain: string }) {
       setLoading(false)
     }
   }
+
+  // 외부에서 키워드 주입 + 자동 분석
+  useEffect(() => {
+    if (prefillTrigger && prefillTrigger > 0 && prefillKeyword) {
+      setKeyword(prefillKeyword)
+      분석실행(prefillKeyword)
+    }
+  }, [prefillTrigger])
 
   return (
     <div>
@@ -192,7 +276,6 @@ function MorphemeTab({ domain }: { domain: string }) {
           {result}
         </pre>
       )}
-
     </div>
   )
 }
@@ -202,6 +285,8 @@ function MorphemeTab({ domain }: { domain: string }) {
 export default function KnowledgeWork() {
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const user = useAuthStore(s => s.user)
+
+  // 키워드 목록
   const [items, setItems] = useState<KeywordItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -210,8 +295,30 @@ export default function KnowledgeWork() {
   const [minPage, setMinPage] = useState(1)
   const [maxPage, setMaxPage] = useState(1)
   const [selected, setSelected] = useState<KeywordItem | null>(null)
-  const [isCenterFocused, setIsCenterFocused] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+
+  // 포커스/토큰
+  const [isCenterFocused, setIsCenterFocused] = useState(false)
+  const [selectedTokenIdx, setSelectedTokenIdx] = useState(-1)
+
+  // 핫키
+  const [hotkeys, setHotkeys] = useState<Record<string, string>>(기본핫키맵)
+  const [hotkeyModalOpen, setHotkeyModalOpen] = useState(false)
+
+  // 하단 탭
+  const [activeTab, setActiveTab] = useState('morpheme')
+  const [dicRefreshKey, setDicRefreshKey] = useState(0)
+  const [thesaurusSearch, setThesaurusSearch] = useState('')
+  const [morphPrefillKw, setMorphPrefillKw] = useState('')
+  const [morphTrigger, setMorphTrigger] = useState(0)
+
+  // AI분석
+  const [aiKeyword, setAiKeyword] = useState('')
+
+  // 작업이력
+  const historyRef = useRef<WorkHistoryRef>(null)
+
+  // ─── 키워드 목록 ────────────────────────────────────────────
 
   const 목록초기화 = useCallback(async () => {
     if (!selectedWorkspace || !selectedDomain || !user) return
@@ -263,7 +370,6 @@ export default function KnowledgeWork() {
       if ((data.items || []).length > 0) {
         setItems(prev => [...(data.items || []), ...prev])
         setMinPage(prevPage)
-        // 상단 prepend 후 스크롤 위치 보정
         requestAnimationFrame(() => {
           if (listRef.current) {
             const newScrollHeight = listRef.current.scrollHeight
@@ -278,18 +384,155 @@ export default function KnowledgeWork() {
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    if (scrollHeight - scrollTop - clientHeight < 80) {
-      다음페이지로드()
-    }
-    if (scrollTop < 80 && minPage > 1) {
-      이전페이지로드()
-    }
+    if (scrollHeight - scrollTop - clientHeight < 80) 다음페이지로드()
+    if (scrollTop < 80 && minPage > 1) 이전페이지로드()
   }, [다음페이지로드, 이전페이지로드, minPage])
 
   useEffect(() => {
     목록초기화()
     setSelected(null)
+    setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
+
+  // ─── 토큰 ───────────────────────────────────────────────────
+
+  const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
+  const selectableTokens = tokens.filter(t => !t.lineBreak)
+  const selectedWord = selectedTokenIdx >= 0 && selectedTokenIdx < selectableTokens.length
+    ? selectableTokens[selectedTokenIdx].text : ''
+
+  // ─── 핫키 로드 ──────────────────────────────────────────────
+
+  useEffect(() => {
+    workspaceAPI.getHotkeys()
+      .then(({ data }) => {
+        if (data && typeof data === 'object') {
+          setHotkeys(prev => ({ ...prev, ...data }))
+        }
+      })
+      .catch(() => { /* 기본값 사용 */ })
+  }, [])
+
+  // ─── 핫키 핸들러 ────────────────────────────────────────────
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+    const encoded = encodeKeyEvent(e)
+    const actionMap = Object.entries(hotkeys).reduce<Record<string, string>>(
+      (acc, [action, key]) => { acc[key] = action; return acc },
+      {},
+    )
+    const action = actionMap[encoded]
+    if (!action) return
+
+    // Home(focusAnalysis)는 항상 동작
+    if (action === 'focusAnalysis') {
+      e.preventDefault()
+      setIsCenterFocused(true)
+      return
+    }
+
+    // 나머지 핫키는 포커스 모드에서만
+    if (!isCenterFocused) return
+    e.preventDefault()
+
+    switch (action) {
+      case 'prevKeyword': {
+        if (!items.length) break
+        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+        const newIdx = curIdx > 0 ? curIdx - 1 : 0
+        setSelected(items[newIdx])
+        setSelectedTokenIdx(-1)
+        break
+      }
+      case 'nextKeyword': {
+        if (!items.length) break
+        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+        const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
+        setSelected(items[newIdx])
+        setSelectedTokenIdx(-1)
+        break
+      }
+      case 'prevAnalysis': {
+        if (!selectableTokens.length) break
+        setSelectedTokenIdx(prev => prev > 0 ? prev - 1 : 0)
+        break
+      }
+      case 'nextAnalysis': {
+        if (!selectableTokens.length) break
+        setSelectedTokenIdx(prev =>
+          prev < selectableTokens.length - 1 ? prev + 1 : selectableTokens.length - 1
+        )
+        break
+      }
+      case 'registerUdic':
+      case 'registerCndic':
+      case 'registerThesaurus': {
+        if (!selectedWord || !selectedDomain) break
+        const dicType: DicType = action === 'registerUdic' ? 'udic'
+          : action === 'registerCndic' ? 'cndic' : 'thesaurus'
+        if (dicType === 'thesaurus') {
+          setActiveTab('thesaurus')
+          setThesaurusSearch(selectedWord)
+        } else {
+          클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
+            .then(() => {
+              message.success(`${사전설정[dicType].title}에 "${selectedWord}" 등록`)
+              setDicRefreshKey(prev => prev + 1)
+              if (selectedWorkspace && selectedDomain) {
+                workspaceAPI.addWorkHistory({
+                  workspace: selectedWorkspace, domain: selectedDomain,
+                  action: `${사전설정[dicType].title} 등록`, keyword: selectedWord,
+                })
+                historyRef.current?.reload()
+              }
+            })
+            .catch(() => message.error('등록 실패'))
+        }
+        break
+      }
+      case 'analyzeKeyword': {
+        const kw = selectedWord || selected?.keyword
+        if (kw) {
+          setActiveTab('morpheme')
+          setMorphPrefillKw(kw)
+          setMorphTrigger(prev => prev + 1)
+        }
+        break
+      }
+      case 'tabUdic': setActiveTab('udic'); break
+      case 'tabCndic': setActiveTab('cndic'); break
+      case 'tabThesaurus': setActiveTab('thesaurus'); break
+      case 'tabMorpheme': setActiveTab('morpheme'); break
+      case 'aiAnalysis': {
+        const kw = selectedWord || selected?.keyword
+        if (kw) setAiKeyword(kw)
+        break
+      }
+      case 'undoHistory': {
+        historyRef.current?.undoLatest()
+        break
+      }
+    }
+  }, [hotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  // ─── 핫키 저장 ──────────────────────────────────────────────
+
+  const handleSaveHotkeys = useCallback((newHotkeys: Record<string, string>) => {
+    setHotkeys(prev => ({ ...prev, ...newHotkeys }))
+    workspaceAPI.saveHotkeys(newHotkeys)
+      .then(() => message.success('핫키 설정 저장 완료'))
+      .catch(() => message.error('핫키 설정 저장 실패'))
+  }, [])
+
+  // ─── Guard ──────────────────────────────────────────────────
 
   if (!selectedWorkspace || !selectedDomain) {
     return (
@@ -299,70 +542,74 @@ export default function KnowledgeWork() {
     )
   }
 
+  // ─── 렌더링 ─────────────────────────────────────────────────
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }} onClick={() => setIsCenterFocused(false)}>
-      {/* 상단 3파티션 영역 */}
-      <div style={{ display: 'flex', gap: 12, height: 340, flexShrink: 0, marginBottom: 12 }}>
-        {/* 좌: 키워드 목록 (인피니티 스크롤) */}
+    <div
+      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}
+      onClick={() => setIsCenterFocused(false)}
+    >
+      {/* 배너 */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '8px 16px', marginBottom: 8,
+        background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderRadius: 6,
+      }}>
+        <Title level={4} style={{ margin: 0 }}>📋 작업실</Title>
+        <Button
+          icon={<SettingOutlined />}
+          onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
+        >
+          핫키설정
+        </Button>
+      </div>
+
+      {/* 상단 3컬럼 */}
+      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0, marginBottom: 12 }}>
+        {/* 좌: 키워드 목록 */}
         <Card
           title={`키워드(${total}건)`}
           size="small"
           style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
           styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
         >
-          <div
-            ref={listRef}
-            onScroll={handleScroll}
-            style={{ flex: 1, overflowY: 'auto' }}
-          >
+          <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
             {loadingPrev && (
-              <div style={{ textAlign: 'center', padding: 8 }}>
-                <Spin size="small" />
-              </div>
+              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
             )}
             {loading ? (
-              <div style={{ textAlign: 'center', padding: 20 }}>
-                <Spin />
-              </div>
+              <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
             ) : items.map(record => (
               <div
                 key={record.id}
-                onClick={(e) => { e.stopPropagation(); setSelected(record) }}
+                onClick={(e) => { e.stopPropagation(); setSelected(record); setSelectedTokenIdx(-1) }}
                 style={{
-                  padding: '6px 12px',
-                  cursor: 'pointer',
+                  padding: '6px 12px', cursor: 'pointer',
                   background: selected?.id === record.id ? '#e6f4ff' : undefined,
                   borderBottom: '1px solid #f0f0f0',
-                  fontSize: 13,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}
               >
                 {record.keyword}
               </div>
             ))}
             {loadingMore && (
-              <div style={{ textAlign: 'center', padding: 8 }}>
-                <Spin size="small" />
-              </div>
+              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
             )}
-
           </div>
         </Card>
 
         {/* 중: 분석결과 */}
         <Card
-          title={selected ? `분석결과 — ${selected.keyword}` : '분석결과'}
+          title="분석결과"
           size="small"
           style={{
             flex: 1, display: 'flex', flexDirection: 'column',
-            cursor: 'default',
-            transition: 'all 0.3s ease',
+            cursor: 'default', transition: 'all 0.3s ease',
             ...(isCenterFocused ? {
               boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-              background: '#f0f5ff',
-              border: '2px solid #1890ff',
+              background: '#FFF9C4',
+              border: '2px solid #FFF176',
               transform: 'translateY(-2px)',
             } : {}),
           }}
@@ -370,12 +617,26 @@ export default function KnowledgeWork() {
           onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
         >
           {selected ? (
-            <pre style={{
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-              fontSize: 13, margin: 0, lineHeight: 1.6,
-            }}>
-              {selected.analysis || '분석결과가 없습니다.'}
-            </pre>
+            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+              {tokens.map((token, i) => {
+                if (token.lineBreak) return <br key={`br-${i}`} />
+                const selIdx = selectableTokens.findIndex(t => t === token)
+                const isSelected = selIdx === selectedTokenIdx
+                return (
+                  <span
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); setSelectedTokenIdx(selIdx); setIsCenterFocused(true) }}
+                    style={{
+                      cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
+                      transition: 'background 0.15s',
+                      ...(isSelected ? { background: '#b3d9ff', fontWeight: 600 } : {}),
+                    }}
+                  >
+                    {token.text}
+                  </span>
+                )
+              })}
+            </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <Text type="secondary">좌측에서 키워드를 선택하세요.</Text>
@@ -383,45 +644,71 @@ export default function KnowledgeWork() {
           )}
         </Card>
 
-        {/* 우: AI 분석 */}
-        <Card
-          title="AI 분석"
-          size="small"
-          style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' } }}
-        >
-          <Text type="secondary">AI 분석 기능은 차후 개발 예정입니다.</Text>
-        </Card>
+        {/* 우: AI분석 + 작업이력 */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Card
+            title="AI 분석"
+            size="small"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
+          >
+            <AIAnalysis keyword={aiKeyword} />
+          </Card>
+          <Card
+            title="작업이력"
+            size="small"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
+          >
+            <WorkHistory
+              ref={historyRef}
+              workspace={selectedWorkspace}
+              domain={selectedDomain}
+            />
+          </Card>
+        </div>
       </div>
 
-      {/* 하단 탭 영역 */}
-      <Card size="small" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}>
+      {/* 하단 탭 */}
+      <Card
+        size="small"
+        style={{ height: 320, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
+      >
         <Tabs
-          defaultActiveKey="morpheme"
+          activeKey={activeTab}
+          onChange={setActiveTab}
           items={[
             {
               key: 'morpheme',
               label: '키워드 분석',
-              children: <MorphemeTab domain={selectedDomain} />,
+              children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
             },
             {
               key: 'udic',
               label: '사용자사전',
-              children: <DicTab dicType="udic" domain={selectedDomain} />,
+              children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
             },
             {
               key: 'cndic',
               label: '복합명사사전',
-              children: <DicTab dicType="cndic" domain={selectedDomain} />,
+              children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
             },
             {
               key: 'thesaurus',
               label: '유사어사전',
-              children: <DicTab dicType="thesaurus" domain={selectedDomain} />,
+              children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
             },
           ]}
         />
       </Card>
+
+      {/* 핫키 설정 모달 */}
+      <HotkeySettings
+        open={hotkeyModalOpen}
+        onClose={() => setHotkeyModalOpen(false)}
+        onSave={handleSaveHotkeys}
+      />
     </div>
   )
 }

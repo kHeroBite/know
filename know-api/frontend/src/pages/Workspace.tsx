@@ -1,714 +1,587 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+
+import { useState, useEffect, useRef } from 'react'
 import {
-  Table, Typography, Card, Tabs, Input, Button, Form, Modal,
-  Popconfirm, message, Spin,
+  Typography,
+  Button,
+  Input,
+  Select,
+  Space,
+  Popconfirm,
+  message,
+  Badge,
+  Card,
+  Row,
+  Col,
+  Progress,
+  Modal,
+  Empty,
+  Spin,
+  ColorPicker,
 } from 'antd'
 import {
-  PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined,
+  PlusOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
+  DeleteOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  BgColorsOutlined,
+
+  ReloadOutlined,
 } from '@ant-design/icons'
-import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
-import { useWorkspaceStore } from '../stores/workspaceStore'
+import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
-import 클라이언트 from '../api/client'
-import AIAnalysis from '../components/workspace/AIAnalysis'
-import WorkHistory, { WorkHistoryRef } from '../components/workspace/WorkHistory'
-import HotkeySettings from '../components/workspace/HotkeySettings'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
-const { Text, Title } = Typography
-const PAGE_SIZE = 10
+const { Title, Text } = Typography
 
-// ─── 핫키 기본값 ────────────────────────────────────────────────
+const 프리셋색상 = [
+  '#0f1c3f', '#1a1a2e', '#1a2744', '#1e3a5f',
+  '#134e4a', '#14532d', '#4c1d95', '#7f1d1d',
+  '#7c2d12', '#1e293b', '#312e81', '#164e63',
+]
 
-const 기본핫키맵: Record<string, string> = {
-  prevKeyword: 'ArrowUp',
-  nextKeyword: 'ArrowDown',
-  prevAnalysis: 'ArrowLeft',
-  nextAnalysis: 'ArrowRight',
-  registerUdic: '1',
-  registerCndic: '2',
-  registerThesaurus: '3',
-  analyzeKeyword: '0',
-  focusAnalysis: 'Home',
-  tabUdic: 'Alt+1',
-  tabCndic: 'Alt+2',
-  tabThesaurus: 'Alt+3',
-  tabMorpheme: 'Alt+0',
-  aiAnalysis: '/',
-  undoHistory: 'Escape',
+interface 워크스페이스항목 {
+  name: string
+  status: 'IDLE' | 'USED' | 'CONNECTING' | 'FAILED'
+  domain: string | null
+  connected_by: string | null
+  color: string | null
 }
 
-function encodeKeyEvent(e: KeyboardEvent): string {
-  const parts: string[] = []
-  if (e.altKey) parts.push('Alt')
-  if (e.ctrlKey) parts.push('Ctrl')
-  if (e.shiftKey) parts.push('Shift')
-  const k = e.key === ' ' ? 'Space' : e.key
-  if (!['Alt', 'Control', 'Shift', 'Meta'].includes(k)) parts.push(k)
-  return parts.join('+')
-}
-
-// ─── 분석결과 토큰 파싱 ─────────────────────────────────────────
-
-interface Token {
-  text: string
-  index: number
-  lineBreak?: boolean
-}
-
-function parseAnalysisText(text: string): Token[] {
-  if (!text) return []
-  const tokens: Token[] = []
-  let idx = 0
-  const lines = text.split('\n')
-  lines.forEach((line, li) => {
-    const words = line.split(/\s+/).filter(Boolean)
-    words.forEach(w => {
-      tokens.push({ text: w, index: idx })
-      idx++
-    })
-    if (li < lines.length - 1) {
-      tokens.push({ text: '\n', index: -1, lineBreak: true })
-    }
-  })
-  return tokens
-}
-
-// ─── 사전 컴포넌트 ──────────────────────────────────────────────
-
-type DicType = 'udic' | 'cndic' | 'thesaurus'
-
-const 사전설정: Record<DicType, { title: string; label: string }> = {
-  udic: { title: '사용자사전', label: '사용자사전(udic)' },
-  cndic: { title: '복합명사사전', label: '복합명사사전(cndic)' },
-  thesaurus: { title: '유사어사전', label: '유사어사전(thesaurus)' },
-}
-
-function 사전컬럼(dicType: DicType) {
-  return (삭제버튼: (r: any) => React.ReactNode) => {
-    if (dicType === 'thesaurus') {
-      return [
-        { title: '키워드', dataIndex: 'head_word', key: 'head_word', ellipsis: true },
-        { title: '유사어', dataIndex: 'tail_word', key: 'tail_word', ellipsis: true },
-        { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
-      ]
-    }
-    return [
-      { title: '단어', dataIndex: 'word', key: 'word', ellipsis: true },
-      { title: '메모', dataIndex: 'memo', key: 'memo', ellipsis: true },
-      { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
-    ]
-  }
-}
-
-function DicTab({ dicType, domain, refreshKey, externalSearch }: {
-  dicType: DicType; domain: string; refreshKey?: number; externalSearch?: string
-}) {
-  const [데이터, set데이터] = useState<any[]>([])
-  const [검색어, set검색어] = useState('')
-  const [검색쿼리, set검색쿼리] = useState('')
+export default function Workspace() {
+  const { user: currentUser } = useAuthStore()
+  const { selectedWorkspace, setWorkspace, clearWorkspace } = useWorkspaceStore()
+  const [목록, set목록] = useState<워크스페이스항목[]>([])
+  const [도메인목록, set도메인목록] = useState<string[]>([])
   const [로딩, set로딩] = useState(false)
-  const [모달열림, set모달열림] = useState(false)
-  const [저장중, set저장중] = useState(false)
-  const [총건수, set총건수] = useState(0)
-  const [현재페이지, set현재페이지] = useState(1)
-  const [form] = Form.useForm()
-  const cfg = 사전설정[dicType]
+  const [새이름, set새이름] = useState('')
+  const [새색상, set새색상] = useState<string | null>(null)
+  const [생성로딩, set생성로딩] = useState(false)
+  const [연결팝업WS, set연결팝업WS] = useState<string | null>(null)
+  const [선택도메인, set선택도메인] = useState<string | null>(null)
+  const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
+  const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
+  const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
-  const 데이터조회 = useCallback(async () => {
-    if (!domain) return
+  const isSuper = currentUser?.auth === 'A'
+
+
+
+
+  const 목록조회 = async () => {
     set로딩(true)
     try {
-      const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
-      const res = await 클라이언트.get(`/dictionaries/${domain}/${경로}`, {
-        params: { page: 현재페이지, size: 50, ...(검색쿼리 ? { search: 검색쿼리 } : {}) },
+      const [wsRes, dmRes] = await Promise.all([
+        workspaceAPI.워크스페이스목록(),
+        workspaceAPI.도메인목록(),
+      ])
+      const wsList: 워크스페이스항목[] = wsRes.data
+      set목록(wsList)
+      set도메인목록(dmRes.data)
+      // CONNECTING 상태 워크스페이스 자동 폴링
+      wsList.forEach(ws => {
+        if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
+          폴링시작(ws.name)
+        }
       })
-      set데이터(res.data?.items || [])
-      set총건수(res.data?.total || 0)
     } catch {
-      message.error(`${cfg.title} 조회 실패`)
+      message.error('목록 조회 실패')
     } finally {
       set로딩(false)
     }
-  }, [domain, dicType, 현재페이지, 검색쿼리])
-
-  useEffect(() => {
-    const timer = setTimeout(() => { set검색쿼리(검색어); set현재페이지(1) }, 100)
-    return () => clearTimeout(timer)
-  }, [검색어])
-
-  useEffect(() => { if (domain) 데이터조회() }, [domain, 데이터조회])
-
-  // refreshKey 변경 시 강제 리로드
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0 && domain) 데이터조회()
-  }, [refreshKey])
-
-  // externalSearch: 외부에서 검색어 주입
-  useEffect(() => {
-    if (externalSearch !== undefined && externalSearch !== '') {
-      set검색어(externalSearch)
-    }
-  }, [externalSearch])
-
-  const 삭제 = async (record: any) => {
-    try {
-      const word = dicType === 'thesaurus' ? record.head_word : record.word
-      await 클라이언트.delete(`/dictionaries/${domain}/${dicType}/${encodeURIComponent(word)}`)
-      message.success('삭제 완료')
-      데이터조회()
-    } catch { message.error('삭제 실패') }
   }
 
-  const 저장 = async () => {
-    try {
-      const values = await form.validateFields()
-      set저장중(true)
-      await 클라이언트.post(`/dictionaries/${domain}/${dicType}`, values)
-      message.success('추가 완료')
-      set모달열림(false)
-      form.resetFields()
-      데이터조회()
-    } catch (err: any) {
-      if (err?.errorFields) return
-      message.error('추가 실패: ' + (err?.response?.data?.detail || '오류'))
-    } finally { set저장중(false) }
-  }
-
-  const 삭제버튼 = (record: any) => (
-    <Popconfirm title="삭제?" onConfirm={() => 삭제(record)} okText="삭제" cancelText="취소">
-      <Button size="small" icon={<DeleteOutlined />} danger type="text" />
-    </Popconfirm>
-  )
-
-  const columns = 사전컬럼(dicType)(삭제버튼)
-
-  const 모달폼내용 = () => {
-    if (dicType === 'thesaurus') {
-      return (<>
-        <Form.Item name="head_word" label="키워드" rules={[{ required: true }]}><Input /></Form.Item>
-        <Form.Item name="tail_word" label="유사어" rules={[{ required: true }]}><Input /></Form.Item>
-      </>)
-    }
-    return (<>
-      <Form.Item name="word" label="단어" rules={[{ required: true }]}><Input /></Form.Item>
-      <Form.Item name="memo" label="메모"><Input /></Form.Item>
-    </>)
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <Input
-          placeholder="검색..." value={검색어} onChange={e => set검색어(e.target.value)}
-          allowClear size="small" prefix={<SearchOutlined />} style={{ width: 200 }}
-        />
-        <Button size="small" type="primary" icon={<PlusOutlined />}
-          onClick={() => { form.resetFields(); set모달열림(true) }}>추가</Button>
-      </div>
-      <Table
-        dataSource={데이터} columns={columns}
-        rowKey={dicType === 'thesaurus' ? (r: any) => `${r.head_word}-${r.tail_word}` : 'word'}
-        loading={로딩} size="small" scroll={{ y: 250 }}
-        pagination={{
-          current: 현재페이지, pageSize: 50, total: 총건수,
-          showTotal: (total) => `총 ${total.toLocaleString()}건`,
-          showSizeChanger: false, size: 'small',
-          onChange: (page) => set현재페이지(page),
-        }}
-      />
-      <Modal title={`${cfg.label} 추가`} open={모달열림} onOk={저장}
-        onCancel={() => set모달열림(false)} confirmLoading={저장중} okText="저장" cancelText="취소">
-        <Form form={form} layout="vertical">{모달폼내용()}</Form>
-      </Modal>
-    </div>
-  )
-}
-
-// ─── 형태소분석 탭 ───────────────────────────────────────────────
-
-function MorphemeTab({ domain, prefillKeyword, prefillTrigger }: {
-  domain: string; prefillKeyword?: string; prefillTrigger?: number
-}) {
-  const [keyword, setKeyword] = useState('')
-  const [result, setResult] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  const 분석실행 = async (value: string) => {
-    const kw = value.trim()
-    if (!kw) return
-    setLoading(true)
-    try {
-      const { data } = await 클라이언트.post('/morpheme/analyze', { keyword: kw, domain })
-      setResult(data.result || '결과 없음')
-    } catch {
-      message.error('형태소분석 실패')
-      setResult(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 외부에서 키워드 주입 + 자동 분석
   useEffect(() => {
-    if (prefillTrigger && prefillTrigger > 0 && prefillKeyword) {
-      setKeyword(prefillKeyword)
-      분석실행(prefillKeyword)
+    목록조회()
+    return () => {
+      Object.values(폴링ref.current).forEach(clearInterval)
     }
-  }, [prefillTrigger])
-
-  return (
-    <div>
-      <Input.Search
-        enterButton="분석"
-        value={keyword}
-        onChange={e => setKeyword(e.target.value)}
-        onSearch={분석실행}
-        loading={loading}
-        style={{ maxWidth: 400, marginBottom: 12 }}
-      />
-      {result !== null && (
-        <pre style={{
-          maxHeight: 260, overflow: 'auto', padding: 12,
-          background: '#f5f5f5', borderRadius: 6, fontSize: 13,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-        }}>
-          {result}
-        </pre>
-      )}
-    </div>
-  )
-}
-
-// ─── 메인 페이지 ─────────────────────────────────────────────────
-
-export default function Workspace() {
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
-  const user = useAuthStore(s => s.user)
-
-  // 키워드 목록
-  const [items, setItems] = useState<KeywordItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [loadingPrev, setLoadingPrev] = useState(false)
-  const [minPage, setMinPage] = useState(1)
-  const [maxPage, setMaxPage] = useState(1)
-  const [selected, setSelected] = useState<KeywordItem | null>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-
-  // 포커스/토큰
-  const [isCenterFocused, setIsCenterFocused] = useState(false)
-  const [selectedTokenIdx, setSelectedTokenIdx] = useState(-1)
-
-  // 핫키
-  const [hotkeys, setHotkeys] = useState<Record<string, string>>(기본핫키맵)
-  const [hotkeyModalOpen, setHotkeyModalOpen] = useState(false)
-
-  // 하단 탭
-  const [activeTab, setActiveTab] = useState('morpheme')
-  const [dicRefreshKey, setDicRefreshKey] = useState(0)
-  const [thesaurusSearch, setThesaurusSearch] = useState('')
-  const [morphPrefillKw, setMorphPrefillKw] = useState('')
-  const [morphTrigger, setMorphTrigger] = useState(0)
-
-  // AI분석
-  const [aiKeyword, setAiKeyword] = useState('')
-
-  // 작업이력
-  const historyRef = useRef<WorkHistoryRef>(null)
-
-  // ─── 키워드 목록 ────────────────────────────────────────────
-
-  const 목록초기화 = useCallback(async () => {
-    if (!selectedWorkspace || !selectedDomain || !user) return
-    setLoading(true)
-    try {
-      const { data } = await assignmentApi.목록(
-        selectedWorkspace, selectedDomain, 'assigned', 1, PAGE_SIZE, user.user_id,
-      )
-      setItems(data.items || [])
-      setTotal(data.total || 0)
-      setMinPage(1)
-      setMaxPage(1)
-    } catch {
-      setItems([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }, [selectedWorkspace, selectedDomain, user])
-
-  const 다음페이지로드 = useCallback(async () => {
-    if (loadingMore || loading) return
-    if (items.length >= total) return
-    const nextPage = maxPage + 1
-    setLoadingMore(true)
-    try {
-      const { data } = await assignmentApi.목록(
-        selectedWorkspace!, selectedDomain!, 'assigned', nextPage, PAGE_SIZE, user!.user_id,
-      )
-      if ((data.items || []).length > 0) {
-        setItems(prev => [...prev, ...(data.items || [])])
-        setMaxPage(nextPage)
-        setTotal(data.total || 0)
-      }
-    } catch { /* 무시 */ } finally {
-      setLoadingMore(false)
-    }
-  }, [loadingMore, loading, items.length, total, maxPage, selectedWorkspace, selectedDomain, user])
-
-  const 이전페이지로드 = useCallback(async () => {
-    if (loadingPrev || loading || minPage <= 1) return
-    const prevPage = minPage - 1
-    const prevScrollHeight = listRef.current?.scrollHeight || 0
-    setLoadingPrev(true)
-    try {
-      const { data } = await assignmentApi.목록(
-        selectedWorkspace!, selectedDomain!, 'assigned', prevPage, PAGE_SIZE, user!.user_id,
-      )
-      if ((data.items || []).length > 0) {
-        setItems(prev => [...(data.items || []), ...prev])
-        setMinPage(prevPage)
-        requestAnimationFrame(() => {
-          if (listRef.current) {
-            const newScrollHeight = listRef.current.scrollHeight
-            listRef.current.scrollTop += newScrollHeight - prevScrollHeight
-          }
-        })
-      }
-    } catch { /* 무시 */ } finally {
-      setLoadingPrev(false)
-    }
-  }, [loadingPrev, loading, minPage, selectedWorkspace, selectedDomain, user])
-
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    if (scrollHeight - scrollTop - clientHeight < 80) 다음페이지로드()
-    if (scrollTop < 80 && minPage > 1) 이전페이지로드()
-  }, [다음페이지로드, 이전페이지로드, minPage])
-
-  useEffect(() => {
-    목록초기화()
-    setSelected(null)
-    setSelectedTokenIdx(-1)
-  }, [selectedWorkspace, selectedDomain])
-
-  // ─── 토큰 ───────────────────────────────────────────────────
-
-  const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
-  const selectableTokens = tokens.filter(t => !t.lineBreak)
-  const selectedWord = selectedTokenIdx >= 0 && selectedTokenIdx < selectableTokens.length
-    ? selectableTokens[selectedTokenIdx].text : ''
-
-  // ─── 핫키 로드 ──────────────────────────────────────────────
-
-  useEffect(() => {
-    workspaceAPI.getHotkeys()
-      .then(({ data }) => {
-        if (data && typeof data === 'object') {
-          setHotkeys(prev => ({ ...prev, ...data }))
-        }
-      })
-      .catch(() => { /* 기본값 사용 */ })
   }, [])
 
-  // ─── 핫키 핸들러 ────────────────────────────────────────────
+  const 폴링종료 = async (wsName: string) => {
+    clearInterval(폴링ref.current[wsName])
+    delete 폴링ref.current[wsName]
+    set복사진행중(prev => {
+      const next = { ...prev }
+      delete next[wsName]
+      return next
+    })
+    await 목록조회()
+  }
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  const 폴링시작 = (wsName: string) => {
+    if (폴링ref.current[wsName]) return
+    폴링ref.current[wsName] = setInterval(async () => {
+      try {
+        const res = await workspaceAPI.진행률조회(wsName)
+        const st = res.data?.status
+        if (st === 'done') {
+          const elapsed = res.data?.elapsed
+          const fileCount = res.data?.file_count
+          const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
+          message.success(`연결 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
+          await 폴링종료(wsName)
+          return
+        }
+        if (st === 'idle' || st === 'error') {
+          if (st === 'error') message.error(`연결 실패: ${res.data?.message || '알 수 없는 오류'}`)
+          await 폴링종료(wsName)
+          return
+        }
+        const percent: number = res.data?.percent ?? 0
+        set복사진행중(prev => ({ ...prev, [wsName]: percent }))
+        if (percent >= 100) {
+          await 폴링종료(wsName)
+        }
+      } catch {
+        await 폴링종료(wsName)
+      }
+    }, 2000)
+  }
 
-    const encoded = encodeKeyEvent(e)
-    const actionMap = Object.entries(hotkeys).reduce<Record<string, string>>(
-      (acc, [action, key]) => { acc[key] = action; return acc },
-      {},
-    )
-    const action = actionMap[encoded]
-    if (!action) return
-
-    // Home(focusAnalysis)는 항상 동작
-    if (action === 'focusAnalysis') {
-      e.preventDefault()
-      setIsCenterFocused(true)
+  const 생성핸들러 = async () => {
+    if (!새이름.trim()) {
+      message.warning('이름을 입력하세요')
       return
     }
-
-    // 나머지 핫키는 포커스 모드에서만
-    if (!isCenterFocused) return
-    e.preventDefault()
-
-    switch (action) {
-      case 'prevKeyword': {
-        if (!items.length) break
-        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx > 0 ? curIdx - 1 : 0
-        setSelected(items[newIdx])
-        setSelectedTokenIdx(-1)
-        break
-      }
-      case 'nextKeyword': {
-        if (!items.length) break
-        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
-        setSelected(items[newIdx])
-        setSelectedTokenIdx(-1)
-        break
-      }
-      case 'prevAnalysis': {
-        if (!selectableTokens.length) break
-        setSelectedTokenIdx(prev => prev > 0 ? prev - 1 : 0)
-        break
-      }
-      case 'nextAnalysis': {
-        if (!selectableTokens.length) break
-        setSelectedTokenIdx(prev =>
-          prev < selectableTokens.length - 1 ? prev + 1 : selectableTokens.length - 1
-        )
-        break
-      }
-      case 'registerUdic':
-      case 'registerCndic':
-      case 'registerThesaurus': {
-        if (!selectedWord || !selectedDomain) break
-        const dicType: DicType = action === 'registerUdic' ? 'udic'
-          : action === 'registerCndic' ? 'cndic' : 'thesaurus'
-        if (dicType === 'thesaurus') {
-          setActiveTab('thesaurus')
-          setThesaurusSearch(selectedWord)
-        } else {
-          클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
-            .then(() => {
-              message.success(`${사전설정[dicType].title}에 "${selectedWord}" 등록`)
-              setDicRefreshKey(prev => prev + 1)
-              if (selectedWorkspace && selectedDomain) {
-                workspaceAPI.addWorkHistory({
-                  workspace: selectedWorkspace, domain: selectedDomain,
-                  action: `${사전설정[dicType].title} 등록`, keyword: selectedWord,
-                })
-                historyRef.current?.reload()
-              }
-            })
-            .catch(() => message.error('등록 실패'))
-        }
-        break
-      }
-      case 'analyzeKeyword': {
-        const kw = selectedWord || selected?.keyword
-        if (kw) {
-          setActiveTab('morpheme')
-          setMorphPrefillKw(kw)
-          setMorphTrigger(prev => prev + 1)
-        }
-        break
-      }
-      case 'tabUdic': setActiveTab('udic'); break
-      case 'tabCndic': setActiveTab('cndic'); break
-      case 'tabThesaurus': setActiveTab('thesaurus'); break
-      case 'tabMorpheme': setActiveTab('morpheme'); break
-      case 'aiAnalysis': {
-        const kw = selectedWord || selected?.keyword
-        if (kw) setAiKeyword(kw)
-        break
-      }
-      case 'undoHistory': {
-        historyRef.current?.undoLatest()
-        break
-      }
+    set생성로딩(true)
+    try {
+      await workspaceAPI.워크스페이스생성(새이름.trim(), 새색상)
+      message.success(`워크스페이스 "${새이름}" 생성 완료`)
+      set새이름('')
+      set새색상(null)
+      await 목록조회()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '생성 실패')
+    } finally {
+      set생성로딩(false)
     }
-  }, [hotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace])
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleKeyDown])
-
-  // ─── 핫키 저장 ──────────────────────────────────────────────
-
-  const handleSaveHotkeys = useCallback((newHotkeys: Record<string, string>) => {
-    setHotkeys(prev => ({ ...prev, ...newHotkeys }))
-    workspaceAPI.saveHotkeys(newHotkeys)
-      .then(() => message.success('핫키 설정 저장 완료'))
-      .catch(() => message.error('핫키 설정 저장 실패'))
-  }, [])
-
-  // ─── Guard ──────────────────────────────────────────────────
-
-  if (!selectedWorkspace || !selectedDomain) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <Text type="secondary">워크스페이스와 도메인을 먼저 선택하세요.</Text>
-      </div>
-    )
   }
 
-  // ─── 렌더링 ─────────────────────────────────────────────────
+  const 삭제핸들러 = async (name: string) => {
+    try {
+      await workspaceAPI.워크스페이스삭제(name)
+      message.success(`워크스페이스 "${name}" 삭제 완료`)
+      await 목록조회()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '삭제 실패')
+    }
+  }
+
+  const 연결확인핸들러 = async () => {
+    if (!연결팝업WS || !선택도메인) {
+      message.warning('도메인을 선택하세요')
+      return
+    }
+    const wsName = 연결팝업WS
+    try {
+      // 즉시 UI에 진행률 0% 표시 (서버 응답 전)
+      set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
+      set연결팝업WS(null)
+      set선택도메인(null)
+      await workspaceAPI.도메인연결(wsName, 선택도메인)
+      message.success(`"${wsName}" 도메인 연결 시작`)
+      폴링시작(wsName)
+      await 목록조회()
+    } catch (err: any) {
+      // 실패 시 progress 제거
+      set복사진행중(prev => {
+        const next = { ...prev }
+        delete next[wsName]
+        return next
+      })
+      message.error(err.response?.data?.detail || '연결 실패')
+    }
+  }
+
+  const 해제핸들러 = async (wsName: string) => {
+    try {
+      await workspaceAPI.워크스페이스해제(wsName)
+      // 선택된 워크스페이스를 연결해제하면 선택도 해제 + 테마 초기화
+      if (selectedWorkspace === wsName) {
+        clearWorkspace()
+      }
+      message.success(`"${wsName}" 연결해제 완료`)
+      await 목록조회()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '연결해제 실패')
+    }
+  }
+
+  const 선택해제핸들러 = () => {
+    clearWorkspace()
+    message.success('워크스페이스 선택 해제')
+  }
+
+  const 초기화핸들러 = async (wsName: string, domain: string) => {
+    try {
+      await assignmentApi.초기화(wsName, domain)
+      message.success('초기화 완료')
+      useWorkspaceStore.getState().setFrozen(false)
+      useWorkspaceStore.getState().setAssigned(false)
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '초기화 실패')
+    }
+  }
+
+  const 색상변경핸들러 = async (wsName: string, color: string) => {
+    try {
+      await workspaceAPI.색상변경(wsName, color)
+      set색상팝업WS(null)
+      if (selectedWorkspace === wsName) {
+        const ws = 목록.find(w => w.name === wsName)
+        if (ws?.domain) setWorkspace(wsName, ws.domain, color)
+      }
+      await 목록조회()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '색상 변경 실패')
+    }
+  }
+
+  const getCardStyle = (ws: 워크스페이스항목): React.CSSProperties => {
+    const isSelected = selectedWorkspace === ws.name
+    const themeColor = ws.color
+    if (isSelected) {
+      const bg = themeColor || '#1a1a2e'
+      return {
+        border: `2px solid ${bg}`,
+        background: bg,
+        color: '#fff',
+        boxShadow: `0 0 14px ${bg}88`,
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (ws.status === 'FAILED') {
+      return {
+        border: '1px solid #ff4d4f',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (ws.status === 'CONNECTING') {
+      return {
+        border: `1px solid ${themeColor || '#faad14'}`,
+        boxShadow: '0 0 8px rgba(250, 173, 20, 0.3)',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (themeColor) {
+      return {
+        border: ws.status === 'USED' ? `1px solid ${themeColor}` : `1px dashed ${themeColor}`,
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    if (ws.status === 'USED') {
+      return {
+        border: '1px solid #1677ff',
+        transition: 'all 0.3s ease',
+        animation: 'wsCardFadeIn 0.4s ease',
+      }
+    }
+    return {
+      border: '1px dashed #d9d9d9',
+      transition: 'all 0.3s ease',
+      animation: 'wsCardFadeIn 0.4s ease',
+    }
+  }
 
   return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}
-      onClick={() => setIsCenterFocused(false)}
-    >
-      {/* 배너 */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '8px 16px', marginBottom: 8,
-        background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderRadius: 6,
-      }}>
-        <Title level={4} style={{ margin: 0 }}>📋 작업실</Title>
-        <Button
-          icon={<SettingOutlined />}
-          onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
-        >
-          핫키설정
-        </Button>
-      </div>
+    <div style={{ padding: '0 0 24px' }}>
+      <style>{`
+        @keyframes wsCardFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
-      {/* 상단 3컬럼 */}
-      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0, marginBottom: 12 }}>
-        {/* 좌: 키워드 목록 */}
-        <Card
-          title={`키워드(${total}건)`}
-          size="small"
-          style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
-        >
-          <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
-            {loadingPrev && (
-              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
-            )}
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-            ) : items.map(record => (
-              <div
-                key={record.id}
-                onClick={(e) => { e.stopPropagation(); setSelected(record); setSelectedTokenIdx(-1) }}
-                style={{
-                  padding: '6px 12px', cursor: 'pointer',
-                  background: selected?.id === record.id ? '#e6f4ff' : undefined,
-                  borderBottom: '1px solid #f0f0f0',
-                  fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
+      <Title level={3}>워크스페이스</Title>
+
+      {isSuper && (
+        <Card style={{ marginBottom: 16, animation: 'wsCardFadeIn 0.3s ease' }}>
+          <Space direction="vertical" size={10}>
+            <Space>
+              <Input
+                placeholder="워크스페이스 이름"
+                value={새이름}
+                onChange={e => set새이름(e.target.value)}
+                onPressEnter={생성핸들러}
+                style={{ width: 200 }}
+              />
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={생성핸들러}
+                loading={생성로딩}
               >
-                {record.keyword}
-              </div>
-            ))}
-            {loadingMore && (
-              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
-            )}
-          </div>
+                생성
+              </Button>
+            </Space>
+            {/* 색상 선택 (생성 시) — ColorPicker */}
+            <Space size={8} align="center">
+              <Text type="secondary" style={{ fontSize: 12 }}>색상:</Text>
+              <ColorPicker
+                value={새색상 || '#1a1a2e'}
+                onChange={(color) => set새색상(color.toHexString())}
+                presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                size="small"
+              />
+              {새색상 && (
+                <div style={{
+                  width: 20, height: 20, borderRadius: 4,
+                  background: 새색상, border: '1px solid #d9d9d9',
+                }} />
+              )}
+            </Space>
+          </Space>
         </Card>
+      )}
 
-        {/* 중: 분석결과 */}
-        <Card
-          title="분석결과"
-          size="small"
-          style={{
-            flex: 1, display: 'flex', flexDirection: 'column',
-            cursor: 'default', transition: 'all 0.3s ease',
-            ...(isCenterFocused ? {
-              boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-              background: '#FFF9C4',
-              border: '2px solid #FFF176',
-              transform: 'translateY(-2px)',
-            } : {}),
-          }}
-          styles={{ body: { flex: 1, overflow: 'auto', padding: 16 } }}
-          onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
-        >
-          {selected ? (
-            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-              {tokens.map((token, i) => {
-                if (token.lineBreak) return <br key={`br-${i}`} />
-                const selIdx = selectableTokens.findIndex(t => t === token)
-                const isSelected = selIdx === selectedTokenIdx
-                return (
-                  <span
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setSelectedTokenIdx(selIdx); setIsCenterFocused(true) }}
+      <Spin spinning={로딩}>
+        <Row gutter={[16, 16]}>
+          {목록.map(ws => {
+            const isSelected = selectedWorkspace === ws.name
+            const progressPercent = 복사진행중[ws.name]
+            const isInProgress = progressPercent !== undefined || ws.status === 'CONNECTING'
+
+            return (
+              <Col xs={24} sm={12} key={ws.name}>
+                <Card style={getCardStyle(ws)} styles={{ body: { padding: 16 } }}>
+                  {/* 복사 진행률 오버레이 */}
+                  {isInProgress && (
+                    <div style={{ marginBottom: 10 }}>
+                      <Progress
+                        percent={progressPercent ?? 0}
+                        size="small"
+                        status="active"
+                        format={p => `${p}%`}
+                      />
+                    </div>
+                  )}
+
+                  {/* 카드 헤더 */}
+                  <div
                     style={{
-                      cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
-                      transition: 'background 0.15s',
-                      ...(isSelected ? { background: '#b3d9ff', fontWeight: 600 } : {}),
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 10,
                     }}
                   >
-                    {token.text}
-                  </span>
-                )
-              })}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <Text type="secondary">좌측에서 키워드를 선택하세요.</Text>
-            </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {ws.color && (
+                        <div
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: 3,
+                            background: ws.color,
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <Text strong style={{ fontSize: 15, color: isSelected ? '#fff' : undefined }}>
+                        {ws.name}
+                      </Text>
+                    </div>
+                    {ws.status === 'CONNECTING' ? (
+                      <Badge status="warning" text={<Text style={{ color: '#faad14', fontSize: 12 }}>연결중</Text>} />
+                    ) : ws.status === 'FAILED' ? (
+                      <Badge status="error" text={<Text style={{ color: '#ff4d4f', fontSize: 12 }}>연결실패</Text>} />
+                    ) : isSelected ? (
+                      <Badge
+                        status="success"
+                        text={
+                          <Text style={{ color: '#fff', fontSize: 12 }}>
+                            선택됨
+                          </Text>
+                        }
+                      />
+                    ) : ws.status === 'USED' ? (
+                      <Badge status="processing" text={<Text style={{ fontSize: 12 }}>연결됨</Text>} />
+                    ) : (
+                      <Badge status="default" text={<Text style={{ color: '#999', fontSize: 12 }}>유휴</Text>} />
+                    )}
+                  </div>
+
+                  {/* 도메인 + 연결자 (한 줄) */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                    minHeight: 22,
+                  }}>
+                    <div>
+                      {ws.domain ? (
+                        <Badge color={isSelected ? 'white' : 'blue'} text={<Text style={{ fontSize: 13, color: isSelected ? '#fff' : undefined }}>{ws.domain}</Text>} />
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
+                          연결된 도메인 없음
+                        </Text>
+                      )}
+                    </div>
+                    {ws.connected_by && (
+                      <Text type="secondary" style={{ fontSize: 11, flexShrink: 0, marginLeft: 8, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
+                        연결: {ws.connected_by}
+                      </Text>
+                    )}
+                  </div>
+
+                  {/* 버튼 영역 */}
+                  <Space size={6} wrap>
+                    {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
+                      <>
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<LinkOutlined />}
+                          disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING')}
+                          onClick={() => {
+                            set연결팝업WS(ws.name)
+                            set선택도메인(null)
+                          }}
+                        >
+                          연결
+                        </Button>
+                        <ColorPicker
+                          value={ws.color || '#1a1a2e'}
+                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
+                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                          size="small"
+                        >
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                            색상
+                          </Button>
+                        </ColorPicker>
+                        {isSuper && (
+                          <Popconfirm
+                            title={`"${ws.name}" 워크스페이스를 삭제하시겠습니까?`}
+                            onConfirm={() => 삭제핸들러(ws.name)}
+                            okText="삭제"
+                            cancelText="취소"
+                          >
+                            <Button size="small" danger icon={<DeleteOutlined />}>
+                              삭제
+                            </Button>
+                          </Popconfirm>
+                        )}
+                      </>
+                    )}
+
+                    {ws.status === 'USED' && (
+                      <>
+                        {isSelected ? (
+                          <Button
+                            size="small"
+                            icon={<CloseCircleOutlined />}
+                            onClick={선택해제핸들러}
+                          >
+                            선택해제
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<CheckCircleOutlined />}
+                              disabled={!currentUser}
+                              onClick={() => ws.domain && setWorkspace(ws.name, ws.domain, ws.color)}
+                            >
+                              선택
+                            </Button>
+                            <Popconfirm
+                              title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
+                              onConfirm={() => 해제핸들러(ws.name)}
+                              okText="연결해제"
+                              okButtonProps={{ danger: true }}
+                              cancelText="취소"
+                            >
+                              <Button size="small" icon={<DisconnectOutlined />}>
+                                연결해제
+                              </Button>
+                            </Popconfirm>
+                          </>
+                        )}
+                        <ColorPicker
+                          value={ws.color || '#1a1a2e'}
+                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
+                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                          size="small"
+                        >
+                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', borderColor: ws.color || '#1a1a2e', ...(isSelected ? { outline: '2px solid #fff' } : {}) }}>
+                            색상
+                          </Button>
+                        </ColorPicker>
+                        {ws.domain && (
+                          <Popconfirm
+                            title="프리징 상태를 해제하고 작업 데이터를 삭제합니다. 계속하시겠습니까?"
+                            onConfirm={() => 초기화핸들러(ws.name, ws.domain!)}
+                            okText="초기화"
+                            cancelText="취소"
+                            okButtonProps={{ danger: true }}
+                          >
+                            <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }}>
+                              초기화
+                            </Button>
+                          </Popconfirm>
+                        )}
+                        {isSuper && (
+                          <Button size="small" danger icon={<DeleteOutlined />} disabled>
+                            삭제
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </Space>
+                </Card>
+              </Col>
+            )
+          })}
+
+          {목록.length === 0 && !로딩 && (
+            <Col span={24}>
+              <Card>
+                <Empty description="워크스페이스가 없습니다" />
+              </Card>
+            </Col>
           )}
-        </Card>
+        </Row>
+      </Spin>
 
-        {/* 우: AI분석 + 작업이력 */}
-        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Card
-            title="AI 분석"
-            size="small"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
-            styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
-          >
-            <AIAnalysis keyword={aiKeyword} />
-          </Card>
-          <Card
-            title="작업이력"
-            size="small"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
-            styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
-          >
-            <WorkHistory
-              ref={historyRef}
-              workspace={selectedWorkspace}
-              domain={selectedDomain}
-            />
-          </Card>
-        </div>
-      </div>
-
-      {/* 하단 탭 */}
-      <Card
-        size="small"
-        style={{ height: 320, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
+      {/* 도메인 연결 모달 */}
+      <Modal
+        title={`도메인 연결 — ${연결팝업WS}`}
+        open={!!연결팝업WS}
+        onOk={연결확인핸들러}
+        onCancel={() => {
+          set연결팝업WS(null)
+          set선택도메인(null)
+        }}
+        okText="연결"
+        cancelText="취소"
+        okButtonProps={{ disabled: !선택도메인 }}
       >
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: 'morpheme',
-              label: '키워드 분석',
-              children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
-            },
-            {
-              key: 'udic',
-              label: '사용자사전',
-              children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
-            },
-            {
-              key: 'cndic',
-              label: '복합명사사전',
-              children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} />,
-            },
-            {
-              key: 'thesaurus',
-              label: '유사어사전',
-              children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
-            },
-          ]}
+        <Select
+          style={{ width: '100%', marginTop: 8 }}
+          placeholder="연결할 도메인 선택"
+          options={도메인목록.map(d => {
+            const 연결됨WS = 목록.find(ws => ws.domain === d && ws.status === 'USED')
+            return {
+              label: 연결됨WS ? `${d} (${연결됨WS.name}에 연결됨)` : d,
+              value: d,
+              disabled: !!연결됨WS,
+            }
+          })}
+          onChange={v => set선택도메인(v)}
+          value={선택도메인}
         />
-      </Card>
+      </Modal>
 
-      {/* 핫키 설정 모달 */}
-      <HotkeySettings
-        open={hotkeyModalOpen}
-        onClose={() => setHotkeyModalOpen(false)}
-        onSave={handleSaveHotkeys}
-      />
     </div>
   )
 }

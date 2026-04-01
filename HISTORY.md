@@ -1,5 +1,19 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-01 — KnowledgeWork.tsx 작업실 8대 기능 이전 (파일 대상 오류 수정)
+
+### 수정 내용
+- **Workspace.tsx**: 6ed616a 원본 복원 (작업실 8대 기능 잘못 적용 수정)
+- **KnowledgeWork.tsx**: 작업실 8대 기능 이전 적용 (배너+포커스스타일+레이아웃+AI분석+작업이력+단축키15개+핫키설정)
+- **dist/**: 프론트엔드 재빌드 반영
+
+### 배경
+- 2eae0c4 커밋에서 작업실 8대 기능이 Workspace.tsx에 잘못 적용됨
+- KnowledgeWork.tsx(지식관리 작업실)가 실제 대상 파일이었으나 Workspace.tsx(워크스페이스 관리)에 적용하는 파일 대상 오류 발생
+- Workspace.tsx를 6ed616a 원본으로 복원하고, KnowledgeWork.tsx에 8대 기능 재적용
+
+---
+
 ## 2026-04-01 — 작업실(Workspace) 8대 기능 구현
 
 ### 수정 내용
