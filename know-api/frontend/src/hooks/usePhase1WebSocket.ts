@@ -12,7 +12,7 @@ export interface LogEntry {
   ts: string
 }
 
-export function usePhase1WebSocket(runId: string | null) {
+export function usePhase1WebSocket(runId: string | null, startStep?: number) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [currentStep, setCurrentStep] = useState(-1)
   const [stepStatuses, setStepStatuses] = useState<Record<number, string>>({})
@@ -21,6 +21,7 @@ export function usePhase1WebSocket(runId: string | null) {
   const wsRef = useRef<WebSocket | null>(null)
   const doneRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!runId) return
@@ -31,7 +32,10 @@ export function usePhase1WebSocket(runId: string | null) {
     setStepStatuses(prev => {
       const preserved: Record<number, string> = {}
       for (const [k, v] of Object.entries(prev)) {
-        if (v === 'completed') preserved[Number(k)] = v
+        const stepNum = Number(k)
+        if (v === 'completed' && (startStep === undefined || stepNum < startStep)) {
+          preserved[stepNum] = v
+        }
       }
       return preserved
     })
@@ -46,6 +50,7 @@ export function usePhase1WebSocket(runId: string | null) {
       doneRef.current = true
       setIsCompleted(true)
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     }
 
     const applyLogs = (entries: LogEntry[]) => {
@@ -86,6 +91,16 @@ export function usePhase1WebSocket(runId: string | null) {
       return false
     }
 
+    // 30초 타임아웃 fallback — WS 메시지 없을 시 API로 최종 상태 확인
+    const scheduleTimeout = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (doneRef.current || cancelled) return
+      timeoutRef.current = setTimeout(async () => {
+        if (doneRef.current || cancelled) return
+        await fetchLogs()
+      }, 30000)
+    }
+
     // DB 폴링 — WebSocket 메시지 누락 시 fallback (2초 간격)
     const startPoll = () => {
       if (pollRef.current) return
@@ -106,6 +121,7 @@ export function usePhase1WebSocket(runId: string | null) {
       ws.onopen = () => {
         setIsConnected(true)
         retryCount = 0
+        scheduleTimeout()
       }
 
       ws.onmessage = (e) => {
@@ -116,6 +132,8 @@ export function usePhase1WebSocket(runId: string | null) {
           setStepStatuses(prev => ({ ...prev, [data.step_num]: data.status }))
           if ((data.status === 'completed' && data.step_num === -1) || data.status === 'failed') {
             doMarkDone()
+          } else {
+            scheduleTimeout()
           }
         } catch { /* ignore */ }
       }
@@ -145,6 +163,7 @@ export function usePhase1WebSocket(runId: string | null) {
     init()
     return () => {
       cancelled = true
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       wsRef.current?.close()
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }

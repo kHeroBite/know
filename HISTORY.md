@@ -1,5 +1,32 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 5건 UI/안정성 수정: 고정높이 + WS타임아웃 + 이력유지 + 깜빡임방지 + startStep
+
+### 수정 내용
+
+**건1: 2~5단계 설정 파라미터 없음 확인** (코드 변경 없음)
+- 현재 2~5단계에 별도 설정 파라미터가 없음을 확인 — 변경 불필요
+
+**건2: 단계 파티션 고정높이 + 로그패널 높이 맞춤** (`know-api/frontend/src/components/phase1/ControlPanel.tsx`)
+- 각 단계 파티션 고정높이 44px 적용 → 단계 수 변해도 레이아웃 안정
+- 로그패널 높이를 단계 파티션과 맞춤
+
+**건3: WebSocket 30초 타임아웃 fallback** (`know-api/frontend/src/hooks/usePhase1WebSocket.ts`)
+- WS 메시지 없을 시 30초 후 API(`/preprocess/logs/{runId}`)로 최종 상태 확인
+- 실행 중 WS가 끊어져도 polling fallback으로 완료 감지 보장
+
+**건4: 전체실행 시 이전 이력 유지** (`know-api/frontend/src/pages/Phase1Pipeline.tsx`)
+- 전체실행 시 이전 실행 결과(건수/경과시간) 보존 — 새 실행 결과로 점진적 갱신
+
+**건5: 개별실행 시 이후 단계 깜빡임 방지** (`know-api/frontend/src/hooks/usePhase1WebSocket.ts`, `know-api/frontend/src/pages/Phase1Pipeline.tsx`)
+- `startStep` 파라미터 도입 — 개별 실행 시 해당 단계 이전 completed 상태 즉시 보존
+- 이후 단계만 리셋하여 실행 전 깜빡임(상태 초기화→재로드) 방지
+
+### 특이사항
+- 프론트엔드 빌드(dist) 포함
+
+---
+
 ## 2026-04-02 — 4건 수정: 프리징버튼 이동 + 복사진행률 message + 필터모드 리디자인 + 정제순서유지 (커밋: 29c1a36+)
 
 ### 수정 내용

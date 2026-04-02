@@ -15,7 +15,8 @@ const { Title } = Typography
 
 export default function Phase1Pipeline() {
   const [runId, setRunId] = useState<string | null>(null)
-  const ws = usePhase1WebSocket(runId)
+  const [runStartStep, setRunStartStep] = useState(1)
+  const ws = usePhase1WebSocket(runId, runStartStep)
   const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
@@ -126,14 +127,13 @@ export default function Phase1Pipeline() {
         domain: selectedDomain ?? '',
         ...filterParams,
       } as any)
+      setRunStartStep(params.start_step)
       setRunId(data.run_id)
       // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
       if (params.start_step === 1 && params.end_step === 5) {
         setFileTabs({})
         setActiveViewTab(null)
         setFileStatus({})
-        setStepElapsed({})
-        setStepOutputs({})
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
@@ -279,7 +279,7 @@ export default function Phase1Pipeline() {
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
             </div>
-            <div style={{ padding: 16 }}>
+            <div style={{ padding: 16, minHeight: 450 }}>
               <LogPanel
                 logs={ws.logs}
                 fileTabs={fileTabs}

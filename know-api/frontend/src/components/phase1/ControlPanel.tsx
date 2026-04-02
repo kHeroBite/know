@@ -125,11 +125,12 @@ export default function ControlPanel({
                 background: running ? `${step.color}08` : completed ? '#f6ffed' : failed ? '#fff2f0' : '#fafafa',
                 border: `1px solid ${running ? step.color : completed ? '#b7eb8f' : failed ? '#ffa39e' : '#f0f0f0'}`,
                 borderBottom: step.num === 1 ? 'none' : undefined,
+                minHeight: 44,
               }}>
                 <Tag color={step.color} style={{ margin: 0, minWidth: 80, textAlign: 'center' }}>
                   {step.name}
                 </Tag>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
                   {completed && (
                     <>
                       <Text type="success"><CheckCircleOutlined /> 완료</Text>
