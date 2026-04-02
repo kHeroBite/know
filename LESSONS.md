@@ -156,6 +156,13 @@ elif os.path.isdir(path):
 **재발방지**: ko/kdev 스킬에 "Agent spawn 시 subagent_type 항상 명시 필수 (general-purpose 포함), 빈 값 금지" 규칙 추가. MEMORY.md 기록만으로는 방지 불충분 확인.
 **Level**: 2 (MEMORY.md + 스킬 규칙 강화 필요)
 
+### L-022: 역라우팅 1회 — 이력/서비스 코드 action_type 상수값 사전 확인 누락 (2026-04-02)
+
+**현상**: work_history_service.py 이력 undo 구현 시 기존 코드의 action_type 상수값(`'add'` 등)을 사전 확인하지 않고 추정하여 작성 → 역라우팅 1회 발생.
+**원인**: 서비스 코드 수정 시 기존 코드의 열거값/상수를 grep으로 먼저 확인하지 않고 추측으로 작성.
+**재발방지**: 이력/서비스 코드에서 action_type, status, 상태 열거값 등 상수를 사용하는 코드 작성 시, 반드시 기존 코드에서 grep으로 실제 값 먼저 확인. 추정 금지.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -172,5 +179,6 @@ elif os.path.isdir(path):
 | L-014 | jiana Java 직접 호출 (EUC-KR 필수) | LESSONS | LESSONS.md | 2026-03-31 | ✅ |
 | L-315 | 에이전트 무응답 타임아웃 즉시 강제 | ko SKILL | ko/SKILL.md | 2026-04-01 | ✅ |
 | L-017 | 팀에이전트 spawn subagent_type 빈 값 차단 | MEMORY | MEMORY.md | 2026-04-01 | 🔄 재발 (L-021) |
-| L-021 | Agent spawn subagent_type 빈 값 3회 재발 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-02 | ⬜ |
+| L-021 | Agent spawn subagent_type 빈 값 3회 재발 | LESSONS+MEMORY+skill | LESSONS.md+MEMORY.md+ko/SKILL.md | 2026-04-02 | ✅ |
+| L-022 | 역라우팅 1회 — action_type 상수값 사전 확인 누락 | LESSONS | LESSONS.md | 2026-04-02 | ✅ |
 | L-018 | DB 테이블 부재 OperationalError 미처리 | LESSONS | LESSONS.md | 2026-04-01 | ✅ |

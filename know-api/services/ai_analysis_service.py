@@ -1,10 +1,9 @@
-"""AI분석 웹스크래핑 서비스 — Google/Perplexity 검색."""
+"""AI분석 검색 서비스 — DuckDuckGo Instant Answer API + Wikipedia 한국어 API."""
 from __future__ import annotations
 
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 import httpx
-from bs4 import BeautifulSoup
 
 _TIMEOUT = 10.0
 _HEADERS = {
@@ -16,67 +15,61 @@ _HEADERS = {
 }
 
 
-async def _구글검색(keyword: str) -> dict:
-    """Google 검색 결과 snippet에서 텍스트 추출."""
+async def _덕덕고검색(keyword: str) -> dict:
+    """DuckDuckGo Instant Answer API로 키워드 정보 추출 (JSON, 크롤링 불필요)."""
     try:
-        query = quote_plus(f"{keyword}가 무엇인지 짧게 2줄로 알려달라")
-        url = f"https://www.google.com/search?q={query}"
+        url = (
+            f"https://api.duckduckgo.com/?q={quote(keyword)}"
+            "&format=json&no_html=1&skip_disambig=1&kl=kr-ko"
+        )
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # Google featured snippet / 검색결과 텍스트 추출
-        snippets = []
-        for selector in ["div.BNeawe.s3v9rd", "div.BNeawe", "span.hgKElc", "div.IsZvec"]:
-            elements = soup.select(selector)
-            for el in elements:
-                txt = el.get_text(strip=True)
-                if txt and len(txt) > 10:
-                    snippets.append(txt)
-            if snippets:
-                break
-        if not snippets:
-            # fallback: 모든 검색결과 div
-            for div in soup.find_all("div"):
-                txt = div.get_text(strip=True)
-                if len(txt) > 30 and keyword.lower() in txt.lower():
-                    snippets.append(txt[:200])
+        data = resp.json()
+        # AbstractText: 위키 기반 요약
+        result = data.get("AbstractText") or ""
+        if not result:
+            # RelatedTopics 첫 번째 항목 텍스트 fallback
+            for topic in data.get("RelatedTopics", []):
+                if isinstance(topic, dict) and topic.get("Text"):
+                    result = topic["Text"][:300]
                     break
-        result = snippets[0][:300] if snippets else "검색 결과를 추출할 수 없습니다"
-        return {"result": result, "error": None}
+        if not result:
+            result = f"'{keyword}'에 대한 검색 결과가 없습니다"
+        return {"result": result[:300], "error": None}
     except Exception as e:
         return {"result": None, "error": str(e)}
 
 
-async def _퍼플렉시티검색(keyword: str) -> dict:
-    """Perplexity 검색 결과에서 답변 텍스트 추출."""
+async def _위키피디아검색(keyword: str) -> dict:
+    """Wikipedia 한국어 REST API로 키워드 요약 추출 (영어 fallback 포함)."""
     try:
-        query = quote_plus(keyword)
-        url = f"https://www.perplexity.ai/search?q={query}"
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
-            resp = await client.get(url)
+            # 한국어 Wikipedia 우선
+            ko_url = f"https://ko.wikipedia.org/api/rest_v1/page/summary/{quote(keyword)}"
+            resp = await client.get(ko_url)
+            if resp.status_code == 404:
+                # 영어 Wikipedia fallback
+                en_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(keyword)}"
+                resp = await client.get(en_url)
             resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # Perplexity는 JS 렌더링이 필요해서 정적 HTML에서는 제한적
-        texts = []
-        for tag in soup.find_all(["p", "span", "div"]):
-            txt = tag.get_text(strip=True)
-            if txt and len(txt) > 20:
-                texts.append(txt)
-        result = texts[0][:300] if texts else "Perplexity 결과를 추출할 수 없습니다 (JS 렌더링 필요)"
-        return {"result": result, "error": None}
+        data = resp.json()
+        result = data.get("extract") or data.get("description") or ""
+        if not result:
+            result = f"Wikipedia에서 '{keyword}' 정보를 찾을 수 없습니다"
+        return {"result": result[:300], "error": None}
     except Exception as e:
         return {"result": None, "error": str(e)}
 
 
 async def AI검색(keyword: str) -> dict:
-    """Google + Perplexity 동시 검색."""
+    """DuckDuckGo + Wikipedia 동시 검색. 반환 키는 기존 google/perplexity 유지."""
     import asyncio
-    google_task = asyncio.create_task(_구글검색(keyword))
-    perplexity_task = asyncio.create_task(_퍼플렉시티검색(keyword))
-    google_result = await google_task
-    perplexity_result = await perplexity_task
+    ddg_task = asyncio.create_task(_덕덕고검색(keyword))
+    wiki_task = asyncio.create_task(_위키피디아검색(keyword))
+    ddg_result = await ddg_task
+    wiki_result = await wiki_task
     return {
-        "google": google_result.get("result") if google_result else None,
-        "perplexity": perplexity_result.get("result") if perplexity_result else None,
+        "google": ddg_result.get("result") if ddg_result else None,
+        "perplexity": wiki_result.get("result") if wiki_result else None,
     }

@@ -237,7 +237,7 @@ know-api/
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
 │   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
-│   └── ai_analysis_service.py # AI 분석 서비스 (Google+Perplexity 웹스크래핑)
+│   └── ai_analysis_service.py # AI 분석 서비스 (DuckDuckGo+Wikipedia API — 크롤링 없는 안정적 검색)
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
@@ -257,7 +257,7 @@ know-api/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3컬럼+배너+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력)
+    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력)
     │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (Google+Perplexity 탭)

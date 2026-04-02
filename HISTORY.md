@@ -1,5 +1,36 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 작업실 4건: 스크롤+AI분석+이력undo+레이아웃
+
+### 수정 내용
+
+**건1: 키워드목록 PAGE_SIZE=100 + 인피니티스크롤 복원 + 선택 키워드 자동 중앙 스크롤** (`KnowledgeWork.tsx`)
+- PAGE_SIZE=100으로 확대 + 인피니티스크롤 복원
+- 선택된 키워드가 목록 중앙에 오도록 자동 스크롤
+
+**건2: AI분석 Google/Perplexity 크롤링 → DuckDuckGo/Wikipedia API 교체** (`ai_analysis_service.py`)
+- Google 검색/Perplexity 크롤링 → DuckDuckGo + Wikipedia 공식 API로 교체
+- 크롤링 없이 안정적 AI 분석 정보 제공
+
+**건3: 작업이력 undo 사전삭제 버그 수정** (`work_history_service.py`, `KnowledgeWork.tsx`)
+- action_type='add' 통일 + word fallback 처리
+- undo 시 사전 항목이 잘못 삭제되던 버그 수정
+
+**건4: 화면 3열 레이아웃 재구성** (`KnowledgeWork.tsx`)
+- 좌: 키워드목록, 중: 분석+사전, 우: AI고정+이력grow
+
+### 수정 파일
+- `know-api/frontend/src/pages/KnowledgeWork.tsx` (건1+건3프론트+건4)
+- `know-api/services/ai_analysis_service.py` (건2)
+- `know-api/services/work_history_service.py` (건3)
+- 프론트엔드 빌드(dist) 포함
+
+### 비고
+- 역라우팅 1회 발생: 건3 action_type 불일치 (L-022 기록)
+- ko/SKILL.md Agent spawn subagent_type 규칙 강화 (L-021 반영)
+
+---
+
 ## 2026-04-02 — 작업실 10건 UI/로직 수정
 
 ### 수정 내용

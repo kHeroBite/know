@@ -95,18 +95,22 @@ def 이력취소(db: Session, history_id: int, user_id: str) -> dict:
 
     if dic_type in ("udic", "cndic"):
         tbl = 사전테이블가져오기(domain.upper(), dic_type, meta)
+        # word NULL 시 head_word → tail_word 순서로 fallback
+        word_to_use = row["word"] or row["head_word"] or row["tail_word"]
         try:
             if action_type == "add":
-                # 추가했던 단어를 삭제
-                db.execute(tbl.delete().where(tbl.c._WORD == row["word"]))
+                # 추가했던 단어를 삭제 — NULL = NULL은 SQL에서 FALSE이므로 word_to_use 사용
+                if word_to_use:
+                    db.execute(tbl.delete().where(tbl.c._WORD == word_to_use))
             elif action_type == "delete":
                 # 삭제했던 단어를 복원
-                db.execute(tbl.insert().values(
-                    _WORD=row["word"],
-                    _MEMO=row["memo"],
-                    _USER_ID=user_id,
-                    _UPDATED=datetime.now(),
-                ))
+                if word_to_use:
+                    db.execute(tbl.insert().values(
+                        _WORD=word_to_use,
+                        _MEMO=row["memo"],
+                        _USER_ID=user_id,
+                        _UPDATED=datetime.now(),
+                    ))
         except OperationalError:
             pass  # 테이블 미존재 시 graceful 처리
     elif dic_type == "thesaurus":

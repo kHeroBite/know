@@ -16,7 +16,7 @@ import WorkHistory, { WorkHistoryRef } from '../components/workspace/WorkHistory
 import HotkeySettings from '../components/workspace/HotkeySettings'
 
 const { Text, Title } = Typography
-const PAGE_SIZE = 10
+const PAGE_SIZE = 100
 
 // ─── 핫키 기본값 ────────────────────────────────────────────────
 
@@ -347,6 +347,7 @@ export default function KnowledgeWork() {
   const [maxPage, setMaxPage] = useState(1)
   const [selected, setSelected] = useState<KeywordItem | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const itemRefs = useRef<{[key: number]: HTMLDivElement | null}>({})
 
   // 포커스/토큰
   const [isCenterFocused, setIsCenterFocused] = useState(false)
@@ -476,6 +477,13 @@ export default function KnowledgeWork() {
     }
   }, [selected])
 
+  // 선택 키워드 자동 중앙 스크롤
+  useEffect(() => {
+    if (selected && itemRefs.current[selected.id]) {
+      itemRefs.current[selected.id]!.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [selected])
+
   // ─── 토큰 ───────────────────────────────────────────────────
 
   const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
@@ -587,7 +595,7 @@ export default function KnowledgeWork() {
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
-                  action_type: '유사어사전 등록', dic_type: 'thesaurus', head_word: selectedWord, tail_word: '',
+                  action_type: 'add', dic_type: 'thesaurus', head_word: selectedWord, tail_word: '', word: selectedWord,
                 })
                 historyRef.current?.reload()
               }
@@ -608,7 +616,7 @@ export default function KnowledgeWork() {
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
-                  action_type: `${사전설정[dicType].title} 등록`, dic_type: dicType, head_word: selectedWord,
+                  action_type: 'add', dic_type: dicType, head_word: selectedWord, word: selectedWord,
                 })
                 historyRef.current?.reload()
               }
@@ -688,100 +696,140 @@ export default function KnowledgeWork() {
         </Button>
       </div>
 
-      {/* 상단 3컬럼 */}
-      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0, marginBottom: 12 }}>
-        {/* 좌: 키워드 목록 */}
-        <Card
-          title={`키워드(${total}건)`}
-          size="small"
-          style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
-        >
-          <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
-            {loadingPrev && (
-              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
-            )}
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-            ) : items.map(record => (
-              <div
-                key={record.id}
-                onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true); setViewedKeywordIds(prev => new Set(prev).add(record.id)) }}
-                style={{
-                  padding: '6px 12px', cursor: 'pointer',
-                  background: selected?.id === record.id ? '#e6f4ff'
-                    : registeredKeywordIds.has(record.id) ? '#FFE0E0'
-                    : viewedKeywordIds.has(record.id) || record.status === 'completed' ? '#FFFDE7' : undefined,
-                  borderBottom: '1px solid #f0f0f0',
-                  fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  fontWeight: record.status === 'completed' ? 'normal' : 600,
-                  color: record.status === 'completed' ? '#999' : '#333',
-                }}
-              >
-                {record.keyword}
+      {/* 3컬럼 메인 */}
+      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
+        {/* 좌측열: 키워드목록 + 키워드분석 */}
+        <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Card
+            title={`키워드(${total}건)`}
+            size="small"
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
+          >
+            <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
+              {loadingPrev && (
+                <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
+              )}
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+              ) : items.map(record => (
+                <div
+                  key={record.id}
+                  ref={(el) => { itemRefs.current[record.id] = el }}
+                  onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true); setViewedKeywordIds(prev => new Set(prev).add(record.id)) }}
+                  style={{
+                    padding: '6px 12px', cursor: 'pointer',
+                    background: selected?.id === record.id ? '#e6f4ff'
+                      : registeredKeywordIds.has(record.id) ? '#FFE0E0'
+                      : viewedKeywordIds.has(record.id) || record.status === 'completed' ? '#FFFDE7' : undefined,
+                    borderBottom: '1px solid #f0f0f0',
+                    fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontWeight: record.status === 'completed' ? 'normal' : 600,
+                    color: record.status === 'completed' ? '#999' : '#333',
+                  }}
+                >
+                  {record.keyword}
+                </div>
+              ))}
+              {loadingMore && (
+                <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
+              )}
+            </div>
+          </Card>
+          <Card
+            title={<span>키워드 분석 <KbdKey>{displayTabKey(hotkeys.tabMorpheme)}</KbdKey></span>}
+            size="small"
+            style={{ height: 240, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+            styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
+          >
+            <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />
+          </Card>
+        </div>
+
+        {/* 중앙열: 분석결과 + 사전탭 */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Card
+            title={<span>분석결과 <KbdKey>{displayKey(hotkeys.focusAnalysis)}</KbdKey></span>}
+            size="small"
+            style={{
+              flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+              cursor: 'default', transition: 'all 0.3s ease',
+              ...(isCenterFocused ? {
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                outline: `2px solid ${selectedColor || '#faad14'}`,
+                transform: 'translateY(-2px)',
+              } : {}),
+            }}
+            styles={{ body: { flex: 1, overflow: 'auto', padding: 0 } }}
+            onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
+          >
+            <div style={{
+              padding: 16, minHeight: '100%', transition: 'background-color 0.3s ease',
+              backgroundColor: isCenterFocused ? `${selectedColor || '#faad14'}20` : undefined,
+            }}>
+            {selected ? (
+              <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+                {tokens.map((token, i) => {
+                  if (token.lineBreak) return <br key={`br-${i}`} />
+                  const selIdx = selectableTokens.findIndex(t => t === token)
+                  const isSelected = selIdx === selectedTokenIdx
+                  return (
+                    <span
+                      key={i}
+                      onClick={(e) => { e.stopPropagation(); setSelectedTokenIdx(selIdx); setIsCenterFocused(true) }}
+                      style={{
+                        cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
+                        transition: 'background 0.15s',
+                        ...(isSelected ? { background: '#b3d9ff' } : {}),
+                      }}
+                    >
+                      {token.text}
+                    </span>
+                  )
+                })}
               </div>
-            ))}
-            {loadingMore && (
-              <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Text type="secondary">좌측에서 키워드를 선택하세요.</Text>
+              </div>
             )}
-          </div>
-        </Card>
-
-        {/* 중: 분석결과 */}
-        <Card
-          title={<span>분석결과 <KbdKey>{displayKey(hotkeys.focusAnalysis)}</KbdKey></span>}
-          size="small"
-          style={{
-            flex: 1, display: 'flex', flexDirection: 'column',
-            cursor: 'default', transition: 'all 0.3s ease',
-            ...(isCenterFocused ? {
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              outline: `2px solid ${selectedColor || '#faad14'}`,
-              transform: 'translateY(-2px)',
-            } : {}),
-          }}
-          styles={{ body: { flex: 1, overflow: 'auto', padding: 0 } }}
-          onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
-        >
-          <div style={{
-            padding: 16, minHeight: '100%', transition: 'background-color 0.3s ease',
-            backgroundColor: isCenterFocused ? `${selectedColor || '#faad14'}20` : undefined,
-          }}>
-          {selected ? (
-            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-              {tokens.map((token, i) => {
-                if (token.lineBreak) return <br key={`br-${i}`} />
-                const selIdx = selectableTokens.findIndex(t => t === token)
-                const isSelected = selIdx === selectedTokenIdx
-                return (
-                  <span
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setSelectedTokenIdx(selIdx); setIsCenterFocused(true) }}
-                    style={{
-                      cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
-                      transition: 'background 0.15s',
-                      ...(isSelected ? { background: '#b3d9ff' } : {}),
-                    }}
-                  >
-                    {token.text}
-                  </span>
-                )
-              })}
             </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <Text type="secondary">좌측에서 키워드를 선택하세요.</Text>
-            </div>
-          )}
-          </div>
-        </Card>
+          </Card>
+          <Card
+            size="small"
+            style={{ height: 300, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
+          >
+            <Tabs
+              activeKey={['udic', 'cndic', 'thesaurus'].includes(activeTab) ? activeTab : 'udic'}
+              onChange={setActiveTab}
+              items={[
+                {
+                  key: 'udic',
+                  label: <span>사용자사전 <KbdKey>{displayTabKey(hotkeys.tabUdic)}</KbdKey></span>,
+                  children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
+                },
+                {
+                  key: 'cndic',
+                  label: <span>복합명사사전 <KbdKey>{displayTabKey(hotkeys.tabCndic)}</KbdKey></span>,
+                  children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
+                },
+                {
+                  key: 'thesaurus',
+                  label: <span>유사어사전 <KbdKey>{displayTabKey(hotkeys.tabThesaurus)}</KbdKey></span>,
+                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
+                },
+              ]}
+            />
+          </Card>
+        </div>
 
-        {/* 우: AI분석 + 작업이력 */}
-        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* 우측열: AI분석(~200px 고정) + 작업이력(flex:1) */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
             title={<span>AI 분석 <KbdKey>{displayKey(hotkeys.aiAnalysis)}</KbdKey></span>}
             size="small"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            style={{ height: 200, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
             <AIAnalysis keyword={aiKeyword} />
@@ -789,7 +837,7 @@ export default function KnowledgeWork() {
           <Card
             title={<span>작업이력 <KbdKey>{displayKey(hotkeys.undoHistory)}</KbdKey></span>}
             size="small"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
             <WorkHistory
@@ -800,40 +848,6 @@ export default function KnowledgeWork() {
           </Card>
         </div>
       </div>
-
-      {/* 하단 탭 */}
-      <Card
-        size="small"
-        style={{ height: 320, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
-      >
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: 'morpheme',
-              label: <span>키워드 분석 <KbdKey>{displayTabKey(hotkeys.tabMorpheme)}</KbdKey></span>,
-              children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
-            },
-            {
-              key: 'udic',
-              label: <span>사용자사전 <KbdKey>{displayTabKey(hotkeys.tabUdic)}</KbdKey></span>,
-              children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
-            },
-            {
-              key: 'cndic',
-              label: <span>복합명사사전 <KbdKey>{displayTabKey(hotkeys.tabCndic)}</KbdKey></span>,
-              children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
-            },
-            {
-              key: 'thesaurus',
-              label: <span>유사어사전 <KbdKey>{displayTabKey(hotkeys.tabThesaurus)}</KbdKey></span>,
-              children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
-            },
-          ]}
-        />
-      </Card>
 
       {/* 핫키 설정 모달 */}
       <HotkeySettings
