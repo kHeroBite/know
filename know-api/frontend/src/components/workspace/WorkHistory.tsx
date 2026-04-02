@@ -27,7 +27,7 @@ interface Props {
   onUndo?: (item: WorkHistoryItem) => void
 }
 
-const DIC_LABEL: Record<string, string> = { udic: '사용자사전', cndic: '복합명사', thesaurus: '유사어' }
+const DIC_LABEL: Record<string, string> = { udic: '사용자', cndic: '복합명사', thesaurus: '유사어' }
 const ACT_LABEL: Record<string, string> = { add: '+', delete: '-' }
 
 export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo }, ref) {
@@ -72,13 +72,13 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
     {
       title: '사전',
       dataIndex: 'dic_type',
-      width: 60,
-      render: (v: string) => DIC_LABEL[v] || v,
+      width: 56,
+      render: (v: string) => <span style={{ fontSize: 11 }}>{DIC_LABEL[v] || v}</span>,
     },
     {
-      title: '작업',
       dataIndex: 'action_type',
-      width: 50,
+      width: 28,
+      align: 'center' as const,
       render: (v: string) => ACT_LABEL[v] || v,
     },
     {
@@ -88,9 +88,9 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
       render: (_: unknown, record: WorkHistoryItem) => record.word || record.head_word || '-',
     },
     {
-      title: '',
       key: 'undo',
-      width: 50,
+      width: 32,
+      align: 'center' as const,
       render: (_: unknown, record: WorkHistoryItem) => !record.undone ? (
         <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(record)} />
       ) : null,
@@ -112,7 +112,7 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
       columns={columns}
       rowKey="id"
       pagination={false}
-      scroll={{ y: 240 }}
+      scroll={{ y: 'calc(100vh - 300px)' as any }}
       onRow={(record) => ({
         style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
       })}

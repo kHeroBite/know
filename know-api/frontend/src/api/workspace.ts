@@ -80,5 +80,5 @@ export const workspaceAPI = {
     클라이언트.get('/workspaces/hotkeys'),
 
   saveHotkeys: (hotkeys: Record<string, string>) =>
-    클라이언트.put('/workspaces/hotkeys', hotkeys),
+    클라이언트.put('/workspaces/hotkeys', { hotkeys }),
 }

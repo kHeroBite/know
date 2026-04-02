@@ -44,10 +44,9 @@ def 프롬프트저장(prompt_template: str) -> None:
 async def _덕덕고검색(keyword: str) -> dict:
     """DuckDuckGo Instant Answer API로 키워드 정보 추출 (JSON, 크롤링 불필요)."""
     try:
-        prompt = 프롬프트로드()
-        query = prompt.format(keyword=keyword)
+        # 키워드만 사용 (프롬프트 포함 시 Instant Answer 적중률 저하)
         url = (
-            f"https://api.duckduckgo.com/?q={quote(query)}"
+            f"https://api.duckduckgo.com/?q={quote(keyword)}"
             "&format=json&no_html=1&skip_disambig=1&kl=kr-ko"
         )
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
@@ -91,13 +90,16 @@ async def _위키피디아검색(keyword: str) -> dict:
 
 
 async def AI검색(keyword: str) -> dict:
-    """DuckDuckGo + Wikipedia 동시 검색. 반환 키는 기존 google/perplexity 유지."""
+    """DuckDuckGo + Wikipedia 동시 검색."""
     import asyncio
+    prompt = 프롬프트로드()
+    query = prompt.format(keyword=keyword)
     ddg_task = asyncio.create_task(_덕덕고검색(keyword))
     wiki_task = asyncio.create_task(_위키피디아검색(keyword))
     ddg_result = await ddg_task
     wiki_result = await wiki_task
     return {
         "google": ddg_result.get("result") if ddg_result else None,
-        "perplexity": wiki_result.get("result") if wiki_result else None,
+        "wikipedia": wiki_result.get("result") if wiki_result else None,
+        "query": query,
     }

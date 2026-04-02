@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Table, Typography, Card, Tabs, Input, Button, Form, Modal,
-  Popconfirm, message, Spin,
+  Popconfirm, message, Spin, Switch, Tag, Space, Tooltip,
 } from 'antd'
 import {
-  PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined,
+  PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined, EditOutlined,
+  SwapOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
@@ -136,12 +137,17 @@ const 사전설정: Record<DicType, { title: string; label: string }> = {
 }
 
 function 사전컬럼(dicType: DicType) {
-  return (삭제버튼: (r: any) => React.ReactNode) => {
+  return (삭제버튼: (r: any) => React.ReactNode, 편집버튼?: (r: any) => React.ReactNode) => {
     if (dicType === 'thesaurus') {
       return [
         { title: '키워드', dataIndex: 'head_word', key: 'head_word', ellipsis: true },
         { title: '유사어', dataIndex: 'tail_word', key: 'tail_word', ellipsis: true },
-        { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
+        { title: '', key: 'action', width: 80, render: (_: unknown, r: any) => (
+          <Space size={0}>
+            {편집버튼?.(r)}
+            {삭제버튼(r)}
+          </Space>
+        )},
       ]
     }
     return [
@@ -152,9 +158,10 @@ function 사전컬럼(dicType: DicType) {
   }
 }
 
-function DicTab({ dicType, domain, refreshKey, externalSearch }: {
-  dicType: DicType; domain: string; refreshKey?: number; externalSearch?: string
+function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger }: {
+  dicType: DicType; domain: string; refreshKey?: number; externalSearch?: string; autoFocusTrigger?: number
 }) {
+  const 검색입력Ref = useRef<any>(null)
   const [데이터, set데이터] = useState<any[]>([])
   const [검색어, set검색어] = useState('')
   const [검색쿼리, set검색쿼리] = useState('')
@@ -165,6 +172,14 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
   const [현재페이지, set현재페이지] = useState(1)
   const [form] = Form.useForm()
   const cfg = 사전설정[dicType]
+
+  // 유사어 편집 상태
+  const [편집모달열림, set편집모달열림] = useState(false)
+  const [편집대상, set편집대상] = useState<any>(null)
+  const [편집유사어목록, set편집유사어목록] = useState<string[]>([])
+  const [새유사어, set새유사어] = useState('')
+  const [양방향, set양방향] = useState(false)
+  const [편집저장중, set편집저장중] = useState(false)
 
   const 데이터조회 = useCallback(async () => {
     if (!domain) return
@@ -202,6 +217,13 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
     }
   }, [externalSearch])
 
+  // autoFocusTrigger: 탭 전환 시 검색 입력 자동 포커스
+  useEffect(() => {
+    if (autoFocusTrigger && autoFocusTrigger > 0) {
+      setTimeout(() => 검색입력Ref.current?.focus(), 50)
+    }
+  }, [autoFocusTrigger])
+
   const 삭제 = async (record: any) => {
     try {
       const word = dicType === 'thesaurus' ? record.head_word : record.word
@@ -209,6 +231,65 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
       message.success('삭제 완료')
       데이터조회()
     } catch { message.error('삭제 실패') }
+  }
+
+  // 유사어 편집 열기
+  const 편집열기 = async (record: any) => {
+    set편집대상(record)
+    set양방향(false)
+    set새유사어('')
+    // 해당 head_word의 모든 유사어 조회
+    try {
+      const res = await 클라이언트.get(`/dictionaries/${domain}/thesaurus/list`, {
+        params: { search: record.head_word, size: 100 },
+      })
+      const items = (res.data?.items || []).filter((i: any) => i.head_word === record.head_word)
+      set편집유사어목록(items.map((i: any) => i.tail_word))
+    } catch {
+      set편집유사어목록([record.tail_word].filter(Boolean))
+    }
+    set편집모달열림(true)
+  }
+
+  const 유사어개별삭제 = async (tailWord: string) => {
+    if (!편집대상) return
+    try {
+      await 클라이언트.delete(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(편집대상.head_word)}`, {
+        params: { tail_word: tailWord },
+      })
+      set편집유사어목록(prev => prev.filter(w => w !== tailWord))
+      message.success(`"${tailWord}" 삭제됨`)
+    } catch {
+      // tail_word 파라미터 미지원 시 fallback
+      try {
+        await 클라이언트.delete(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(편집대상.head_word)}`)
+        set편집유사어목록(prev => prev.filter(w => w !== tailWord))
+        message.success(`"${tailWord}" 삭제됨`)
+      } catch { message.error('삭제 실패') }
+    }
+    데이터조회()
+  }
+
+  const 유사어개별추가 = async () => {
+    const word = 새유사어.trim()
+    if (!word || !편집대상) return
+    set편집저장중(true)
+    try {
+      await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
+        head_word: 편집대상.head_word, tail_word: word, memo: '',
+      })
+      if (양방향) {
+        await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
+          head_word: word, tail_word: 편집대상.head_word, memo: '',
+        }).catch(() => { /* 역방향 중복 무시 */ })
+      }
+      set편집유사어목록(prev => [...prev, word])
+      set새유사어('')
+      message.success(`"${word}" 추가됨${양방향 ? ' (양방향)' : ''}`)
+      데이터조회()
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '추가 실패')
+    } finally { set편집저장중(false) }
   }
 
   const 저장 = async () => {
@@ -232,7 +313,13 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
     </Popconfirm>
   )
 
-  const columns = 사전컬럼(dicType)(삭제버튼)
+  const 편집버튼렌더 = dicType === 'thesaurus' ? (record: any) => (
+    <Tooltip title="편집">
+      <Button size="small" icon={<EditOutlined />} type="text" onClick={() => 편집열기(record)} />
+    </Tooltip>
+  ) : undefined
+
+  const columns = 사전컬럼(dicType)(삭제버튼, 편집버튼렌더)
 
   const 모달폼내용 = () => {
     if (dicType === 'thesaurus') {
@@ -251,6 +338,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <Input
+          ref={검색입력Ref}
           placeholder="검색..." value={검색어} onChange={e => set검색어(e.target.value)}
           allowClear size="small" prefix={<SearchOutlined />} style={{ width: 200 }}
         />
@@ -260,7 +348,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
       <Table
         dataSource={데이터} columns={columns}
         rowKey={dicType === 'thesaurus' ? (r: any) => `${r.head_word}-${r.tail_word}` : 'word'}
-        loading={로딩} size="small" scroll={{ y: 250 }}
+        loading={로딩} size="small" scroll={{ y: 160 }}
         pagination={{
           current: 현재페이지, pageSize: 50, total: 총건수,
           showTotal: (total) => `총 ${total.toLocaleString()}건`,
@@ -272,16 +360,67 @@ function DicTab({ dicType, domain, refreshKey, externalSearch }: {
         onCancel={() => set모달열림(false)} confirmLoading={저장중} okText="저장" cancelText="취소">
         <Form form={form} layout="vertical">{모달폼내용()}</Form>
       </Modal>
+
+      {/* 유사어 편집 모달 */}
+      {dicType === 'thesaurus' && (
+        <Modal
+          title={`유사어 편집: ${편집대상?.head_word || ''}`}
+          open={편집모달열림}
+          onCancel={() => set편집모달열림(false)}
+          footer={<Button onClick={() => set편집모달열림(false)}>닫기</Button>}
+          width={420}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>등록된 유사어 목록:</Text>
+            <div style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
+              {편집유사어목록.length === 0 ? (
+                <Text type="secondary">없음</Text>
+              ) : 편집유사어목록.map(w => (
+                <div key={w} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '4px 8px', borderBottom: '1px solid #f0f0f0',
+                }}>
+                  <span style={{ fontSize: 13 }}>{w}</span>
+                  <Button size="small" type="text" danger icon={<DeleteOutlined />}
+                    onClick={() => 유사어개별삭제(w)} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <Input
+              placeholder="새 유사어 입력"
+              value={새유사어}
+              onChange={e => set새유사어(e.target.value)}
+              onPressEnter={유사어개별추가}
+              size="small"
+              style={{ flex: 1 }}
+            />
+            <Button size="small" type="primary" onClick={유사어개별추가} loading={편집저장중}>추가</Button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Switch size="small" checked={양방향} onChange={set양방향} />
+            <Text style={{ fontSize: 12 }}>
+              {양방향 ? (
+                <><SwapOutlined /> 양방향 (A↔B 모두 등록)</>
+              ) : (
+                <>단방향 (A→B만 등록)</>
+              )}
+            </Text>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
 
 // ─── 형태소분석 탭 ───────────────────────────────────────────────
 
-function MorphemeTab({ domain, prefillKeyword, prefillTrigger }: {
-  domain: string; prefillKeyword?: string; prefillTrigger?: number
+function MorphemeTab({ domain, prefillKeyword, prefillTrigger, autoFocusTrigger }: {
+  domain: string; prefillKeyword?: string; prefillTrigger?: number; autoFocusTrigger?: number
 }) {
   const [keyword, setKeyword] = useState('')
+  const morphInputRef = useRef<any>(null)
   const [result, setResult] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -308,9 +447,17 @@ function MorphemeTab({ domain, prefillKeyword, prefillTrigger }: {
     }
   }, [prefillTrigger])
 
+  // autoFocusTrigger: 탭 전환 시 입력 자동 포커스
+  useEffect(() => {
+    if (autoFocusTrigger && autoFocusTrigger > 0) {
+      setTimeout(() => morphInputRef.current?.focus(), 50)
+    }
+  }, [autoFocusTrigger])
+
   return (
     <div>
       <Input.Search
+        ref={morphInputRef}
         enterButton="분석"
         value={keyword}
         onChange={e => setKeyword(e.target.value)}
@@ -365,6 +512,7 @@ export default function KnowledgeWork() {
   const [cndicSearch, setCndicSearch] = useState('')
   const [morphPrefillKw, setMorphPrefillKw] = useState('')
   const [morphTrigger, setMorphTrigger] = useState(0)
+  const [tabFocusTrigger, setTabFocusTrigger] = useState(0)
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
@@ -392,14 +540,16 @@ export default function KnowledgeWork() {
       setTotalCount(data.total_count || data.total || 0)
       setMinPage(1)
       setMaxPage(1)
-      // REQ-12: 첫 미작업 키워드 자동 선택 (flag W = 작업완료 제외)
-      const firstUnread = (data.items || []).find((i: KeywordItem) => i.flag !== 'W')
-      if (firstUnread) {
-        setSelected(firstUnread)
+      // REQ-12: 마지막 작업한 키워드 자동 선택 (이어서 작업하기 위해)
+      const allItems = data.items || []
+      const lastWorked = [...allItems].reverse().find((i: KeywordItem) => i.flag === 'W' || i.flag === 'R')
+      const target = lastWorked || allItems[0]
+      if (target) {
+        setSelected(target)
         setIsCenterFocused(true)
-        if (!firstUnread.flag) {
-          assignmentApi.updateFlag(firstUnread.id, 'R').catch(() => {})
-          setItems(prev => prev.map(i => i.id === firstUnread.id ? { ...i, flag: 'R' } : i))
+        if (!target.flag) {
+          assignmentApi.updateFlag(target.id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === target.id ? { ...i, flag: 'R' } : i))
         }
       }
     } catch {
@@ -497,13 +647,20 @@ export default function KnowledgeWork() {
   const selectedWord = selectedTokenIdx >= 0 && selectedTokenIdx < selectableTokens.length
     ? selectableTokens[selectedTokenIdx].text : ''
 
+  // 선택 키워드 자동 클립보드 복사 (HTTP 환경: navigator.clipboard 없을 수 있음)
+  useEffect(() => {
+    if (selectedWord) {
+      navigator.clipboard?.writeText(selectedWord).catch(() => {})
+    }
+  }, [selectedWord])
+
   // ─── 핫키 로드 ──────────────────────────────────────────────
 
   useEffect(() => {
     workspaceAPI.getHotkeys()
       .then(({ data }) => {
-        if (data && typeof data === 'object') {
-          setHotkeys(prev => ({ ...prev, ...data }))
+        if (data?.hotkeys && typeof data.hotkeys === 'object') {
+          setHotkeys(prev => ({ ...prev, ...data.hotkeys }))
         }
       })
       .catch(() => { /* 기본값 사용 */ })
@@ -527,6 +684,19 @@ export default function KnowledgeWork() {
     if (action === 'focusAnalysis') {
       e.preventDefault()
       setIsCenterFocused(true)
+      return
+    }
+
+    // Alt+N 탭 전환은 항상 동작 (포커스 모드 무관) + 자동 포커스
+    if (['tabUdic', 'tabCndic', 'tabThesaurus', 'tabMorpheme'].includes(action)) {
+      e.preventDefault()
+      switch (action) {
+        case 'tabUdic': setActiveTab('udic'); break
+        case 'tabCndic': setActiveTab('cndic'); break
+        case 'tabThesaurus': setActiveTab('thesaurus'); break
+        case 'tabMorpheme': setActiveTab('morpheme'); break
+      }
+      setTabFocusTrigger(prev => prev + 1)
       return
     }
 
@@ -774,10 +944,10 @@ export default function KnowledgeWork() {
                   style={{
                     padding: '6px 12px', cursor: 'pointer',
                     background: record.flag === 'W' ? '#FCE4EC' : record.flag === 'R' ? '#FFF9C4' : 'white',
-                    outline: selected?.id === record.id ? '1px solid #1890ff' : undefined,
-                    borderBottom: '1px solid #f0f0f0',
+                    boxShadow: selected?.id === record.id ? 'inset 0 0 0 1px #000' : undefined,
+                    borderBottom: selected?.id === record.id ? undefined : '1px solid #f0f0f0',
                     fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    fontWeight: record.status === 'completed' ? 'normal' : 600,
+                    fontWeight: selected?.id === record.id ? 600 : 'normal',
                     color: record.status === 'completed' ? '#999' : '#333',
                   }}
                 >
@@ -799,10 +969,10 @@ export default function KnowledgeWork() {
           <Card
             title={<span>키워드 분석 <KbdKey>{displayTabKey(hotkeys.tabMorpheme)}</KbdKey></span>}
             size="small"
-            style={{ height: 240, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+            style={{ height: 350, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
           >
-            <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />
+            <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} autoFocusTrigger={tabFocusTrigger} />
           </Card>
         </div>
 
@@ -840,7 +1010,7 @@ export default function KnowledgeWork() {
                       style={{
                         cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
                         transition: 'background 0.15s',
-                        ...(isSelected ? { background: '#FFF9C4' } : {}),
+                        ...(isSelected ? { background: '#FCE4EC' } : {}),
                       }}
                     >
                       {token.text}
@@ -857,27 +1027,27 @@ export default function KnowledgeWork() {
           </Card>
           <Card
             size="small"
-            style={{ height: 300, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-            styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
+            style={{ height: 350, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px' } }}
           >
             <Tabs
               activeKey={['udic', 'cndic', 'thesaurus'].includes(activeTab) ? activeTab : 'udic'}
-              onChange={setActiveTab}
+              onChange={(key) => { setActiveTab(key); setTabFocusTrigger(prev => prev + 1) }}
               items={[
                 {
                   key: 'udic',
                   label: <span>사용자사전 <KbdKey>{displayTabKey(hotkeys.tabUdic)}</KbdKey></span>,
-                  children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
+                  children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} autoFocusTrigger={activeTab === 'udic' ? tabFocusTrigger : 0} />,
                 },
                 {
                   key: 'cndic',
                   label: <span>복합명사사전 <KbdKey>{displayTabKey(hotkeys.tabCndic)}</KbdKey></span>,
-                  children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
+                  children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} autoFocusTrigger={activeTab === 'cndic' ? tabFocusTrigger : 0} />,
                 },
                 {
                   key: 'thesaurus',
                   label: <span>유사어사전 <KbdKey>{displayTabKey(hotkeys.tabThesaurus)}</KbdKey></span>,
-                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
+                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={activeTab === 'thesaurus' ? tabFocusTrigger : 0} />,
                 },
               ]}
             />
