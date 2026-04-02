@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Table, Typography, Card, Tabs, Input, Button, Form, Modal,
   Popconfirm, message, Spin, Switch, Tag, Space, Tooltip,
@@ -31,10 +31,6 @@ const 기본핫키맵: Record<string, string> = {
   registerThesaurus: '3',
   analyzeKeyword: '0',
   focusAnalysis: 'Home',
-  tabUdic: 'Alt+1',
-  tabCndic: 'Alt+2',
-  tabThesaurus: 'Alt+3',
-  tabMorpheme: 'Alt+0',
   aiAnalysis: '/',
   undoHistory: 'Escape',
 }
@@ -512,7 +508,12 @@ export default function KnowledgeWork() {
   const [cndicSearch, setCndicSearch] = useState('')
   const [morphPrefillKw, setMorphPrefillKw] = useState('')
   const [morphTrigger, setMorphTrigger] = useState(0)
-  const [tabFocusTrigger, setTabFocusTrigger] = useState(0)
+  const [udicFocusTrigger, setUdicFocusTrigger] = useState(0)
+  const [cndicFocusTrigger, setCndicFocusTrigger] = useState(0)
+  const [thesaurusFocusTrigger, setThesaurusFocusTrigger] = useState(0)
+  const [morphFocusTrigger, setMorphFocusTrigger] = useState(0)
+  const [escKeyword, setEscKeyword] = useState<string | null>(null)
+  const [escCount, setEscCount] = useState<number>(0)
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
@@ -666,6 +667,14 @@ export default function KnowledgeWork() {
       .catch(() => { /* 기본값 사용 */ })
   }, [])
 
+  // ─── derivedHotkeys: 등록키 기반 탭 단축키 ─────────────────
+  const derivedHotkeys = useMemo(() => ({
+    tabUdic: 'Alt+' + (hotkeys.registerUdic || '1'),
+    tabCndic: 'Alt+' + (hotkeys.registerCndic || '2'),
+    tabThesaurus: 'Alt+' + (hotkeys.registerThesaurus || '3'),
+    tabMorpheme: 'Alt+' + (hotkeys.analyzeKeyword || '0'),
+  }), [hotkeys.registerUdic, hotkeys.registerCndic, hotkeys.registerThesaurus, hotkeys.analyzeKeyword])
+
   // ─── 핫키 핸들러 ────────────────────────────────────────────
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -688,16 +697,17 @@ export default function KnowledgeWork() {
     }
 
     // Alt+N 탭 전환은 항상 동작 (포커스 모드 무관) + 자동 포커스
-    if (['tabUdic', 'tabCndic', 'tabThesaurus', 'tabMorpheme'].includes(action)) {
-      e.preventDefault()
-      switch (action) {
-        case 'tabUdic': setActiveTab('udic'); break
-        case 'tabCndic': setActiveTab('cndic'); break
-        case 'tabThesaurus': setActiveTab('thesaurus'); break
-        case 'tabMorpheme': setActiveTab('morpheme'); break
-      }
-      setTabFocusTrigger(prev => prev + 1)
-      return
+    if (encoded === derivedHotkeys.tabUdic) {
+      e.preventDefault(); setActiveTab('udic'); setUdicFocusTrigger(prev => prev + 1); return
+    }
+    if (encoded === derivedHotkeys.tabCndic) {
+      e.preventDefault(); setActiveTab('cndic'); setCndicFocusTrigger(prev => prev + 1); return
+    }
+    if (encoded === derivedHotkeys.tabThesaurus) {
+      e.preventDefault(); setActiveTab('thesaurus'); setThesaurusFocusTrigger(prev => prev + 1); return
+    }
+    if (encoded === derivedHotkeys.tabMorpheme) {
+      e.preventDefault(); setActiveTab('morpheme'); setMorphFocusTrigger(prev => prev + 1); return
     }
 
     // 나머지 핫키는 포커스 모드에서만
@@ -777,6 +787,8 @@ export default function KnowledgeWork() {
           클라이언트.post(`/dictionaries/${selectedDomain}/thesaurus`, { head_word: selectedWord, tail_word: '', memo: '' })
             .then(() => {
               message.success(`유사어사전에 "${selectedWord}" 등록`)
+              setEscKeyword(selectedWord)
+              setEscCount(0)
               setDicRefreshKey(prev => prev + 1)
               setActiveTab('thesaurus')
               setThesaurusSearch(selectedWord)
@@ -804,6 +816,8 @@ export default function KnowledgeWork() {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
             .then(() => {
               message.success(`${사전설정[dicType].title}에 "${selectedWord}" 등록`)
+              setEscKeyword(selectedWord)
+              setEscCount(0)
               setDicRefreshKey(prev => prev + 1)
               setActiveTab(dicType)
               if (dicType === 'udic') setUdicSearch(selectedWord)
@@ -840,21 +854,20 @@ export default function KnowledgeWork() {
         }
         break
       }
-      case 'tabUdic': setActiveTab('udic'); break
-      case 'tabCndic': setActiveTab('cndic'); break
-      case 'tabThesaurus': setActiveTab('thesaurus'); break
-      case 'tabMorpheme': setActiveTab('morpheme'); break
       case 'aiAnalysis': {
         const kw = selectedWord || selected?.keyword
         if (kw) setAiKeyword(kw)
         break
       }
       case 'undoHistory': {
-        historyRef.current?.undoLatest()
+        if (escKeyword && escCount < 3) {
+          historyRef.current?.undoLatestForKeyword(escKeyword || '')
+          setEscCount(prev => prev + 1)
+        }
         break
       }
     }
-  }, [hotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace])
+  }, [hotkeys, derivedHotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -967,12 +980,12 @@ export default function KnowledgeWork() {
             </div>
           </Card>
           <Card
-            title={<span>키워드 분석 <KbdKey>{displayTabKey(hotkeys.tabMorpheme)}</KbdKey></span>}
+            title={<span>키워드 분석 <KbdKey>{displayTabKey(derivedHotkeys.tabMorpheme)}</KbdKey></span>}
             size="small"
             style={{ height: 350, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 12px 12px' } }}
           >
-            <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} autoFocusTrigger={tabFocusTrigger} />
+            <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} autoFocusTrigger={morphFocusTrigger} />
           </Card>
         </div>
 
@@ -1032,22 +1045,27 @@ export default function KnowledgeWork() {
           >
             <Tabs
               activeKey={['udic', 'cndic', 'thesaurus'].includes(activeTab) ? activeTab : 'udic'}
-              onChange={(key) => { setActiveTab(key); setTabFocusTrigger(prev => prev + 1) }}
+              onChange={(key) => {
+                setActiveTab(key)
+                if (key === 'udic') setUdicFocusTrigger(prev => prev + 1)
+                else if (key === 'cndic') setCndicFocusTrigger(prev => prev + 1)
+                else if (key === 'thesaurus') setThesaurusFocusTrigger(prev => prev + 1)
+              }}
               items={[
                 {
                   key: 'udic',
-                  label: <span>사용자사전 <KbdKey>{displayTabKey(hotkeys.tabUdic)}</KbdKey></span>,
-                  children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} autoFocusTrigger={activeTab === 'udic' ? tabFocusTrigger : 0} />,
+                  label: <span>사용자사전 <KbdKey>{displayTabKey(derivedHotkeys.tabUdic)}</KbdKey></span>,
+                  children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} autoFocusTrigger={udicFocusTrigger} />,
                 },
                 {
                   key: 'cndic',
-                  label: <span>복합명사사전 <KbdKey>{displayTabKey(hotkeys.tabCndic)}</KbdKey></span>,
-                  children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} autoFocusTrigger={activeTab === 'cndic' ? tabFocusTrigger : 0} />,
+                  label: <span>복합명사사전 <KbdKey>{displayTabKey(derivedHotkeys.tabCndic)}</KbdKey></span>,
+                  children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} autoFocusTrigger={cndicFocusTrigger} />,
                 },
                 {
                   key: 'thesaurus',
-                  label: <span>유사어사전 <KbdKey>{displayTabKey(hotkeys.tabThesaurus)}</KbdKey></span>,
-                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={activeTab === 'thesaurus' ? tabFocusTrigger : 0} />,
+                  label: <span>유사어사전 <KbdKey>{displayTabKey(derivedHotkeys.tabThesaurus)}</KbdKey></span>,
+                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} />,
                 },
               ]}
             />

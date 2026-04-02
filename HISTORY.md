@@ -1,5 +1,35 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 작업실 단축키·포커스·undo·이력 컬럼 개선 5건 (커밋: TBD)
+
+### 수정 내용
+
+**건1: derivedHotkeys 계산 로직 도입** (`KnowledgeWork.tsx`)
+- 기존 고정 단축키 배열 대신 useMemo 기반 derivedHotkeys로 동적 계산
+- HotkeySettings 설정값 반영하여 탭별 단축키 자동 구성
+
+**건2: 탭별 포커스 트리거 개선** (`KnowledgeWork.tsx`)
+- 탭 전환 시 해당 탭의 입력 필드에 포커스 자동 이동
+- escKeyword + escCount 상태 추가로 Esc 키 이벤트 감지 개선
+
+**건3: WorkHistory undoLatestForKeyword 추가** (`WorkHistory.tsx`)
+- 선택 키워드 기준 최근 작업 1건 되돌리기 기능 추가
+- 사전 컬럼 width 70으로 고정
+
+**건4: HotkeySettings 고정탭단축키 제거** (`HotkeySettings.tsx`)
+- 고정된 탭 단축키 항목 제거
+- 사용자 안내 텍스트 교체 (derivedHotkeys 방식 반영)
+
+**건5: AC-006 escCount 역라우팅 수정** (`KnowledgeWork.tsx`)
+- ktest AC-006 검증에서 escCount 미구현 발견 → 즉시 수정
+
+### 수정 파일
+- `know-api/frontend/src/pages/KnowledgeWork.tsx`
+- `know-api/frontend/src/components/workspace/WorkHistory.tsx`
+- `know-api/frontend/src/components/workspace/HotkeySettings.tsx`
+
+---
+
 ## 2026-04-02 — 작업실 6건: 자동선택+border+컬럼분리+AI분석UI+이력테이블+오류표시 (커밋: TBD)
 
 ### 수정 내용

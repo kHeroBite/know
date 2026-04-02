@@ -11,14 +11,6 @@ interface HotkeyConfig {
   key: string
 }
 
-// Alt+N 고정 단축키 (편집 불가)
-const 고정탭단축키 = [
-  { id: 'tabUdic', label: '사용자사전탭', key: 'Alt+1' },
-  { id: 'tabCndic', label: '복합명사탭', key: 'Alt+2' },
-  { id: 'tabThesaurus', label: '유사어탭', key: 'Alt+3' },
-  { id: 'tabMorpheme', label: '키워드분석탭', key: 'Alt+0' },
-]
-
 // 편집 가능한 단축키
 const 기본핫키: HotkeyConfig[] = [
   { id: 'prevKeyword', label: '이전 키워드', key: 'ArrowUp' },
@@ -93,12 +85,6 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
       return
     }
     const encoded = encodeKeyEvent(e)
-    // 고정 탭 단축키와 충돌 체크
-    const fixedConflict = 고정탭단축키.find(h => h.key === encoded)
-    if (fixedConflict) {
-      message.warning(`"${fixedConflict.label}"에서 사용 중인 고정 단축키입니다.`)
-      return
-    }
     const conflict = hotkeys.find(h => h.id !== editingId && h.key === encoded)
     if (conflict) {
       message.warning(`"${conflict.label}"에서 이미 사용 중인 키입니다.`)
@@ -118,8 +104,6 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
   const handleSave = () => {
     const map: Record<string, string> = {}
     hotkeys.forEach(h => { map[h.id] = h.key })
-    // 고정 탭 단축키도 포함
-    고정탭단축키.forEach(h => { map[h.id] = h.key })
     onSave(map)
     onClose()
   }
@@ -158,20 +142,13 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
         </Space>
       }
     >
-      {/* 고정 탭 단축키 (Alt 기반, 변경 불가) */}
+      {/* 탭 전환 안내 */}
       <div style={{
         background: '#f5f5f5', borderRadius: 6, padding: '8px 12px', marginBottom: 12,
       }}>
-        <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-          Alt 탭 전환 (고정)
+        <Text style={{ fontSize: 12 }}>
+          Alt+{'{등록키}'} = 해당 사전탭 열기 (등록키 변경 시 자동 반영)
         </Text>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {고정탭단축키.map(h => (
-            <span key={h.id} style={{ fontSize: 12 }}>
-              <Tag>{displayKey(h.key)}</Tag> {h.label}
-            </span>
-          ))}
-        </div>
       </div>
 
       {/* 편집 가능한 단축키 */}

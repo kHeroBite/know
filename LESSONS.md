@@ -163,6 +163,20 @@ elif os.path.isdir(path):
 **재발방지**: 이력/서비스 코드에서 action_type, status, 상태 열거값 등 상수를 사용하는 코드 작성 시, 반드시 기존 코드에서 grep으로 실제 값 먼저 확인. 추정 금지.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-023: PLAN 상태에서 서브에이전트 spawn hook 차단 (2026-04-02)
+
+**현상**: kplan 실행 중 PLAN 상태에서 서브에이전트 spawn 시도 시 no_team_agent_guard.sh가 차단. subagent_type=general-purpose 명시에도 차단됨.
+**원인**: no_team_agent_guard.sh가 PLAN 상태를 감지하여 팀에이전트 spawn을 상태 기반으로 차단. L-021(빈 subagent_type 차단)과 다른 패턴.
+**재발방지**: PLAN 상태에서는 팀에이전트 spawn 불가. kplan에서 서브에이전트 spawn이 필요한 경우 파이프라인 상태 전환(DEV 등) 후 시도.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-024: 역라우팅 1회 — AC-006 escCount 상태 변수 미구현 (2026-04-02)
+
+**현상**: KnowledgeWork.tsx 단축키 개선 작업 시 escKeyword+escCount 상태 쌍 중 escCount를 derivedHotkeys 설계 단계에서 누락하여 역라우팅 1회 발생.
+**원인**: 단축키 이벤트 관련 상태 변수(keyword+count 쌍)를 구현할 때 연관 상태를 함께 체크하지 않음.
+**재발방지**: 단축키/이벤트 카운터 상태 구현 시 관련 상태 변수 쌍(keyword+count)을 함께 체크리스트로 확인. AC 검증 항목에서 미구현 상태 조기 발견 필요.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블

@@ -19,6 +19,7 @@ export interface WorkHistoryItem {
 export interface WorkHistoryRef {
   reload: () => void
   undoLatest: () => void
+  undoLatestForKeyword: (keyword: string) => void
 }
 
 interface Props {
@@ -66,13 +67,20 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
     else message.info('되돌릴 작업이 없습니다')
   }
 
-  useImperativeHandle(ref, () => ({ reload: load, undoLatest }))
+  const undoLatestForKeyword = async (keyword: string) => {
+    if (!keyword) { message.info('되돌릴 키워드가 없습니다'); return }
+    const match = items.find(i => !i.undone && (i.word === keyword || i.head_word === keyword))
+    if (match) await handleUndo(match)
+    else message.info(`"${keyword}" 키워드의 되돌릴 작업이 없습니다`)
+  }
+
+  useImperativeHandle(ref, () => ({ reload: load, undoLatest, undoLatestForKeyword }))
 
   const columns: ColumnsType<WorkHistoryItem> = [
     {
       title: '사전',
       dataIndex: 'dic_type',
-      width: 56,
+      width: 70,
       render: (v: string) => <span style={{ fontSize: 11 }}>{DIC_LABEL[v] || v}</span>,
     },
     {
