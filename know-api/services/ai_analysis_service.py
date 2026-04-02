@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# uvicorn 핸들러 공유 — 기본 WARNING 레벨을 DEBUG로 낮춰 로그 출력
+_uvicorn_logger = logging.getLogger("uvicorn")
+if _uvicorn_logger.handlers:
+    for _h in _uvicorn_logger.handlers:
+        logger.addHandler(_h)
+    logger.propagate = False
 
 _TIMEOUT = 10.0
 _HEADERS = {
@@ -49,22 +59,37 @@ async def _덕덕고검색(keyword: str) -> dict:
             f"https://api.duckduckgo.com/?q={quote(keyword)}"
             "&format=json&no_html=1&skip_disambig=1&kl=kr-ko"
         )
+        logger.info("[AI분석][DDG] 검색 시작: keyword=%r, url=%s", keyword, url)
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
             resp = await client.get(url)
             resp.raise_for_status()
         data = resp.json()
+        abstract = data.get("AbstractText") or ""
+        related = data.get("RelatedTopics", [])
+        answer_type = data.get("Type", "")
+        logger.info(
+            "[AI분석][DDG] 응답: AbstractText=%r, Type=%r, RelatedTopics수=%d",
+            abstract[:100] if abstract else "",
+            answer_type,
+            len(related),
+        )
         # AbstractText: 위키 기반 요약
-        result = data.get("AbstractText") or ""
+        result = abstract
         if not result:
             # RelatedTopics 첫 번째 항목 텍스트 fallback
-            for topic in data.get("RelatedTopics", []):
+            for topic in related:
                 if isinstance(topic, dict) and topic.get("Text"):
                     result = topic["Text"][:300]
+                    logger.info("[AI분석][DDG] RelatedTopics fallback 사용: %r", result[:80])
                     break
         if not result:
+            logger.info("[AI분석][DDG] 결과 없음 — '%s'에 대한 데이터 없음", keyword)
             result = f"'{keyword}'에 대한 검색 결과가 없습니다"
+        else:
+            logger.info("[AI분석][DDG] 최종 결과: %r", result[:100])
         return {"result": result[:300], "error": None}
     except Exception as e:
+        logger.error("[AI분석][DDG] 오류: %s", e)
         return {"result": None, "error": str(e)}
 
 
@@ -74,32 +99,49 @@ async def _위키피디아검색(keyword: str) -> dict:
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
             # 한국어 Wikipedia 우선
             ko_url = f"https://ko.wikipedia.org/api/rest_v1/page/summary/{quote(keyword)}"
+            logger.info("[AI분석][Wiki] 한국어 검색: url=%s", ko_url)
             resp = await client.get(ko_url)
             if resp.status_code == 404:
+                logger.info("[AI분석][Wiki] 한국어 404 → 영어 fallback 시도")
                 # 영어 Wikipedia fallback
                 en_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(keyword)}"
+                logger.info("[AI분석][Wiki] 영어 검색: url=%s", en_url)
                 resp = await client.get(en_url)
+            logger.info("[AI분석][Wiki] 응답 status=%d", resp.status_code)
             resp.raise_for_status()
         data = resp.json()
         result = data.get("extract") or data.get("description") or ""
         if not result:
+            logger.info("[AI분석][Wiki] extract/description 없음 — '%s'", keyword)
             result = f"Wikipedia에서 '{keyword}' 정보를 찾을 수 없습니다"
+        else:
+            logger.info("[AI분석][Wiki] 최종 결과: %r", result[:100])
         return {"result": result[:300], "error": None}
     except Exception as e:
+        logger.error("[AI분석][Wiki] 오류: %s", e)
         return {"result": None, "error": str(e)}
 
 
 async def AI검색(keyword: str) -> dict:
     """DuckDuckGo + Wikipedia 동시 검색."""
     import asyncio
+    logger.info("[AI분석] 검색 시작: keyword=%r", keyword)
     prompt = 프롬프트로드()
     query = prompt.format(keyword=keyword)
+    logger.info("[AI분석] 프롬프트 query=%r", query)
     ddg_task = asyncio.create_task(_덕덕고검색(keyword))
     wiki_task = asyncio.create_task(_위키피디아검색(keyword))
     ddg_result = await ddg_task
     wiki_result = await wiki_task
+    google_val = ddg_result.get("result") if ddg_result else None
+    wiki_val = wiki_result.get("result") if wiki_result else None
+    logger.info(
+        "[AI분석] 최종 반환: google(DDG)=%r, wikipedia=%r",
+        google_val[:60] if google_val else None,
+        wiki_val[:60] if wiki_val else None,
+    )
     return {
-        "google": ddg_result.get("result") if ddg_result else None,
-        "wikipedia": wiki_result.get("result") if wiki_result else None,
+        "google": google_val,
+        "wikipedia": wiki_val,
         "query": query,
     }
