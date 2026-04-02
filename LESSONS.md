@@ -149,6 +149,13 @@ elif os.path.isdir(path):
 **재발방지**: API 반환 타입 구조 변경(primitive → object 등) 시 해당 타입을 import하는 프론트엔드 전체 파일 Grep 검색 후 모든 호출처 영향도 확인 필수.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-021: Agent spawn subagent_type 빈 값 — L-017 재발 (3회) (2026-04-02)
+
+**현상**: kdev 에이전트 spawn 시 subagent_type 빈 값으로 설정하여 no_team_agent_guard.sh에 3회 연속 차단됨.
+**원인**: L-017에서 MEMORY.md에만 기록되고 kdev/ko 스킬에 명시적 spawn subagent_type 필수 규칙이 없어 재발.
+**재발방지**: ko/kdev 스킬에 "Agent spawn 시 subagent_type 항상 명시 필수 (general-purpose 포함), 빈 값 금지" 규칙 추가. MEMORY.md 기록만으로는 방지 불충분 확인.
+**Level**: 2 (MEMORY.md + 스킬 규칙 강화 필요)
+
 ---
 
 ## 반영 추적 테이블
@@ -164,5 +171,6 @@ elif os.path.isdir(path):
 | L-009 | ktest_done_guard silent pass | hook | ktest_done_guard.sh | 2026-03-26 | ✅ |
 | L-014 | jiana Java 직접 호출 (EUC-KR 필수) | LESSONS | LESSONS.md | 2026-03-31 | ✅ |
 | L-315 | 에이전트 무응답 타임아웃 즉시 강제 | ko SKILL | ko/SKILL.md | 2026-04-01 | ✅ |
-| L-017 | 팀에이전트 spawn subagent_type 빈 값 차단 | MEMORY | MEMORY.md | 2026-04-01 | ✅ |
+| L-017 | 팀에이전트 spawn subagent_type 빈 값 차단 | MEMORY | MEMORY.md | 2026-04-01 | 🔄 재발 (L-021) |
+| L-021 | Agent spawn subagent_type 빈 값 3회 재발 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-02 | ⬜ |
 | L-018 | DB 테이블 부재 OperationalError 미처리 | LESSONS | LESSONS.md | 2026-04-01 | ✅ |

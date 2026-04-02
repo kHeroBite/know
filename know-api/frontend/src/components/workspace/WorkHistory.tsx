@@ -7,9 +7,12 @@ const { Text } = Typography
 
 export interface WorkHistoryItem {
   id: number
-  action: string
-  keyword: string
-  detail?: string
+  action_type: string
+  dic_type: string
+  word?: string
+  head_word?: string
+  tail_word?: string
+  memo?: string
   created_at: string
   undone: boolean
 }
@@ -86,7 +89,7 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
               <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(item)} />
             ) : undefined}
           >
-            <Text style={{ fontSize: 12 }}>{item.action}: {item.keyword}</Text>
+            <Text style={{ fontSize: 12 }}>{item.action_type}: {item.word || item.head_word || '-'}</Text>
           </List.Item>
         )}
       />

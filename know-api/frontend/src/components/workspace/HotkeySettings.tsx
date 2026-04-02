@@ -131,7 +131,7 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
 
   return (
     <Modal
-      title="⚙ 핫키 설정"
+      title="⚙ 단축키 설정"
       open={open}
       onCancel={onClose}
       width={420}

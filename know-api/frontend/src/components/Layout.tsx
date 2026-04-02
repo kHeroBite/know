@@ -82,7 +82,7 @@ export default function Layout() {
         { key: '/workspace', label: '워크스페이스' },
         { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected || isFrozen },
         { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen || isAssigned },
-        { key: '/knowledge-work', label: 핫키라벨('작업실', '/knowledge-work'), disabled: !wsSelected || !isAssigned },
+        { key: '/knowledge-work', label: '작업실', disabled: !wsSelected || !isAssigned },
         { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
         { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
         { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isAssigned },

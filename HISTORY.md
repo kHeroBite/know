@@ -1,5 +1,50 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 작업실 10건 UI/로직 수정
+
+### 수정 내용
+
+**건1: 분석결과 카드 포커스 배경+3D+border 2px** (`KnowledgeWork.tsx`)
+- 분석 결과 카드에 포커스 시 배경 강조 + 3D 효과 + border 2px 적용
+
+**건2: ← 키 이전 키워드 자동 이동** (`KnowledgeWork.tsx`)
+- 분석 결과 화면에서 ← 방향키 누르면 이전 키워드로 자동 이동
+
+**건3: comp: 패턴 자동선택 제외** (`KnowledgeWork.tsx`)
+- comp: 접두사 패턴을 자동선택 대상에서 제외
+
+**건4: AI분석 화면 사라짐 버그 수정** (`ai_analysis_service.py`)
+- AI 검색 반환값 평탄화 처리 → 분석 화면 사라짐 현상 수정
+
+**건5: 사전등록 작업이력 미저장 버그 수정** (`workspace.ts`, `WorkHistory.tsx`)
+- addWorkHistory 타입 수정 + WorkHistoryItem 인터페이스 필드명 불일치 수정
+
+**건6: 핫키설정 → 단축키설정 명칭 변경** (`HotkeySettings.tsx`)
+- 모달 제목 "핫키설정" → "단축키설정" 변경
+
+**건7: 카드 title KbdKey 키보드 이미지 추가** (`KnowledgeWork.tsx`)
+- 카드 제목 영역에 단축키 표시용 KbdKey 컴포넌트 추가
+
+**건8: 하단 탭 Alt+ 제거** (`KnowledgeWork.tsx`)
+- 하단 탭에서 Alt+ 접두사 표시 제거
+
+**건9: 키워드 열람 시 노랑색 배경 표시** (`KnowledgeWork.tsx`)
+- 열람 상태 키워드에 노랑색 배경 적용
+
+**건10: 메뉴명 작업실(Home) → 작업실** (`Layout.tsx`)
+- 사이드바 메뉴명 "작업실(Home)" → "작업실" 변경
+
+### 수정 파일
+- `know-api/frontend/src/pages/KnowledgeWork.tsx` (8건)
+- `know-api/frontend/src/api/workspace.ts`
+- `know-api/frontend/src/components/workspace/WorkHistory.tsx`
+- `know-api/services/ai_analysis_service.py`
+- `know-api/frontend/src/components/workspace/HotkeySettings.tsx`
+- `know-api/frontend/src/components/Layout.tsx`
+- 프론트엔드 빌드(dist) 포함
+
+---
+
 ## 2026-04-02 — 5건 UI/안정성 수정: 고정높이 + WS타임아웃 + 이력유지 + 깜빡임방지 + startStep
 
 ### 수정 내용

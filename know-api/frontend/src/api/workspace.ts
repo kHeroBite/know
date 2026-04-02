@@ -55,7 +55,11 @@ export const workspaceAPI = {
   fetchWorkHistory: (workspace: string, domain: string) =>
     클라이언트.get('/work-history', { params: { workspace, domain } }),
 
-  addWorkHistory: (data: { workspace: string; domain: string; action: string; keyword: string; detail?: string }) =>
+  addWorkHistory: (data: {
+    workspace: string; domain: string;
+    action_type: string; dic_type: string;
+    word?: string; head_word?: string; tail_word?: string; memo?: string;
+  }) =>
     클라이언트.post('/work-history', data),
 
   undoWorkHistory: (id: number) =>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Table, Typography, Card, Tabs, Input, Button, Form, Modal,
   Popconfirm, message, Spin,
@@ -88,6 +88,22 @@ function displayKey(key: string): string {
 function isWordToken(text: string): boolean {
   return /[가-힣a-zA-Z]/.test(text)
 }
+function isNavigableToken(toks: Token[], idx: number): boolean {
+  const t = toks[idx]
+  if (!isWordToken(t.text)) return false
+  if (t.text === 'comp' && toks[idx + 1]?.text === ':') return false
+  return true
+}
+function displayTabKey(key: string): string {
+  return key.replace(/^Alt\+/, '')
+}
+const KbdKey = ({ children }: { children: React.ReactNode }) => (
+  <kbd style={{
+    display: 'inline-block', padding: '1px 5px', fontSize: '11px', lineHeight: '1.4',
+    color: '#444', background: '#fafafa', border: '1px solid #ccc', borderRadius: 3,
+    boxShadow: '0 1px 1px rgba(0,0,0,0.2)', fontFamily: 'monospace', whiteSpace: 'nowrap',
+  }}>{children}</kbd>
+)
 
 // ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
 
@@ -338,6 +354,7 @@ export default function KnowledgeWork() {
 
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
+  const selectLastTokenRef = useRef(false)
 
   // ─── 키워드 목록 ────────────────────────────────────────────
 
@@ -421,12 +438,19 @@ export default function KnowledgeWork() {
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
-  // REQ-20: 키워드 선택 시 자동포커스 + 첫 단어 선택
+  // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택
   useEffect(() => {
     if (selected?.analysis) {
       const toks = parseAnalysisText(selected.analysis).filter(t => !t.lineBreak)
-      const firstWord = toks.findIndex(t => isWordToken(t.text))
-      setSelectedTokenIdx(firstWord >= 0 ? firstWord : 0)
+      if (selectLastTokenRef.current) {
+        let lastIdx = toks.length - 1
+        while (lastIdx >= 0 && !isNavigableToken(toks, lastIdx)) lastIdx--
+        setSelectedTokenIdx(lastIdx >= 0 ? lastIdx : 0)
+        selectLastTokenRef.current = false
+      } else {
+        const firstWord = toks.findIndex((_, idx) => isNavigableToken(toks, idx))
+        setSelectedTokenIdx(firstWord >= 0 ? firstWord : 0)
+      }
     } else {
       setSelectedTokenIdx(-1)
     }
@@ -482,6 +506,7 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx > 0 ? curIdx - 1 : 0
         setSelected(items[newIdx])
+        setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[newIdx].id); return n })
         break
       }
       case 'nextKeyword': {
@@ -489,19 +514,29 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
         setSelected(items[newIdx])
+        setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[newIdx].id); return n })
         break
       }
       case 'prevAnalysis': {
         if (!selectableTokens.length) break
         let prevIdx = selectedTokenIdx - 1
-        while (prevIdx >= 0 && !isWordToken(selectableTokens[prevIdx].text)) prevIdx--
-        if (prevIdx >= 0) setSelectedTokenIdx(prevIdx)
+        while (prevIdx >= 0 && !isNavigableToken(selectableTokens, prevIdx)) prevIdx--
+        if (prevIdx >= 0) {
+          setSelectedTokenIdx(prevIdx)
+        } else {
+          const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+          if (curIdx > 0) {
+            selectLastTokenRef.current = true
+            setSelected(items[curIdx - 1])
+            setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[curIdx - 1].id); return n })
+          }
+        }
         break
       }
       case 'nextAnalysis': {
         if (!selectableTokens.length) break
         let nextIdx = selectedTokenIdx + 1
-        while (nextIdx < selectableTokens.length && !isWordToken(selectableTokens[nextIdx].text)) nextIdx++
+        while (nextIdx < selectableTokens.length && !isNavigableToken(selectableTokens, nextIdx)) nextIdx++
         if (nextIdx >= selectableTokens.length) {
           // REQ-21: 마지막 토큰 → 다음 키워드 자동 이동
           const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
@@ -532,7 +567,7 @@ export default function KnowledgeWork() {
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
-                  action: '유사어사전 등록', keyword: selectedWord,
+                  action_type: '유사어사전 등록', dic_type: 'thesaurus', head_word: selectedWord, tail_word: '',
                 })
                 historyRef.current?.reload()
               }
@@ -553,7 +588,7 @@ export default function KnowledgeWork() {
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
-                  action: `${사전설정[dicType].title} 등록`, keyword: selectedWord,
+                  action_type: `${사전설정[dicType].title} 등록`, dic_type: dicType, head_word: selectedWord,
                 })
                 historyRef.current?.reload()
               }
@@ -629,7 +664,7 @@ export default function KnowledgeWork() {
           icon={<SettingOutlined />}
           onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
         >
-          핫키설정
+          단축키설정
         </Button>
       </div>
 
@@ -674,19 +709,18 @@ export default function KnowledgeWork() {
 
         {/* 중: 분석결과 */}
         <Card
-          title={`분석결과 (${displayKey(hotkeys.focusAnalysis)})`}
+          title={<span>분석결과 <KbdKey>{displayKey(hotkeys.focusAnalysis)}</KbdKey></span>}
           size="small"
           style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             cursor: 'default', transition: 'all 0.3s ease',
             ...(isCenterFocused ? {
-              boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-              background: selectedColor ? `${selectedColor}18` : '#FFF9C4',
-              border: `2px solid ${selectedColor || '#FFF176'}`,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              border: `2px solid ${selectedColor || '#faad14'}`,
               transform: 'translateY(-2px)',
             } : {}),
           }}
-          styles={{ body: { flex: 1, overflow: 'auto', padding: 16 } }}
+          styles={{ body: { flex: 1, overflow: 'auto', padding: 16, ...(isCenterFocused ? { background: selectedColor ? `${selectedColor}18` : '#FFF9C4' } : {}) } }}
           onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
         >
           {selected ? (
@@ -720,7 +754,7 @@ export default function KnowledgeWork() {
         {/* 우: AI분석 + 작업이력 */}
         <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Card
-            title={`AI 분석 (${displayKey(hotkeys.aiAnalysis)})`}
+            title={<span>AI 분석 <KbdKey>{displayKey(hotkeys.aiAnalysis)}</KbdKey></span>}
             size="small"
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
@@ -728,7 +762,7 @@ export default function KnowledgeWork() {
             <AIAnalysis keyword={aiKeyword} />
           </Card>
           <Card
-            title={`작업이력 (${displayKey(hotkeys.undoHistory)})`}
+            title={<span>작업이력 <KbdKey>{displayKey(hotkeys.undoHistory)}</KbdKey></span>}
             size="small"
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
@@ -754,22 +788,22 @@ export default function KnowledgeWork() {
           items={[
             {
               key: 'morpheme',
-              label: `키워드 분석 (${displayKey(hotkeys.tabMorpheme)})`,
+              label: `키워드 분석 (${displayTabKey(hotkeys.tabMorpheme)})`,
               children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
             },
             {
               key: 'udic',
-              label: `사용자사전 (${displayKey(hotkeys.tabUdic)})`,
+              label: `사용자사전 (${displayTabKey(hotkeys.tabUdic)})`,
               children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
             },
             {
               key: 'cndic',
-              label: `복합명사사전 (${displayKey(hotkeys.tabCndic)})`,
+              label: `복합명사사전 (${displayTabKey(hotkeys.tabCndic)})`,
               children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
             },
             {
               key: 'thesaurus',
-              label: `유사어사전 (${displayKey(hotkeys.tabThesaurus)})`,
+              label: `유사어사전 (${displayTabKey(hotkeys.tabThesaurus)})`,
               children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
             },
           ]}

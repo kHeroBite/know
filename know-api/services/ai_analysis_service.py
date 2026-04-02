@@ -76,4 +76,7 @@ async def AI검색(keyword: str) -> dict:
     perplexity_task = asyncio.create_task(_퍼플렉시티검색(keyword))
     google_result = await google_task
     perplexity_result = await perplexity_task
-    return {"google": google_result, "perplexity": perplexity_result}
+    return {
+        "google": google_result.get("result") if google_result else None,
+        "perplexity": perplexity_result.get("result") if perplexity_result else None,
+    }
