@@ -97,13 +97,33 @@ function isNavigableToken(toks: Token[], idx: number): boolean {
 function displayTabKey(key: string): string {
   return key.replace(/^Alt\+/, '')
 }
-const KbdKey = ({ children }: { children: React.ReactNode }) => (
-  <kbd style={{
-    display: 'inline-block', padding: '1px 5px', fontSize: '11px', lineHeight: '1.4',
-    color: '#444', background: '#fafafa', border: '1px solid #ccc', borderRadius: 3,
-    boxShadow: '0 1px 1px rgba(0,0,0,0.2)', fontFamily: 'monospace', whiteSpace: 'nowrap',
-  }}>{children}</kbd>
-)
+const KbdKey = ({ children }: { children: React.ReactNode }) => {
+  const [pressed, setPressed] = useState(false)
+  return (
+    <kbd
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => setPressed(false)}
+      style={{
+        display: 'inline-block', padding: '1px 6px', fontSize: '11px', lineHeight: '1.4',
+        color: '#444',
+        background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)',
+        border: '1px solid #adb5bd',
+        borderBottom: pressed ? '1px solid #adb5bd' : '3px solid #adb5bd',
+        borderRadius: 4,
+        boxShadow: pressed
+          ? '0 0px 1px rgba(0,0,0,0.1)'
+          : '0 1px 0 rgba(0,0,0,0.2), 0 2px 3px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.8)',
+        textShadow: '0 1px 0 rgba(255,255,255,0.8)',
+        fontFamily: 'monospace', whiteSpace: 'nowrap',
+        cursor: 'default',
+        transform: pressed ? 'translateY(1px)' : 'none',
+        transition: 'transform 0.05s, box-shadow 0.05s',
+        userSelect: 'none' as React.CSSProperties['userSelect'],
+      }}
+    >{children}</kbd>
+  )
+}
 
 // ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
 
@@ -716,13 +736,17 @@ export default function KnowledgeWork() {
             cursor: 'default', transition: 'all 0.3s ease',
             ...(isCenterFocused ? {
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              border: `2px solid ${selectedColor || '#faad14'}`,
+              outline: `2px solid ${selectedColor || '#faad14'}`,
               transform: 'translateY(-2px)',
             } : {}),
           }}
-          styles={{ body: { flex: 1, overflow: 'auto', padding: 16, ...(isCenterFocused ? { background: selectedColor ? `${selectedColor}18` : '#FFF9C4' } : {}) } }}
+          styles={{ body: { flex: 1, overflow: 'auto', padding: 0 } }}
           onClick={(e) => { e.stopPropagation(); setIsCenterFocused(true) }}
         >
+          <div style={{
+            padding: 16, minHeight: '100%', transition: 'background-color 0.3s ease',
+            backgroundColor: isCenterFocused ? `${selectedColor || '#faad14'}20` : undefined,
+          }}>
           {selected ? (
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
               {tokens.map((token, i) => {
@@ -749,6 +773,7 @@ export default function KnowledgeWork() {
               <Text type="secondary">좌측에서 키워드를 선택하세요.</Text>
             </div>
           )}
+          </div>
         </Card>
 
         {/* 우: AI분석 + 작업이력 */}
@@ -788,22 +813,22 @@ export default function KnowledgeWork() {
           items={[
             {
               key: 'morpheme',
-              label: `키워드 분석 (${displayTabKey(hotkeys.tabMorpheme)})`,
+              label: <span>키워드 분석 <KbdKey>{displayTabKey(hotkeys.tabMorpheme)}</KbdKey></span>,
               children: <MorphemeTab domain={selectedDomain} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} />,
             },
             {
               key: 'udic',
-              label: `사용자사전 (${displayTabKey(hotkeys.tabUdic)})`,
+              label: <span>사용자사전 <KbdKey>{displayTabKey(hotkeys.tabUdic)}</KbdKey></span>,
               children: <DicTab dicType="udic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={udicSearch} />,
             },
             {
               key: 'cndic',
-              label: `복합명사사전 (${displayTabKey(hotkeys.tabCndic)})`,
+              label: <span>복합명사사전 <KbdKey>{displayTabKey(hotkeys.tabCndic)}</KbdKey></span>,
               children: <DicTab dicType="cndic" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={cndicSearch} />,
             },
             {
               key: 'thesaurus',
-              label: `유사어사전 (${displayTabKey(hotkeys.tabThesaurus)})`,
+              label: <span>유사어사전 <KbdKey>{displayTabKey(hotkeys.tabThesaurus)}</KbdKey></span>,
               children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} />,
             },
           ]}
