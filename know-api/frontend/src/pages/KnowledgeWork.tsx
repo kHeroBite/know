@@ -392,8 +392,8 @@ export default function KnowledgeWork() {
       setTotalCount(data.total_count || data.total || 0)
       setMinPage(1)
       setMaxPage(1)
-      // REQ-12: 첫 안읽은 키워드 자동 선택
-      const firstUnread = (data.items || []).find((i: KeywordItem) => i.status !== 'completed')
+      // REQ-12: 첫 미작업 키워드 자동 선택 (flag W = 작업완료 제외)
+      const firstUnread = (data.items || []).find((i: KeywordItem) => i.flag !== 'W')
       if (firstUnread) {
         setSelected(firstUnread)
         setIsCenterFocused(true)
@@ -623,7 +623,11 @@ export default function KnowledgeWork() {
               }
             })
             .catch((err: any) => {
-              const detail = err?.response?.data?.detail || '등록 실패'
+              const detail = typeof err?.response?.data?.detail === 'string'
+                ? err.response.data.detail
+                : Array.isArray(err?.response?.data?.detail)
+                  ? err.response.data.detail.map((d: any) => d.msg || d).join(', ')
+                  : err?.response?.data?.message || err?.message || '등록 실패'
               message.error(detail)
             })
         } else {
@@ -646,7 +650,14 @@ export default function KnowledgeWork() {
                 historyRef.current?.reload()
               }
             })
-            .catch((err: any) => { const detail = err?.response?.data?.detail || '등록 실패'; message.error(detail) })
+            .catch((err: any) => {
+              const detail = typeof err?.response?.data?.detail === 'string'
+                ? err.response.data.detail
+                : Array.isArray(err?.response?.data?.detail)
+                  ? err.response.data.detail.map((d: any) => d.msg || d).join(', ')
+                  : err?.response?.data?.message || err?.message || '등록 실패'
+              message.error(detail)
+            })
         }
         break
       }
@@ -763,14 +774,21 @@ export default function KnowledgeWork() {
                   style={{
                     padding: '6px 12px', cursor: 'pointer',
                     background: record.flag === 'W' ? '#FCE4EC' : record.flag === 'R' ? '#FFF9C4' : 'white',
-                    border: selected?.id === record.id ? '2px solid #000' : undefined,
-                    borderBottom: selected?.id === record.id ? undefined : '1px solid #f0f0f0',
+                    outline: selected?.id === record.id ? '1px solid #1890ff' : undefined,
+                    borderBottom: '1px solid #f0f0f0',
                     fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     fontWeight: record.status === 'completed' ? 'normal' : 600,
                     color: record.status === 'completed' ? '#999' : '#333',
                   }}
                 >
-                  {index + 1}. {record.keyword}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <span style={{ width: 28, flexShrink: 0, textAlign: 'right', color: '#999', fontSize: 12 }}>
+                      {index + 1}
+                    </span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {record.keyword}
+                    </span>
+                  </div>
                 </div>
               ))}
               {loadingMore && (
@@ -874,7 +892,7 @@ export default function KnowledgeWork() {
             style={{ height: 400, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
-            <AIAnalysis keyword={aiKeyword} />
+            <AIAnalysis initialKeyword={aiKeyword} isAdmin={user?.auth === 'A'} />
           </Card>
           <Card
             title={<span>작업이력 <KbdKey>{displayKey(hotkeys.undoHistory)}</KbdKey></span>}

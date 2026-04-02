@@ -244,7 +244,7 @@ know-api/
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag)
-│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — DuckDuckGo+Wikipedia API)
+│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — DuckDuckGo+Wikipedia API, 프롬프트 GET/PUT 관리자 API)
 ├── migrations/                # DB 마이그레이션 SQL
 │   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 ├── pipeline/                  # Celery 태스크 모듈
@@ -252,17 +252,19 @@ know-api/
 │   ├── refine.py              # 검색로그 정제 태스크
 │   ├── morpheme.py            # 형태소분석 태스크
 │   └── build_wrapper.py       # 사전빌드 래퍼 태스크
+├── config/
+│   └── ai_prompt.json         # AI 분석 기본 프롬프트 설정 (관리자 수정 가능)
 ├── scripts/
 │   └── install_redis.sh       # Redis 설치 스크립트
 ├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환)
+    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시)
     │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
     ├── src/components/workspace/ # 작업실 컴포넌트
-    │   ├── AIAnalysis.tsx     # AI 분석 패널 (Google+Perplexity 탭)
-    │   ├── WorkHistory.tsx    # 작업이력 패널 (undo 버튼 + "사용자사전+명인" 표시 형식)
+    │   ├── AIAnalysis.tsx     # AI 분석 패널 (직접입력+URL표시+관리자프롬프트수정)
+    │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
     │   └── HotkeySettings.tsx # 핫키 설정 모달 (15개 단축키)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
     │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)

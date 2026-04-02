@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
-import { List, Button, Typography, Empty, Spin, message } from 'antd'
+import { Table, Button, Empty, Spin, message } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { UndoOutlined } from '@ant-design/icons'
 import { workspaceAPI } from '../../api/workspace'
-
-const { Text } = Typography
 
 export interface WorkHistoryItem {
   id: number
@@ -27,6 +26,9 @@ interface Props {
   domain: string
   onUndo?: (item: WorkHistoryItem) => void
 }
+
+const DIC_LABEL: Record<string, string> = { udic: '사용자사전', cndic: '복합명사', thesaurus: '유사어' }
+const ACT_LABEL: Record<string, string> = { add: '+', delete: '-' }
 
 export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo }, ref) {
   const [items, setItems] = useState<WorkHistoryItem[]>([])
@@ -66,6 +68,35 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
 
   useImperativeHandle(ref, () => ({ reload: load, undoLatest }))
 
+  const columns: ColumnsType<WorkHistoryItem> = [
+    {
+      title: '사전',
+      dataIndex: 'dic_type',
+      width: 60,
+      render: (v: string) => DIC_LABEL[v] || v,
+    },
+    {
+      title: '작업',
+      dataIndex: 'action_type',
+      width: 50,
+      render: (v: string) => ACT_LABEL[v] || v,
+    },
+    {
+      title: '키워드',
+      key: 'keyword',
+      ellipsis: true,
+      render: (_: unknown, record: WorkHistoryItem) => record.word || record.head_word || '-',
+    },
+    {
+      title: '',
+      key: 'undo',
+      width: 50,
+      render: (_: unknown, record: WorkHistoryItem) => !record.undone ? (
+        <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(record)} />
+      ) : null,
+    },
+  ]
+
   if (loading) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin size="small" /></div>
   }
@@ -75,28 +106,16 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
   }
 
   return (
-    <div style={{ overflow: 'auto', height: '100%' }}>
-      <List
-        size="small"
-        dataSource={items}
-        renderItem={(item) => (
-          <List.Item
-            style={{
-              padding: '4px 8px',
-              ...(item.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {}),
-            }}
-            extra={!item.undone ? (
-              <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(item)} />
-            ) : undefined}
-          >
-            <Text style={{ fontSize: 12 }}>
-              {({'udic':'사용자사전','cndic':'복합명사','thesaurus':'유사어'} as Record<string,string>)[item.dic_type] || item.dic_type}{' '}
-              {({'add':'+','delete':'-'} as Record<string,string>)[item.action_type] || item.action_type}{' '}
-              {item.word || item.head_word || '-'}
-            </Text>
-          </List.Item>
-        )}
-      />
-    </div>
+    <Table
+      size="small"
+      dataSource={items}
+      columns={columns}
+      rowKey="id"
+      pagination={false}
+      scroll={{ y: 240 }}
+      onRow={(record) => ({
+        style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
+      })}
+    />
   )
 })

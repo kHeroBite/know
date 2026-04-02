@@ -69,6 +69,12 @@ export const workspaceAPI = {
   searchAI: (keyword: string) =>
     클라이언트.get('/ai-analysis/search', { params: { keyword } }),
 
+  getAIPrompt: () =>
+    클라이언트.get('/ai-analysis/prompt'),
+
+  updateAIPrompt: (prompt_template: string) =>
+    클라이언트.put('/ai-analysis/prompt', { prompt_template }),
+
   // 핫키
   getHotkeys: () =>
     클라이언트.get('/workspaces/hotkeys'),

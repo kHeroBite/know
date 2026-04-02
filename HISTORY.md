@@ -1,5 +1,39 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 작업실 6건: 자동선택+border+컬럼분리+AI분석UI+이력테이블+오류표시 (커밋: TBD)
+
+### 수정 내용
+
+**건1: 진입 시 미작업 키워드 자동 선택** (`KnowledgeWork.tsx`)
+- 작업실 진입 시 flag!='W'인 첫 번째 키워드 자동 선택 처리
+
+**건2: 선택 키워드 outline 1px solid #1890ff** (`KnowledgeWork.tsx`)
+- 선택된 키워드 행에 파란색 테두리 1px 표시
+
+**건3: 키워드 번호/텍스트 컬럼 분리** (`KnowledgeWork.tsx`)
+- 키워드 목록에서 순번 컬럼과 텍스트 컬럼을 별도 분리
+
+**건4: AI분석 직접입력 UI + URL 표시 + 프롬프트 수정(관리자)** (`AIAnalysis.tsx`, `ai_analysis.py`, `ai_analysis_service.py`, `workspace.ts`, `config/ai_prompt.json`)
+- AI분석 패널에 직접입력 텍스트박스 추가
+- 분석 결과 URL 표시 기능 추가
+- 관리자 전용 프롬프트 수정 UI 추가
+- config/ai_prompt.json 신규 생성 (기본 프롬프트 저장)
+
+**건5: 작업이력 Table 4컬럼 분리** (`WorkHistory.tsx`)
+- 작업이력 패널을 Ant Design Table로 변환 — 번호/사전/단어/작업 4컬럼
+
+**건6: 단축키 등록 오류 메시지 복원** (`KnowledgeWork.tsx`)
+- 단축키 등록 실패 시 오류 메시지 표시 기능 복원
+
+### 수정 파일
+- `know-api/frontend/src/pages/KnowledgeWork.tsx`
+- `know-api/frontend/src/components/workspace/AIAnalysis.tsx`
+- `know-api/frontend/src/components/workspace/WorkHistory.tsx`
+- `know-api/api/ai_analysis.py`
+- `know-api/services/ai_analysis_service.py`
+- `know-api/config/ai_prompt.json` (신규)
+- `know-api/frontend/src/api/workspace.ts`
+
 ## 2026-04-02 — 작업실 8건: flag+포스트잇+프롬프트+이력형식+순번+undo탭전환+border
 
 ### 수정 내용

@@ -1,6 +1,9 @@
 """AI분석 검색 서비스 — DuckDuckGo Instant Answer API + Wikipedia 한국어 API."""
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from urllib.parse import quote
 
 import httpx
@@ -14,11 +17,35 @@ _HEADERS = {
     ),
 }
 
+_PROMPT_FILE = Path(__file__).parent.parent / "config" / "ai_prompt.json"
+_DEFAULT_PROMPT = "{keyword} 무엇인지 짧게 2줄로 설명해줘"
+
+
+def 프롬프트로드() -> str:
+    """config/ai_prompt.json에서 프롬프트 템플릿 로드."""
+    try:
+        if _PROMPT_FILE.exists():
+            data = json.loads(_PROMPT_FILE.read_text(encoding="utf-8"))
+            return data.get("prompt_template", _DEFAULT_PROMPT)
+    except Exception:
+        pass
+    return _DEFAULT_PROMPT
+
+
+def 프롬프트저장(prompt_template: str) -> None:
+    """config/ai_prompt.json에 프롬프트 템플릿 저장."""
+    _PROMPT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _PROMPT_FILE.write_text(
+        json.dumps({"prompt_template": prompt_template}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
 
 async def _덕덕고검색(keyword: str) -> dict:
     """DuckDuckGo Instant Answer API로 키워드 정보 추출 (JSON, 크롤링 불필요)."""
     try:
-        query = f"{keyword} 무엇인지 짧게 2줄로 설명해줘"
+        prompt = 프롬프트로드()
+        query = prompt.format(keyword=keyword)
         url = (
             f"https://api.duckduckgo.com/?q={quote(query)}"
             "&format=json&no_html=1&skip_disambig=1&kl=kr-ko"
