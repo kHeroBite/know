@@ -1,4 +1,4 @@
-"""AI분석 검색 서비스 — DuckDuckGo Instant Answer API + Wikipedia 한국어 API."""
+"""AI분석 검색 서비스 — Google 스니펫(httpx+BS4) + DuckDuckGo Instant Answer API + Wikipedia 한국어 API."""
 from __future__ import annotations
 
 import json
@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import httpx
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -49,6 +50,54 @@ def 프롬프트저장(prompt_template: str) -> None:
         json.dumps({"prompt_template": prompt_template}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+async def _구글AI개요검색(keyword: str) -> dict:
+    """httpx + BeautifulSoup4로 구글 검색 지식 패널/스니펫 파싱."""
+    _GOOGLE_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        search_url = f"https://www.google.com/search?q={quote(keyword)}&hl=ko&gl=kr&num=3"
+        logger.info("[AI분석][Google] httpx 검색 시작: keyword=%r", keyword)
+        async with httpx.AsyncClient(timeout=10.0, headers=_GOOGLE_HEADERS, follow_redirects=True) as client:
+            resp = await client.get(search_url)
+            resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # 지식 패널/AI개요 CSS 선택자 순서대로 시도
+        selectors = [
+            {"selector": "div[data-attrid='wa:/description']", "attr": "span"},
+            {"selector": "div.kno-rdesc", "attr": "span"},
+            {"selector": "div.hgKElc", "attr": None},
+            {"selector": "div.LGOjhe", "attr": None},
+            {"selector": "div.VwiC3b", "attr": None},
+        ]
+        result = None
+        for s in selectors:
+            container = soup.select_one(s["selector"])
+            if container:
+                if s["attr"]:
+                    el = container.find(s["attr"])
+                    text = el.get_text(strip=True) if el else container.get_text(strip=True)
+                else:
+                    text = container.get_text(strip=True)
+                if text and len(text) > 15:
+                    result = text[:300]
+                    logger.info("[AI분석][Google] 선택자 '%s' 적중: %r", s["selector"], result[:80])
+                    break
+        if not result:
+            logger.info("[AI분석][Google] 스니펫 없음 — '%s'", keyword)
+            return {"result": None, "error": "Google 스니펫 없음"}
+        return {"result": result, "error": None}
+    except Exception as e:
+        logger.error("[AI분석][Google] httpx 오류: %s", e)
+        return {"result": None, "error": str(e)}
 
 
 async def _덕덕고검색(keyword: str) -> dict:
@@ -123,20 +172,29 @@ async def _위키피디아검색(keyword: str) -> dict:
 
 
 async def AI검색(keyword: str) -> dict:
-    """DuckDuckGo + Wikipedia 동시 검색."""
+    """Google AI개요(Playwright 우선) + DDG fallback + Wikipedia 동시 검색."""
     import asyncio
     logger.info("[AI분석] 검색 시작: keyword=%r", keyword)
     prompt = 프롬프트로드()
     query = prompt.format(keyword=keyword)
     logger.info("[AI분석] 프롬프트 query=%r", query)
-    ddg_task = asyncio.create_task(_덕덕고검색(keyword))
+    # Google AI개요 우선 시도 + Wikipedia 동시 실행
+    google_task = asyncio.create_task(_구글AI개요검색(keyword))
     wiki_task = asyncio.create_task(_위키피디아검색(keyword))
-    ddg_result = await ddg_task
+    google_result = await google_task
     wiki_result = await wiki_task
-    google_val = ddg_result.get("result") if ddg_result else None
+    google_val = google_result.get("result") if google_result else None
+    # Google 결과 없으면 DDG fallback
+    if not google_val:
+        logger.info("[AI분석] Google AI개요 없음 — DDG fallback 시도")
+        ddg_result = await _덕덕고검색(keyword)
+        google_val = ddg_result.get("result") if ddg_result else None
+        logger.info("[AI분석] DDG fallback 결과: %r", google_val[:60] if google_val else None)
+    else:
+        logger.info("[AI분석] Google AI개요 사용: %r", google_val[:60])
     wiki_val = wiki_result.get("result") if wiki_result else None
     logger.info(
-        "[AI분석] 최종 반환: google(DDG)=%r, wikipedia=%r",
+        "[AI분석] 최종 반환: google=%r, wikipedia=%r",
         google_val[:60] if google_val else None,
         wiki_val[:60] if wiki_val else None,
     )
