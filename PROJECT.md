@@ -238,9 +238,12 @@ know-api/
 │   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
-│   └── ai_analysis_service.py # AI 분석 서비스 (LLM + Wikipedia — LLM탭/Wikipedia탭 2종)
+│   ├── ai_analysis_service.py # AI 분석 서비스 (LLM + Wikipedia — LLM탭/Wikipedia탭 2종)
+│   ├── typo_matcher.py        # 한영변환+오타변형 엔진 (검색변형생성 — 모음/인접키/한영 최대 20개)
+│   └── thesaurus_recommend.py # 유사어 추천 서비스 (후보검색 + LLM재순위, frozenset 양방향 중복제거)
 ├── api/                       # FastAPI 라우터
-│   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
+│   ├── auth.py, domain.py, category.py, statistics.py
+│   ├── dictionary.py          # 사전 CRUD API + 유사어 추천: GET/POST /api/dictionary/recommend
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})

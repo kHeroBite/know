@@ -30,6 +30,8 @@ from services.dictionary_service import (
     비동기파일임포트시작,
     임포트진행률조회,
 )
+from pydantic import BaseModel
+from services.thesaurus_recommend import 유사어추천후보검색, LLM재순위
 
 라우터 = APIRouter(prefix="/api/dictionaries", tags=["사전"])
 
@@ -221,3 +223,37 @@ def 유의어일괄등록(
     """유의어 일괄 등록."""
     결과 = 유의어일괄추가(db, domain, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
+
+
+# ─── THESAURUS RECOMMEND ────────────────────────────────────────────
+
+
+class LLM추천요청(BaseModel):
+    keyword: str
+    candidates: list
+    context: str = ""
+    prompt: str = ""
+
+
+@라우터.get("/{domain}/thesaurus/recommend")
+def 유사어추천(
+    domain: str,
+    keyword: str = Query(...),
+    limit: int = Query(50),
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """키워드 기반 유사어 세트 추천 (텍스트 매칭 Phase 1)."""
+    결과 = 유사어추천후보검색(db, domain, keyword, limit)
+    return {"items": 결과, "total": len(결과), "keyword": keyword}
+
+
+@라우터.post("/{domain}/thesaurus/recommend/llm")
+async def 유사어LLM추천(
+    domain: str,
+    요청: LLM추천요청,
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """LLM 기반 의미 재순위 (Phase 2)."""
+    결과 = await LLM재순위(요청.keyword, 요청.candidates, 요청.context, 요청.prompt)
+    return 결과

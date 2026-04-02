@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
+import { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useRef } from 'react'
 import { Table, Button, Empty, Spin, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { UndoOutlined } from '@ant-design/icons'
@@ -34,6 +34,19 @@ const ACT_LABEL: Record<string, string> = { add: '+', delete: '-' }
 export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo }, ref) {
   const [items, setItems] = useState<WorkHistoryItem[]>([])
   const [loading, setLoading] = useState(false)
+  const 컨테이너Ref = useRef<HTMLDivElement>(null)
+  const [테이블높이, set테이블높이] = useState(200)
+
+  useEffect(() => {
+    const el = 컨테이너Ref.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      const h = el.clientHeight - 8
+      set테이블높이(Math.max(80, h))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const load = useCallback(async () => {
     if (!workspace || !domain) return
@@ -114,16 +127,18 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
   }
 
   return (
-    <Table
-      size="small"
-      dataSource={items}
-      columns={columns}
-      rowKey="id"
-      pagination={false}
-      scroll={{ y: 'calc(100vh - 300px)' as any }}
-      onRow={(record) => ({
-        style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
-      })}
-    />
+    <div ref={컨테이너Ref} style={{ height: '100%' }}>
+      <Table
+        size="small"
+        dataSource={items}
+        columns={columns}
+        rowKey="id"
+        pagination={false}
+        scroll={{ y: 테이블높이 }}
+        onRow={(record) => ({
+          style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
+        })}
+      />
+    </div>
   )
 })

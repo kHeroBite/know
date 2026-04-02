@@ -136,6 +136,34 @@ def flag_업데이트(db: Session, keyword_id: int, flag: str, user_id: str) -> 
     return {"id": keyword_id, "flag": flag}
 
 
+def 마지막읽은위치(db: Session, workspace: str, domain: str, assigned_to: str, size: int = 100) -> dict:
+    """마지막으로 읽은(R/W) 키워드의 위치를 반환하여 해당 페이지부터 로딩할 수 있게 한다."""
+    params = {"ws": workspace, "dom": domain, "uid": assigned_to}
+
+    # 마지막 R/W 키워드 조회 (line_num DESC)
+    row = db.execute(text("""
+        SELECT id, line_num FROM keyword_assignments
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND flag IN ('R','W')
+        ORDER BY line_num DESC LIMIT 1
+    """), params).fetchone()
+
+    if not row:
+        return {"keyword_id": None, "page": 1}
+
+    keyword_id, line_num = row[0], row[1]
+
+    # 해당 키워드 앞에 몇 건이 있는지 (페이지 계산용)
+    position = db.execute(text("""
+        SELECT COUNT(*) FROM keyword_assignments
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid
+        AND status='assigned' AND line_num < :ln
+    """), {**params, "ln": line_num}).scalar() or 0
+
+    page = max(1, (position // size) + 1)
+
+    return {"keyword_id": keyword_id, "line_num": line_num, "page": page, "position": position}
+
+
 def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """user_id에게 할당된 키워드를 완료 처리."""
     now = datetime.now().isoformat()

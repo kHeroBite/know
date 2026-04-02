@@ -96,7 +96,6 @@ export default function Layout() {
         { key: '/statistics', label: '통계' },
         { key: '/build-history', label: '빌드 이력' },
         { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
-        { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },

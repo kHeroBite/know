@@ -41,6 +41,13 @@ def 목록(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), _: dict = Depends(현재사용자가져오기)):
     return assignment_service.키워드목록(db, workspace, domain, filter, page, size, assigned_to=assigned_to)
 
+@라우터.get("/last-read")
+def 마지막읽은위치(workspace: str = Query(...), domain: str = Query(...),
+                   size: int = Query(100),
+                   db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
+    """마지막으로 읽은 키워드의 위치(페이지) 반환."""
+    return assignment_service.마지막읽은위치(db, workspace, domain, current["user_id"], size)
+
 @라우터.get("/stats")
 def 통계(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), _: dict = Depends(현재사용자가져오기)):

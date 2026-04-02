@@ -1,5 +1,36 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-03 — 작업실 유사어 추천 시스템: 오타변형 텍스트매칭 + LLM 의미기반 재순위 하이브리드 (커밋: TBD)
+
+### 수정 내용
+
+**신규: 한영변환+오타변형 엔진** (`services/typo_matcher.py`)
+- 한글 자모 분해/조합 유틸 (5-state machine으로 복합종성 처리)
+- 한→영/영→한 키보드 레이아웃 변환
+- 모음 오타 그룹 치환, 인접키 자음 치환
+- `검색변형생성(keyword)` → 최대 20개 변형 반환 (점수 기반)
+
+**신규: 유사어 후보검색 + LLM 재순위** (`services/thesaurus_recommend.py`)
+- `세트정규화키(head, tail)` — frozenset 양방향 중복 제거
+- `유사어추천후보검색(db, site, keyword, limit=50)` — 변형 생성 → DB 전체 로드 → 점수 매칭 → 상위 반환
+- `LLM재순위(keyword, candidates, context, prompt)` — LLM 상위 5개 선택, 실패 시 점수 기준 폴백
+
+**수정: recommend GET/POST 엔드포인트 추가** (`api/dictionary.py`)
+- `GET /api/dictionary/recommend` — 후보 검색 (텍스트 매칭 결과)
+- `POST /api/dictionary/recommend` — LLM 재순위 결과 반환
+
+**수정: 추천 모달 UI** (`frontend/src/pages/KnowledgeWork.tsx`)
+- 작업실 숫자3 핫키 → 유사어 추천 모달 오픈
+- LLM 분석 버튼 + 프롬프트 편집 가능
+
+**기타 수정** (`api/assignment.py`, `services/assignment_service.py`, `frontend/src/api/assignment.ts`, `frontend/src/components/Layout.tsx`, `frontend/src/components/workspace/WorkHistory.tsx`)
+
+### 수정 파일 (9개)
+- **백엔드 (4):** `services/typo_matcher.py`(신규), `services/thesaurus_recommend.py`(신규), `api/dictionary.py`, `api/assignment.py`, `services/assignment_service.py`
+- **프론트엔드 (4):** `frontend/src/pages/KnowledgeWork.tsx`, `frontend/src/components/Layout.tsx`, `frontend/src/components/workspace/WorkHistory.tsx`, `frontend/src/api/assignment.ts`
+
+---
+
 ## 2026-04-02 — LLM 설정 페이지 + AI분석 LLM탭 구현 (커밋: 3a00471)
 
 ### 수정 내용

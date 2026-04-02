@@ -184,6 +184,13 @@ elif os.path.isdir(path):
 **재발방지**: Python 신규 파일 작성 시 서버 Python 버전(3.8) 사전 확인 필수. `list[T]`/`dict[K,V]` 금지 — 반드시 `from typing import List, Dict, Optional` 임포트 후 사용.
 **Level**: 1 (ktest에서 즉시 발견·수정, docs 기록)
 
+### L-026: write_guard.sh가 Bash mkdir -p 차단 → kio dir_create로 즉시 대체 (2026-04-03)
+
+**현상**: kdev 에이전트가 디렉토리 생성 시 Bash `mkdir -p` 명령 사용 → write_guard.sh 차단 → `mcp__kio__dir_create`로 정상 대체.
+**원인**: kdev 에이전트가 CLAUDE.md kio 독점 규칙을 준수하지 않고 Bash mkdir 사용 시도.
+**재발방지**: 디렉토리 생성 시 항상 `mcp__kio__dir_create` 사용 (write_guard 차단 → 즉시 kio로 대체 패턴).
+**Level**: 1 (write_guard가 즉시 차단·대체 처리, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
