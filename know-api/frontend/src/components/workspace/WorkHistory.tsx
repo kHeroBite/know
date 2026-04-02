@@ -89,7 +89,11 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
               <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(item)} />
             ) : undefined}
           >
-            <Text style={{ fontSize: 12 }}>{item.action_type}: {item.word || item.head_word || '-'}</Text>
+            <Text style={{ fontSize: 12 }}>
+              {({'udic':'사용자사전','cndic':'복합명사','thesaurus':'유사어'} as Record<string,string>)[item.dic_type] || item.dic_type}{' '}
+              {({'add':'+','delete':'-'} as Record<string,string>)[item.action_type] || item.action_type}{' '}
+              {item.word || item.head_word || '-'}
+            </Text>
           </List.Item>
         )}
       />

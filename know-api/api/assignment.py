@@ -52,6 +52,16 @@ def 할당(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
     return assignment_service.할당받기(db, workspace, domain, from_line, to_line, current["user_id"])
 
+@라우터.put("/flag")
+def flag_업데이트처리(
+    keyword_id: int = Query(...),
+    flag: str = Query(...),
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """키워드 읽음/작업완료 flag 업데이트."""
+    return assignment_service.flag_업데이트(db, keyword_id, flag, current["user_id"])
+
 @라우터.post("/complete")
 def 완료(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):

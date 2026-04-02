@@ -12,7 +12,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
 import 클라이언트 from '../api/client'
 import AIAnalysis from '../components/workspace/AIAnalysis'
-import WorkHistory, { WorkHistoryRef } from '../components/workspace/WorkHistory'
+import WorkHistory, { WorkHistoryRef, WorkHistoryItem } from '../components/workspace/WorkHistory'
 import HotkeySettings from '../components/workspace/HotkeySettings'
 
 const { Text, Title } = Typography
@@ -369,9 +369,9 @@ export default function KnowledgeWork() {
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
 
-  // 키워드 읽음/등록 추적
-  const [viewedKeywordIds, setViewedKeywordIds] = useState<Set<number>>(new Set())
-  const [registeredKeywordIds, setRegisteredKeywordIds] = useState<Set<number>>(new Set())
+  // 키워드 카운트
+  const [workedCount, setWorkedCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
 
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
@@ -388,6 +388,8 @@ export default function KnowledgeWork() {
       )
       setItems(data.items || [])
       setTotal(data.total || 0)
+      setWorkedCount(data.worked_count || 0)
+      setTotalCount(data.total_count || data.total || 0)
       setMinPage(1)
       setMaxPage(1)
       // REQ-12: 첫 안읽은 키워드 자동 선택
@@ -395,6 +397,10 @@ export default function KnowledgeWork() {
       if (firstUnread) {
         setSelected(firstUnread)
         setIsCenterFocused(true)
+        if (!firstUnread.flag) {
+          assignmentApi.updateFlag(firstUnread.id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === firstUnread.id ? { ...i, flag: 'R' } : i))
+        }
       }
     } catch {
       setItems([])
@@ -534,7 +540,10 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx > 0 ? curIdx - 1 : 0
         setSelected(items[newIdx])
-        setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[newIdx].id); return n })
+        if (!items[newIdx].flag) {
+          assignmentApi.updateFlag(items[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === items[newIdx].id ? { ...i, flag: 'R' } : i))
+        }
         break
       }
       case 'nextKeyword': {
@@ -542,7 +551,10 @@ export default function KnowledgeWork() {
         const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
         setSelected(items[newIdx])
-        setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[newIdx].id); return n })
+        if (!items[newIdx].flag) {
+          assignmentApi.updateFlag(items[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === items[newIdx].id ? { ...i, flag: 'R' } : i))
+        }
         break
       }
       case 'prevAnalysis': {
@@ -556,7 +568,10 @@ export default function KnowledgeWork() {
           if (curIdx > 0) {
             selectLastTokenRef.current = true
             setSelected(items[curIdx - 1])
-            setViewedKeywordIds(prev => { const n = new Set(prev); n.add(items[curIdx - 1].id); return n })
+            if (!items[curIdx - 1].flag) {
+              assignmentApi.updateFlag(items[curIdx - 1].id, 'R').catch(() => {})
+              setItems(prev => prev.map(i => i.id === items[curIdx - 1].id ? { ...i, flag: 'R' } : i))
+            }
           }
         }
         break
@@ -570,6 +585,10 @@ export default function KnowledgeWork() {
           const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
           if (curIdx >= 0 && curIdx < items.length - 1) {
             setSelected(items[curIdx + 1])
+            if (!items[curIdx + 1].flag) {
+              assignmentApi.updateFlag(items[curIdx + 1].id, 'R').catch(() => {})
+              setItems(prev => prev.map(i => i.id === items[curIdx + 1].id ? { ...i, flag: 'R' } : i))
+            }
           } else {
             message.info('모든 키워드를 완료했습니다')
           }
@@ -591,7 +610,10 @@ export default function KnowledgeWork() {
               setDicRefreshKey(prev => prev + 1)
               setActiveTab('thesaurus')
               setThesaurusSearch(selectedWord)
-              if (selected) setRegisteredKeywordIds(prev => new Set(prev).add(selected.id))
+              if (selected) {
+                assignmentApi.updateFlag(selected.id, 'W').catch(() => {})
+                setItems(prev => prev.map(i => i.id === selected.id ? { ...i, flag: 'W' } : i))
+              }
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
@@ -612,7 +634,10 @@ export default function KnowledgeWork() {
               setActiveTab(dicType)
               if (dicType === 'udic') setUdicSearch(selectedWord)
               else if (dicType === 'cndic') setCndicSearch(selectedWord)
-              if (selected) setRegisteredKeywordIds(prev => new Set(prev).add(selected.id))
+              if (selected) {
+                assignmentApi.updateFlag(selected.id, 'W').catch(() => {})
+                setItems(prev => prev.map(i => i.id === selected.id ? { ...i, flag: 'W' } : i))
+              }
               if (selectedWorkspace && selectedDomain) {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
@@ -664,6 +689,18 @@ export default function KnowledgeWork() {
       .catch(() => message.error('핫키 설정 저장 실패'))
   }, [])
 
+  // ─── Undo 콜백 ───────────────────────────────────────────────
+  const handleUndoDone = useCallback((item: WorkHistoryItem) => {
+    const tabMap: Record<string, string> = { udic: 'udic', cndic: 'cndic', thesaurus: 'thesaurus' }
+    const tab = tabMap[item.dic_type] || 'udic'
+    setActiveTab(tab)
+    const word = item.word || item.head_word || ''
+    if (tab === 'udic') setUdicSearch(word)
+    else if (tab === 'cndic') setCndicSearch(word)
+    else if (tab === 'thesaurus') setThesaurusSearch(word)
+    setDicRefreshKey(prev => prev + 1)
+  }, [])
+
   // ─── Guard ──────────────────────────────────────────────────
 
   if (!selectedWorkspace || !selectedDomain) {
@@ -701,7 +738,7 @@ export default function KnowledgeWork() {
         {/* 좌측열: 키워드목록 + 키워드분석 */}
         <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
-            title={`키워드(${total}건)`}
+            title={`키워드(${workedCount}/${totalCount})`}
             size="small"
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
@@ -712,23 +749,28 @@ export default function KnowledgeWork() {
               )}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-              ) : items.map(record => (
+              ) : items.map((record, index) => (
                 <div
                   key={record.id}
                   ref={(el) => { itemRefs.current[record.id] = el }}
-                  onClick={(e) => { e.stopPropagation(); setSelected(record); setIsCenterFocused(true); setViewedKeywordIds(prev => new Set(prev).add(record.id)) }}
+                  onClick={(e) => {
+                    e.stopPropagation(); setSelected(record); setIsCenterFocused(true)
+                    if (!record.flag) {
+                      assignmentApi.updateFlag(record.id, 'R').catch(() => {})
+                      setItems(prev => prev.map(i => i.id === record.id ? { ...i, flag: 'R' } : i))
+                    }
+                  }}
                   style={{
                     padding: '6px 12px', cursor: 'pointer',
-                    background: selected?.id === record.id ? '#e6f4ff'
-                      : registeredKeywordIds.has(record.id) ? '#FFE0E0'
-                      : viewedKeywordIds.has(record.id) || record.status === 'completed' ? '#FFFDE7' : undefined,
-                    borderBottom: '1px solid #f0f0f0',
+                    background: record.flag === 'W' ? '#FCE4EC' : record.flag === 'R' ? '#FFF9C4' : 'white',
+                    border: selected?.id === record.id ? '2px solid #000' : undefined,
+                    borderBottom: selected?.id === record.id ? undefined : '1px solid #f0f0f0',
                     fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     fontWeight: record.status === 'completed' ? 'normal' : 600,
                     color: record.status === 'completed' ? '#999' : '#333',
                   }}
                 >
-                  {record.keyword}
+                  {index + 1}. {record.keyword}
                 </div>
               ))}
               {loadingMore && (
@@ -765,7 +807,7 @@ export default function KnowledgeWork() {
           >
             <div style={{
               padding: 16, minHeight: '100%', transition: 'background-color 0.3s ease',
-              backgroundColor: isCenterFocused ? `${selectedColor || '#faad14'}20` : undefined,
+              backgroundColor: isCenterFocused ? '#FFFDE7' : undefined,
             }}>
             {selected ? (
               <div style={{ fontSize: 13, lineHeight: 1.8 }}>
@@ -780,7 +822,7 @@ export default function KnowledgeWork() {
                       style={{
                         cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
                         transition: 'background 0.15s',
-                        ...(isSelected ? { background: '#b3d9ff' } : {}),
+                        ...(isSelected ? { background: '#FFF9C4' } : {}),
                       }}
                     >
                       {token.text}
@@ -829,7 +871,7 @@ export default function KnowledgeWork() {
           <Card
             title={<span>AI 분석 <KbdKey>{displayKey(hotkeys.aiAnalysis)}</KbdKey></span>}
             size="small"
-            style={{ height: 200, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+            style={{ height: 400, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
             <AIAnalysis keyword={aiKeyword} />
@@ -844,6 +886,7 @@ export default function KnowledgeWork() {
               ref={historyRef}
               workspace={selectedWorkspace}
               domain={selectedDomain}
+              onUndo={handleUndoDone}
             />
           </Card>
         </div>

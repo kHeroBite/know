@@ -83,18 +83,23 @@ def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pen
         params["uid"] = assigned_to
     
     total = db.execute(text(f"SELECT COUNT(*) FROM keyword_assignments WHERE {where}"), params).scalar() or 0
-    
+
+    worked_count = db.execute(text(
+        f"SELECT COUNT(*) FROM keyword_assignments WHERE {where} AND flag != ''"
+    ), params).scalar() or 0
+
     offset = (page - 1) * size
     rows = db.execute(text(f"""
-        SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at
+        SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at, flag
         FROM keyword_assignments WHERE {where}
         ORDER BY line_num ASC LIMIT :limit OFFSET :offset
     """), {**params, "limit": size, "offset": offset}).fetchall()
     
     items = [{"id": r[0], "line_num": r[1], "keyword": r[2], "analysis": r[3],
-              "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7]} for r in rows]
+              "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7],
+              "flag": r[8] or ""} for r in rows]
     
-    return {"items": items, "total": total, "page": page, "size": size}
+    return {"items": items, "total": total, "page": page, "size": size, "worked_count": worked_count}
 
 
 def 통계(db: Session, workspace: str, domain: str) -> dict:
@@ -119,6 +124,16 @@ def 할당받기(db: Session, workspace: str, domain: str, from_line: int, to_li
     """), {"uid": user_id, "now": now, "ws": workspace, "dom": domain, "fr": from_line, "to": to_line})
     db.commit()
     return {"assigned": result.rowcount, "user_id": user_id, "from": from_line, "to": to_line}
+
+
+def flag_업데이트(db: Session, keyword_id: int, flag: str, user_id: str) -> dict:
+    """키워드 flag 업데이트 (R=읽음, W=작업완료, ''=미확인)."""
+    db.execute(
+        text("UPDATE keyword_assignments SET flag=:flag WHERE id=:id AND assigned_to=:uid"),
+        {"flag": flag, "id": keyword_id, "uid": user_id},
+    )
+    db.commit()
+    return {"id": keyword_id, "flag": flag}
 
 
 def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:

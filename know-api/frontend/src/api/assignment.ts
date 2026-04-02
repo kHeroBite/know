@@ -9,6 +9,7 @@ export interface KeywordItem {
   assigned_to: string | null
   assigned_at: string | null
   completed_at: string | null
+  flag?: string
 }
 
 export interface AssignmentStats {
@@ -33,4 +34,6 @@ export const assignmentApi = {
     클라이언트.post('/assignments/reset', null, { params: { workspace, domain } }),
   작업상태: (workspace: string, domain: string) =>
     클라이언트.get('/assignments/status', { params: { workspace, domain } }),
+  updateFlag: (id: number, flag: string) =>
+    클라이언트.put('/assignments/flag', null, { params: { keyword_id: id, flag } }),
 }

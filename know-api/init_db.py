@@ -96,6 +96,14 @@ def 테이블생성():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_status ON keyword_assignments(status)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_unique ON keyword_assignments(workspace, domain, line_num)"))
 
+        # 마이그레이션: flag 컬럼 추가 (없으면 추가)
+        try:
+            conn.execute(text("ALTER TABLE keyword_assignments ADD COLUMN flag TEXT DEFAULT ''"))
+            conn.commit()
+            print("  [OK] keyword_assignments.flag 컬럼 추가")
+        except Exception:
+            pass  # 이미 존재하면 무시
+
         # 5. work_history (작업이력)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS work_history (

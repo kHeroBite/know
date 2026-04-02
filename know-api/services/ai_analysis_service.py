@@ -18,8 +18,9 @@ _HEADERS = {
 async def _덕덕고검색(keyword: str) -> dict:
     """DuckDuckGo Instant Answer API로 키워드 정보 추출 (JSON, 크롤링 불필요)."""
     try:
+        query = f"{keyword} 무엇인지 짧게 2줄로 설명해줘"
         url = (
-            f"https://api.duckduckgo.com/?q={quote(keyword)}"
+            f"https://api.duckduckgo.com/?q={quote(query)}"
             "&format=json&no_html=1&skip_disambig=1&kl=kr-ko"
         )
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:

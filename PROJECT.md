@@ -243,7 +243,8 @@ know-api/
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
-│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — Google+Perplexity 스크래핑)
+│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag)
+│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — DuckDuckGo+Wikipedia API)
 ├── migrations/                # DB 마이그레이션 SQL
 │   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 ├── pipeline/                  # Celery 태스크 모듈
@@ -257,17 +258,18 @@ know-api/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력)
+    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환)
     │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (Google+Perplexity 탭)
-    │   ├── WorkHistory.tsx    # 작업이력 패널 (undo 버튼 포함)
+    │   ├── WorkHistory.tsx    # 작업이력 패널 (undo 버튼 + "사용자사전+명인" 표시 형식)
     │   └── HotkeySettings.tsx # 핫키 설정 모달 (15개 단축키)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
     │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)
     │   └── ControlPanel.tsx   # 파이프라인 제어 패널
     │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
+    ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함)
     ├── src/stores/authStore.ts # JWT 상태 관리
@@ -296,4 +298,6 @@ know-api/
 | /workspaces/hotkeys | 핫키 설정 조회 (GET) / 저장 (PUT) |
 | /work-history | 작업이력 목록 (GET) / 기록 (POST) |
 | /work-history/undo/{id} | 작업이력 undo/rollback (POST) |
-| /ai-analysis/search | AI 분석 검색 — Google+Perplexity 스크래핑 (GET) |
+| /assignments | 키워드 할당 목록 조회 (GET) |
+| /assignments/flag | 키워드 읽음/작업 flag 업데이트 (PUT) — R/W/'' |
+| /ai-analysis/search | AI 분석 검색 — DuckDuckGo+Wikipedia API (GET) |

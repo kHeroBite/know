@@ -1,5 +1,51 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 작업실 8건: flag+포스트잇+프롬프트+이력형식+순번+undo탭전환+border
+
+### 수정 내용
+
+**건1: 분석결과 하이라이트 배경색 포스트잇(#FFFDE7) 고정** (`KnowledgeWork.tsx`)
+- 분석결과 패널 배경색을 포스트잇 느낌 #FFFDE7(연노랑) 고정
+
+**건2: DB flag 컬럼 추가 + 자동 마킹 + 키워드목록 실시간 반영** (`init_db.py`, `assignment_service.py`, `api/assignment.py`, `assignment.ts`, `KnowledgeWork.tsx`)
+- `keyword_assignments.flag` 컬럼 추가 (R=읽음, W=작업완료, ''=미확인)
+- 분석결과 열릴 때 flag='R'로 자동 마킹 → PUT `/api/assignments/flag`
+- 키워드목록 worked_count 실시간 반영
+
+**건3: 키워드목록 타이틀 "키워드(N/M)" 형식** (`KnowledgeWork.tsx`)
+- 헤더에 총 키워드 수 / worked_count 표시
+
+**건4: AI분석 프롬프트 변경 + 높이 2배** (`ai_analysis_service.py`, `KnowledgeWork.tsx`)
+- DuckDuckGo 검색 기반 프롬프트 개선
+- 분석결과 패널 높이 2배 확대
+
+**건5: 작업이력 "사용자사전 + 명인" 형식** (`WorkHistory.tsx`)
+- 이력 항목 표시: `[사전타입] 단어` → `사용자사전 + 명인 표시 형식` 개선
+
+**건6: 키워드 할당 순번 표시** (`KnowledgeWork.tsx`)
+- 키워드목록에서 line_num(원본 순번) 표시
+
+**건7: undo 시 사전탭 전환 + 재검색** (`KnowledgeWork.tsx`)
+- undo 실행 후 해당 사전탭으로 자동 전환 + 키워드 재검색
+
+**건8: 선택 키워드 border 검정 (배경색 유지)** (`KnowledgeWork.tsx`)
+- 선택된 키워드 아이템에 검정 border 추가 (기존 배경색 유지)
+
+### 수정 파일
+- `know-api/init_db.py` (flag 컬럼 마이그레이션)
+- `know-api/services/assignment_service.py` (flag SELECT/UPDATE, worked_count)
+- `know-api/api/assignment.py` (PUT /flag 엔드포인트)
+- `know-api/services/ai_analysis_service.py` (DuckDuckGo 프롬프트)
+- `know-api/frontend/src/api/assignment.ts` (updateFlag API)
+- `know-api/frontend/src/pages/KnowledgeWork.tsx` (건1~건8 프론트 전체)
+- `know-api/frontend/src/components/workspace/WorkHistory.tsx` (이력 표시 형식)
+- `.claude/skills/kinfra_know/SKILL.md` (서버 빌드 스크립트 방식 명시)
+
+### 비고
+- 역라우팅 1회 발생: 건1 배경색 + 건2 flag API URL (L-022 기록됨)
+
+---
+
 ## 2026-04-02 — 작업실 4건: 스크롤+AI분석+이력undo+레이아웃
 
 ### 수정 내용

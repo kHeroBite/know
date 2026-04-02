@@ -6,6 +6,39 @@
 
 ## SQLite 스키마 (know.db)
 
+### keyword_assignments 테이블 (2026-04-02 flag 컬럼 추가)
+
+```sql
+CREATE TABLE IF NOT EXISTS keyword_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    line_num INTEGER NOT NULL,      -- 원본 순번
+    keyword TEXT NOT NULL,
+    analysis TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    assigned_to TEXT,
+    assigned_at TEXT,
+    completed_at TEXT,
+    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_unique ON keyword_assignments(workspace, domain, line_num);
+CREATE INDEX IF NOT EXISTS idx_kw_workspace ON keyword_assignments(workspace, domain);
+CREATE INDEX IF NOT EXISTS idx_kw_status ON keyword_assignments(status);
+```
+
+**목적**: 작업실 키워드 할당 관리 + 읽음/작업 상태 추적  
+**주요 쿼리**:
+- 목록 조회: `SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at, flag FROM keyword_assignments WHERE workspace=? AND domain=? AND assigned_to=? ORDER BY line_num LIMIT ? OFFSET ?`
+- worked_count: `SELECT COUNT(*) FROM keyword_assignments WHERE workspace=? AND domain=? AND assigned_to=? AND flag != ''`
+- flag 업데이트: `UPDATE keyword_assignments SET flag=:flag WHERE id=:id AND assigned_to=:uid`
+
+**마이그레이션**: 기존 DB는 `ALTER TABLE keyword_assignments ADD COLUMN flag TEXT DEFAULT ''` (init_db.py 자동 실행)
+
+---
+
 ### work_history 테이블 (2026-04-01 신규)
 
 ```sql
@@ -60,4 +93,5 @@ EPOST_CATEGORY   -- 카테고리 사전 (word, category)
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-02 | keyword_assignments.flag 컬럼 추가 (R/W/'') + API PUT /flag | init_db.py, assignment_service.py, api/assignment.py |
 | 2026-04-01 | work_history 테이블 신규 생성 | init_db.py |
