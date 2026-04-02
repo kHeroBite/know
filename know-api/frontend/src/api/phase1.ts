@@ -7,6 +7,9 @@ interface RunParams {
   start_step: number
   end_step: number
   workspace?: string
+  filter_mode?: string
+  filter_value?: number
+  sort_by?: string
 }
 
 export const phase1API = {

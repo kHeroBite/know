@@ -22,6 +22,9 @@ export default function Phase1Pipeline() {
   const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
   const [hasFiles, setHasFiles] = useState(false)
   const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
+  const [filterMode, setFilterMode] = useState<'rank' | 'count'>('rank')
+  const [filterValue, setFilterValue] = useState<number>(150000)
+  const [sortBy, setSortBy] = useState<'count' | 'rank'>('count')
 
   // 파일 존재 여부 체크
   useEffect(() => {
@@ -102,6 +105,11 @@ export default function Phase1Pipeline() {
         ...params,
         workspace: selectedWorkspace ?? '',
         domain: selectedDomain ?? '',
+        ...(params.start_step <= 1 && {
+          filter_mode: filterMode,
+          filter_value: filterValue,
+          sort_by: sortBy,
+        }),
       })
       setRunId(data.run_id)
       // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
@@ -230,6 +238,12 @@ export default function Phase1Pipeline() {
                 stepStatuses={유효단계상태}
                 stepElapsed={stepElapsed}
                 stepOutputs={stepOutputs}
+                filterMode={filterMode}
+                filterValue={filterValue}
+                sortBy={sortBy}
+                onFilterModeChange={setFilterMode}
+                onFilterValueChange={setFilterValue}
+                onSortByChange={setSortBy}
               />
             </div>
           </Col>

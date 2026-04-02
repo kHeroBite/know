@@ -1,5 +1,31 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 워크스페이스 초기화 완전삭제 + 키워드추출 필터링/정렬 옵션 추가
+
+### 수정 내용
+
+**건1: 워크스페이스 초기화 API 확장** (`know-api/api/assignment.py`)
+- `POST /api/assignment/reset` — DB 6테이블 완전 삭제 + 파일시스템 정리
+  - phase1_logs (자식 테이블 선삭제) → phase1_runs → build_history → keyword_assignments → work_history
+  - 파일시스템: popular/, fails/ 폴더 내 파일 삭제 + work/ 디렉토리 재생성
+
+**건2: 키워드추출 필터링/정렬 옵션** (Backend 3파일 + Frontend 3파일)
+
+*Backend*
+- **know-api/api/phase1.py**: `Phase1실행요청` 모델에 `filter_mode`, `filter_value`, `sort_by` 파라미터 추가
+- **know-api/phase1/executor.py**: `_sync_extract` 함수 — rank/count 필터링 + count/rank 정렬 로직 추가
+- **know-api/services/phase1_service.py**: `phase1_실행()` 호출 시 3개 파라미터 전달
+
+*Frontend*
+- **know-api/frontend/src/api/phase1.ts**: `RunParams` 인터페이스에 `filter_mode`, `filter_value`, `sort_by` 추가
+- **know-api/frontend/src/components/phase1/ControlPanel.tsx**: 키워드추출 단계 하단 옵션 UI — 추출기준(상위N개/최소N회이상) + 프리셋 태그 + 정렬(검색횟수순/등수순)
+- **know-api/frontend/src/pages/Phase1Pipeline.tsx**: filterMode/filterValue/sortBy 상태 관리 + ControlPanel props 전달
+
+### 특이사항
+- 없음
+
+---
+
 ## 2026-04-01 — 워크스페이스/도메인관리 UI 7건 개선 + BuildHistory 회귀 수정
 
 ### 수정 내용

@@ -33,6 +33,9 @@ class Phase1실행요청(BaseModel):
     start_step: int = 0
     end_step: int = 4
     workspace: Optional[str] = None
+    filter_mode: str = "rank"    # rank=상위N개, count=최소N회이상
+    filter_value: int = 150000   # rank 기본 15만, count 기본 10
+    sort_by: str = "count"       # count=검색횟수순, rank=등수순/원본순서
 
 @라우터.get("/preprocess/files/{folder}")
 async def 파일목록(folder: str, workspace: str = Query("")):

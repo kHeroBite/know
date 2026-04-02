@@ -1,3 +1,5 @@
+import os
+import shutil
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -5,6 +7,7 @@ from sqlalchemy import text
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
 from services import assignment_service
+from services.work_history_service import 이력전체삭제
 
 라우터 = APIRouter()
 
@@ -57,9 +60,42 @@ def 완료(workspace: str = Query(...), domain: str = Query(...),
 @라우터.post("/reset")
 def 초기화(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
-    """keyword_assignments 데이터 삭제 + 프리징 상태 해제."""
+    """데이터 전처리 데이터 완전 삭제: keyword_assignments + phase1 + build_history + work_history + 파일."""
+    # 1. phase1_logs 삭제 (phase1_runs 자식 테이블 — 선 삭제)
+    db.execute(text(
+        "DELETE FROM phase1_logs WHERE run_id IN "
+        "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
+    ), {"dom": domain})
+
+    # 2. phase1_runs 삭제
+    db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": domain})
+
+    # 3. build_history 삭제
+    db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
+
+    # 4. keyword_assignments 삭제
     db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
                {"ws": workspace, "dom": domain})
+
     db.commit()
-    deleted = db.execute(text("SELECT changes()")).scalar() or 0
-    return {"reset": True, "deleted": deleted, "workspace": workspace, "domain": domain}
+
+    # 5. work_history 삭제 (서비스 내부에서 commit 처리)
+    이력전체삭제(db, workspace, domain)
+
+    # 6. 업로드 파일 정리 (popular / fails 폴더 내 파일 삭제)
+    WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+    for folder in ("popular", "fails"):
+        dir_path = os.path.join(WORKSPACE_BASE, workspace, "build", folder)
+        if os.path.isdir(dir_path):
+            for fname in os.listdir(dir_path):
+                fpath = os.path.join(dir_path, fname)
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+
+    # 7. work 디렉토리 재생성
+    work_dir = os.path.join(WORKSPACE_BASE, workspace, "build", "work")
+    if os.path.isdir(work_dir):
+        shutil.rmtree(work_dir)
+    os.makedirs(work_dir, exist_ok=True)
+
+    return {"reset": True, "workspace": workspace, "domain": domain}

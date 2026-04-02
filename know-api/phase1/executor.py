@@ -95,7 +95,7 @@ def _publish_phase1(run_id: str, step_num: int, step_name: str, percent: int, me
         logger.error(f"Redis 발행 실패: {e}")
 
 
-def _sync_extract(file_path: str, domain: str, workspace_dir: str) -> str:
+def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> str:
     """키워드추출: popular/ + fails/ → work/keywords.txt (등수별 교차 합치기)"""
     _ensure_know_ops_path()
     from know.pipeline.추출.키워드추출기 import 키워드추출기
@@ -110,8 +110,26 @@ def _sync_extract(file_path: str, domain: str, workspace_dir: str) -> str:
     pop_카운터 = 추출기._디렉토리_읽기(ws / "build" / "popular")
     fail_카운터 = 추출기._디렉토리_읽기(ws / "build" / "fails")
 
-    pop_순위 = [kw for kw, _ in pop_카운터.most_common()]
-    fail_순위 = [kw for kw, _ in fail_카운터.most_common()]
+    # filter_value가 None이거나 9999999 이상이면 전체 사용
+    effective_n = filter_value if (filter_value is not None and filter_value < 9999999) else None
+
+    # 필터링 적용
+    if effective_n is None:
+        pop_필터 = [kw for kw, _ in pop_카운터.most_common()]
+        fail_필터 = [kw for kw, _ in fail_카운터.most_common()]
+    else:
+        pop_필터 = 추출기._필터링(pop_카운터, filter_mode, effective_n)
+        fail_필터 = 추출기._필터링(fail_카운터, filter_mode, effective_n)
+
+    # sort_by 적용
+    if sort_by == "rank":
+        pop_set = set(pop_필터)
+        fail_set = set(fail_필터)
+        pop_순위 = [kw for kw in pop_카운터 if kw in pop_set]
+        fail_순위 = [kw for kw in fail_카운터 if kw in fail_set]
+    else:  # "count": 검색횟수 내림차순
+        pop_순위 = sorted(pop_필터, key=lambda kw: pop_카운터[kw], reverse=True)
+        fail_순위 = sorted(fail_필터, key=lambda kw: fail_카운터[kw], reverse=True)
 
     # 등수별 교차 합치기: pop1/fail1/pop2/fail2/...
     seen = set()
@@ -243,12 +261,12 @@ def _sync_freeze(domain: str, workspace_dir: str) -> str:
         db.close()
 
 
-async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str) -> None:
+async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> None:
     """python 단계 — run_in_executor로 비동기 처리"""
     loop = asyncio.get_event_loop()
     func = step.get("func", "convert")
     if func == "extract":
-        result = await loop.run_in_executor(None, _sync_extract, file_path, domain, workspace_dir)
+        result = await loop.run_in_executor(None, lambda: _sync_extract(file_path, domain, workspace_dir, filter_mode, filter_value, sort_by))
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
         _publish_phase1(run_id, step_num, step["name"], 100, f"추출 완료: {result}", "running", elapsed)
     elif func == "refine":
@@ -312,7 +330,7 @@ async def _run_register(run_id: str, step_num: int, step: dict, domain: str, fil
     _publish_phase1(run_id, step_num, step["name"], 100, f"등록 완료: {count}건", "running", elapsed)
 
 
-async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A") -> None:
+async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> None:
     """Phase 1 전체 파이프라인 실행 — 단계별 순차 실행"""
     workspace_dir = f"{WORKSPACE_BASE}/{workspace}"
     total_start = time.time()
@@ -337,7 +355,7 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
         _publish_phase1(run_id, step_num, step["name"], 0, "시작", "running")
         try:
             if step["type"] == "python":
-                await _run_python(run_id, step_num, step, domain, file_path, workspace_dir)
+                await _run_python(run_id, step_num, step, domain, file_path, workspace_dir, filter_mode, filter_value, sort_by)
             elif step["type"] == "db":
                 await _run_register(run_id, step_num, step, domain, file_path)
             elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
