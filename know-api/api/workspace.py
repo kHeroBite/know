@@ -278,6 +278,8 @@ def 복사진행률조회(
     if 진행 is None:
         return {"status": "idle"}
     result: Dict[str, Any] = {"percent": 진행["percent"], "status": 진행["status"]}
+    if "message" in 진행:
+        result["message"] = 진행["message"]
     if "elapsed" in 진행:
         result["elapsed"] = 진행["elapsed"]
     if "file_count" in 진행:

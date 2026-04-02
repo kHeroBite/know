@@ -95,7 +95,7 @@ def _publish_phase1(run_id: str, step_num: int, step_name: str, percent: int, me
         logger.error(f"Redis 발행 실패: {e}")
 
 
-def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> str:
+def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> str:
     """키워드추출: popular/ + fails/ → work/keywords.txt (등수별 교차 합치기)"""
     _ensure_know_ops_path()
     from know.pipeline.추출.키워드추출기 import 키워드추출기
@@ -114,7 +114,19 @@ def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: 
     effective_n = filter_value if (filter_value is not None and filter_value < 9999999) else None
 
     # 필터링 적용
-    if effective_n is None:
+    if filter_mode in ("both_and", "both_or"):
+        # rank/count 두 조건 동시 적용 (교집합 또는 합집합)
+        eff_rank = rank_value if (rank_value is not None and rank_value < 9999999) else None
+        eff_count = count_value if (count_value is not None and count_value < 9999999) else None
+
+        def _both_filter(카운터):
+            r_set = set(추출기._필터링(카운터, "rank", eff_rank)) if eff_rank is not None else set(kw for kw, _ in 카운터.most_common())
+            c_set = set(추출기._필터링(카운터, "count", eff_count)) if eff_count is not None else set(kw for kw, _ in 카운터.most_common())
+            return list(r_set & c_set) if filter_mode == "both_and" else list(r_set | c_set)
+
+        pop_필터 = _both_filter(pop_카운터)
+        fail_필터 = _both_filter(fail_카운터)
+    elif effective_n is None:
         pop_필터 = [kw for kw, _ in pop_카운터.most_common()]
         fail_필터 = [kw for kw, _ in fail_카운터.most_common()]
     else:
@@ -161,7 +173,7 @@ def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: 
 
 
 def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
-    """정제: work/keywords.txt → work/refine.txt"""
+    """정제: work/keywords.txt → work/refine.txt (원본 순서 유지)"""
     _ensure_know_ops_path()
     from know.pipeline.정제.검색로그정제기 import 검색로그정제기
     설정값 = _make_설정(workspace_dir)
@@ -170,9 +182,17 @@ def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
     os.makedirs(ws / "build" / "work", exist_ok=True)
     입력 = ws / "build" / "work" / "keywords.txt"
     출력 = ws / "build" / "work" / "refine.txt"
-    입력cnt = sum(1 for line in open(입력, encoding='utf-8', errors='replace') if line.strip())
+    # 원본 순서 보존: 정제 전 keywords.txt 순서 기록
+    원본순서 = [line.strip() for line in open(입력, encoding='utf-8', errors='replace') if line.strip()]
+    입력cnt = len(원본순서)
     result = 정제기.정제(입력, domain, 출력파일=출력)
-    cnt = sum(1 for line in open(출력, encoding='utf-8', errors='replace') if line.strip())
+    # 정제 결과를 set으로 읽어 원본 순서 기준으로 재정렬
+    정제결과 = {line.strip() for line in open(출력, encoding='utf-8', errors='replace') if line.strip()}
+    재정렬 = [kw for kw in 원본순서 if kw in 정제결과]
+    with open(출력, "w", encoding="utf-8") as f:
+        for kw in 재정렬:
+            f.write(f"{kw}\n")
+    cnt = len(재정렬)
     제거 = 입력cnt - cnt
     return f"{result} ({cnt}건, 제거:{제거}건)"
 
@@ -261,12 +281,12 @@ def _sync_freeze(domain: str, workspace_dir: str) -> str:
         db.close()
 
 
-async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> None:
+async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
     """python 단계 — run_in_executor로 비동기 처리"""
     loop = asyncio.get_event_loop()
     func = step.get("func", "convert")
     if func == "extract":
-        result = await loop.run_in_executor(None, lambda: _sync_extract(file_path, domain, workspace_dir, filter_mode, filter_value, sort_by))
+        result = await loop.run_in_executor(None, lambda: _sync_extract(file_path, domain, workspace_dir, filter_mode, filter_value, sort_by, rank_value, count_value))
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
         _publish_phase1(run_id, step_num, step["name"], 100, f"추출 완료: {result}", "running", elapsed)
     elif func == "refine":
@@ -330,7 +350,7 @@ async def _run_register(run_id: str, step_num: int, step: dict, domain: str, fil
     _publish_phase1(run_id, step_num, step["name"], 100, f"등록 완료: {count}건", "running", elapsed)
 
 
-async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count") -> None:
+async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
     """Phase 1 전체 파이프라인 실행 — 단계별 순차 실행"""
     workspace_dir = f"{WORKSPACE_BASE}/{workspace}"
     total_start = time.time()
@@ -355,7 +375,7 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
         _publish_phase1(run_id, step_num, step["name"], 0, "시작", "running")
         try:
             if step["type"] == "python":
-                await _run_python(run_id, step_num, step, domain, file_path, workspace_dir, filter_mode, filter_value, sort_by)
+                await _run_python(run_id, step_num, step, domain, file_path, workspace_dir, filter_mode, filter_value, sort_by, rank_value, count_value)
             elif step["type"] == "db":
                 await _run_register(run_id, step_num, step, domain, file_path)
             elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
