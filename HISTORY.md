@@ -1,5 +1,35 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-02 — 4건 수정: 프리징버튼 이동 + 복사진행률 message + 필터모드 리디자인 + 정제순서유지 (커밋: 29c1a36+)
+
+### 수정 내용
+
+**건1: 프리징 버튼 위치 이동** (`know-api/frontend/src/components/phase1/ControlPanel.tsx`)
+- 프리징 버튼을 유사어체크(Synonym Check) 아래로 이동
+
+**건2: 워크스페이스 복사진행률 message 필드 누락 수정** (`know-api/api/workspace.py`)
+- `GET /api/workspace/copy-progress` 응답에 `message` 필드 반환 누락 수정
+
+**건3: 키워드 추출 옵션 리디자인** (Backend 3파일 + Frontend 3파일)
+
+*Backend*
+- **know-api/api/phase1.py**: `Phase1실행요청` — `filter_mode` 옵션 확장 (`both_and`, `both_or` 추가)
+- **know-api/phase1/executor.py**: `_sync_extract` — both_and/both_or 이중 필터 로직 추가
+- **know-api/services/phase1_service.py**: `phase1_실행()` 파라미터 전달 확장
+
+*Frontend*
+- **know-api/frontend/src/api/phase1.ts**: `RunParams` 인터페이스 확장
+- **know-api/frontend/src/components/phase1/ControlPanel.tsx**: 체크박스 2개 + 프리셋 콤보 + AND/OR 리디자인
+- **know-api/frontend/src/pages/Phase1Pipeline.tsx**: filterMode/filterValue 상태 관리 + props 전달
+
+**건4: 정제 단계 정렬 순서 유지** (`know-api/phase1/executor.py`, `know-ops/.../검색로그정제기.py`)
+- `_sync_refine`: 정제 처리 후 원본 입력 순서 재정렬 유지
+
+### 특이사항
+- 백엔드(건2/건3/건4)는 커밋 29c1a36에 포함, 프론트엔드+검색로그정제기.py는 후속 커밋에 포함
+
+---
+
 ## 2026-04-02 — 워크스페이스 초기화 완전삭제 + 키워드추출 필터링/정렬 옵션 추가
 
 ### 수정 내용

@@ -1,4 +1,5 @@
-import { Button, Space, Typography, Tag, Progress, Select, InputNumber } from 'antd'
+import { useRef } from 'react'
+import { Button, Space, Typography, Tag, Progress, Select, InputNumber, Checkbox } from 'antd'
 import { PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, EyeOutlined } from '@ant-design/icons'
 
 const { Text } = Typography
@@ -25,6 +26,8 @@ interface RunParams {
   end_step: number
   filter_mode?: string
   filter_value?: number
+  rank_value?: number
+  count_value?: number
   sort_by?: string
 }
 
@@ -37,12 +40,25 @@ interface ControlPanelProps {
   stepStatuses: Record<number, string>
   stepElapsed: Record<number, number>
   stepOutputs: Record<number, string>
-  filterMode: 'rank' | 'count'
-  filterValue: number
+  rankEnabled: boolean
+  rankValue: number
+  rankPreset: string
+  countEnabled: boolean
+  countValue: number
+  countPreset: string
+  combineMode: 'and' | 'or'
   sortBy: 'count' | 'rank'
-  onFilterModeChange: (mode: 'rank' | 'count') => void
-  onFilterValueChange: (value: number) => void
-  onSortByChange: (sortBy: 'count' | 'rank') => void
+  onRankEnabledChange: (v: boolean) => void
+  onRankValueChange: (v: number) => void
+  onRankPresetChange: (v: string) => void
+  onCountEnabledChange: (v: boolean) => void
+  onCountValueChange: (v: number) => void
+  onCountPresetChange: (v: string) => void
+  onCombineModeChange: (v: 'and' | 'or') => void
+  onSortByChange: (v: 'count' | 'rank') => void
+  onFreeze?: () => void
+  freezeDisabled?: boolean
+  freezeLoading?: boolean
 }
 
 function 경과표시(sec: number): string {
@@ -52,14 +68,30 @@ function 경과표시(sec: number): string {
 
 export default function ControlPanel({
   folder, onRun, onStop, onViewFile, isRunning, stepStatuses, stepElapsed, stepOutputs,
-  filterMode, filterValue, sortBy, onFilterModeChange, onFilterValueChange, onSortByChange,
+  rankEnabled, rankValue, rankPreset, countEnabled, countValue, countPreset,
+  combineMode, sortBy,
+  onRankEnabledChange, onRankValueChange, onRankPresetChange,
+  onCountEnabledChange, onCountValueChange, onCountPresetChange,
+  onCombineModeChange, onSortByChange,
+  onFreeze, freezeDisabled, freezeLoading,
 }: ControlPanelProps) {
+  const rankInputRef = useRef<any>(null)
+  const countInputRef = useRef<any>(null)
+
   const 단계실행 = (stepNum: number) => {
     const runParams: RunParams = { category: folder, start_step: stepNum, end_step: stepNum }
     if (stepNum <= 1) {
-      runParams.filter_mode = filterMode
-      runParams.filter_value = filterValue
+      const mode = rankEnabled && countEnabled
+        ? combineMode === 'and' ? 'both_and' : 'both_or'
+        : rankEnabled ? 'rank' : 'count'
+      runParams.filter_mode = mode
       runParams.sort_by = sortBy
+      if (rankEnabled && countEnabled) {
+        runParams.rank_value = rankValue
+        runParams.count_value = countValue
+      } else {
+        runParams.filter_value = rankEnabled ? rankValue : countValue
+      }
     }
     onRun(runParams)
   }
@@ -67,16 +99,12 @@ export default function ControlPanel({
   const 실행가능 = (stepNum: number): boolean => {
     if (isRunning) return false
     if (stepNum === 1) return true
-    // 이전 단계 완료이거나, 자기 이후 단계가 완료된 경우(이전 단계도 이미 완료된 것)
     if (stepStatuses[stepNum - 1] === 'completed') return true
     for (let i = stepNum; i <= 5; i++) {
       if (stepStatuses[i] === 'completed') return true
     }
     return false
   }
-
-  const rankPresets = [50000, 100000, 150000, 200000]
-  const countPresets = [5, 10, 50, 100]
 
   return (
     <div>
@@ -145,68 +173,121 @@ export default function ControlPanel({
                   borderRadius: '0 0 8px 8px',
                   marginBottom: 0,
                 }}>
-                  <Space size={6} wrap>
-                    <Text style={{ fontSize: 12, color: '#555' }}>추출기준</Text>
-                    <Select
-                      size="small"
-                      value={filterMode}
-                      onChange={(val: 'rank' | 'count') => {
-                        onFilterModeChange(val)
-                        onFilterValueChange(val === 'rank' ? 150000 : 10)
-                      }}
-                      style={{ width: 120 }}
-                      options={[
-                        { label: '상위 N개', value: 'rank' },
-                        { label: '최소 N회 이상', value: 'count' },
-                      ]}
-                    />
+                  {/* 상위N개 행 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'nowrap' }}>
+                    <Checkbox
+                      checked={rankEnabled}
+                      onChange={e => onRankEnabledChange(e.target.checked)}
+                    >
+                      <Text style={{ fontSize: 12 }}>상위N개</Text>
+                    </Checkbox>
                     <InputNumber
+                      ref={rankInputRef}
                       size="small"
-                      value={filterValue === 9999999 ? undefined : filterValue}
-                      placeholder="전체"
-                      onChange={(val) => val != null && onFilterValueChange(val)}
+                      value={rankValue}
+                      onChange={v => { if (v != null) { onRankValueChange(v); onRankPresetChange('custom') } }}
+                      disabled={!rankEnabled || rankPreset !== 'custom'}
+                      min={1}
                       style={{ width: 90 }}
                     />
-                    <Space size={2}>
-                      {filterMode === 'rank'
-                        ? rankPresets.map(v => (
-                          <Tag.CheckableTag
-                            key={v}
-                            checked={filterValue === v}
-                            onChange={() => onFilterValueChange(v)}
-                          >
-                            {`${v / 10000}만`}
-                          </Tag.CheckableTag>
-                        ))
-                        : countPresets.map(v => (
-                          <Tag.CheckableTag
-                            key={v}
-                            checked={filterValue === v}
-                            onChange={() => onFilterValueChange(v)}
-                          >
-                            {v}
-                          </Tag.CheckableTag>
-                        ))
-                      }
-                      <Tag.CheckableTag
-                        checked={filterValue === 9999999}
-                        onChange={() => onFilterValueChange(9999999)}
-                      >
-                        전체
-                      </Tag.CheckableTag>
-                    </Space>
-                    <Text style={{ fontSize: 12, color: '#555' }}>정렬</Text>
+                    <Select
+                      size="small"
+                      value={rankPreset}
+                      onChange={(v: string) => {
+                        onRankPresetChange(v)
+                        if (v !== 'custom') {
+                          onRankValueChange(Number(v))
+                        } else {
+                          setTimeout(() => rankInputRef.current?.focus(), 50)
+                        }
+                      }}
+                      disabled={!rankEnabled}
+                      options={[
+                        { label: '직접입력', value: 'custom' },
+                        { label: '5만', value: '50000' },
+                        { label: '10만', value: '100000' },
+                        { label: '15만', value: '150000' },
+                        { label: '20만', value: '200000' },
+                        { label: '전체', value: '9999999' },
+                      ]}
+                      style={{ width: 88 }}
+                    />
+                    {rankEnabled && countEnabled && (
+                      <Select
+                        size="small"
+                        value={combineMode}
+                        onChange={onCombineModeChange}
+                        options={[
+                          { label: 'AND', value: 'and' },
+                          { label: 'OR', value: 'or' },
+                        ]}
+                        style={{ width: 68 }}
+                      />
+                    )}
+                  </div>
+                  {/* 최소N회 행 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                    <Checkbox
+                      checked={countEnabled}
+                      onChange={e => onCountEnabledChange(e.target.checked)}
+                    >
+                      <Text style={{ fontSize: 12 }}>최소N회</Text>
+                    </Checkbox>
+                    <InputNumber
+                      ref={countInputRef}
+                      size="small"
+                      value={countValue}
+                      onChange={v => { if (v != null) { onCountValueChange(v); onCountPresetChange('custom') } }}
+                      disabled={!countEnabled || countPreset !== 'custom'}
+                      min={1}
+                      style={{ width: 90 }}
+                    />
+                    <Select
+                      size="small"
+                      value={countPreset}
+                      onChange={(v: string) => {
+                        onCountPresetChange(v)
+                        if (v !== 'custom') {
+                          onCountValueChange(Number(v))
+                        } else {
+                          setTimeout(() => countInputRef.current?.focus(), 50)
+                        }
+                      }}
+                      disabled={!countEnabled}
+                      options={[
+                        { label: '직접입력', value: 'custom' },
+                        { label: '5', value: '5' },
+                        { label: '10', value: '10' },
+                        { label: '50', value: '50' },
+                        { label: '100', value: '100' },
+                      ]}
+                      style={{ width: 88 }}
+                    />
                     <Select
                       size="small"
                       value={sortBy}
                       onChange={onSortByChange}
-                      style={{ width: 140 }}
                       options={[
-                        { label: '검색횟수순', value: 'count' },
-                        { label: '등수순(원본순서)', value: 'rank' },
+                        { label: '빈도순', value: 'count' },
+                        { label: '등수순', value: 'rank' },
                       ]}
+                      style={{ width: 80 }}
                     />
-                  </Space>
+                  </div>
+                </div>
+              )}
+              {step.num === 5 && onFreeze && (
+                <div style={{ marginTop: 12, textAlign: 'center' }}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    disabled={freezeDisabled}
+                    loading={freezeLoading}
+                    onClick={onFreeze}
+                    style={{ minWidth: 200, height: 48, fontSize: 16 }}
+                  >
+                    다음단계로
+                  </Button>
                 </div>
               )}
             </div>

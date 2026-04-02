@@ -9,6 +9,8 @@ interface RunParams {
   workspace?: string
   filter_mode?: string
   filter_value?: number
+  rank_value?: number
+  count_value?: number
   sort_by?: string
 }
 

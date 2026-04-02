@@ -22,8 +22,13 @@ export default function Phase1Pipeline() {
   const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
   const [hasFiles, setHasFiles] = useState(false)
   const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
-  const [filterMode, setFilterMode] = useState<'rank' | 'count'>('rank')
-  const [filterValue, setFilterValue] = useState<number>(150000)
+  const [rankEnabled, setRankEnabled] = useState(true)
+  const [rankValue, setRankValue] = useState(150000)
+  const [rankPreset, setRankPreset] = useState('150000')
+  const [countEnabled, setCountEnabled] = useState(false)
+  const [countValue, setCountValue] = useState(5)
+  const [countPreset, setCountPreset] = useState('5')
+  const [combineMode, setCombineMode] = useState<'and' | 'or'>('and')
   const [sortBy, setSortBy] = useState<'count' | 'rank'>('count')
 
   // 파일 존재 여부 체크
@@ -101,16 +106,26 @@ export default function Phase1Pipeline() {
       }
     }
     try {
+      const filterParams: Record<string, unknown> = {}
+      if (params.start_step <= 1) {
+        const mode = rankEnabled && countEnabled
+          ? combineMode === 'and' ? 'both_and' : 'both_or'
+          : rankEnabled ? 'rank' : 'count'
+        filterParams.filter_mode = mode
+        filterParams.sort_by = sortBy
+        if (rankEnabled && countEnabled) {
+          filterParams.rank_value = rankValue
+          filterParams.count_value = countValue
+        } else {
+          filterParams.filter_value = rankEnabled ? rankValue : countValue
+        }
+      }
       const { data } = await phase1API.실행({
         ...params,
         workspace: selectedWorkspace ?? '',
         domain: selectedDomain ?? '',
-        ...(params.start_step <= 1 && {
-          filter_mode: filterMode,
-          filter_value: filterValue,
-          sort_by: sortBy,
-        }),
-      })
+        ...filterParams,
+      } as any)
       setRunId(data.run_id)
       // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
       if (params.start_step === 1 && params.end_step === 5) {
@@ -238,12 +253,25 @@ export default function Phase1Pipeline() {
                 stepStatuses={유효단계상태}
                 stepElapsed={stepElapsed}
                 stepOutputs={stepOutputs}
-                filterMode={filterMode}
-                filterValue={filterValue}
+                rankEnabled={rankEnabled}
+                rankValue={rankValue}
+                rankPreset={rankPreset}
+                countEnabled={countEnabled}
+                countValue={countValue}
+                countPreset={countPreset}
+                combineMode={combineMode}
                 sortBy={sortBy}
-                onFilterModeChange={setFilterMode}
-                onFilterValueChange={setFilterValue}
+                onRankEnabledChange={setRankEnabled}
+                onRankValueChange={setRankValue}
+                onRankPresetChange={setRankPreset}
+                onCountEnabledChange={setCountEnabled}
+                onCountValueChange={setCountValue}
+                onCountPresetChange={setCountPreset}
+                onCombineModeChange={setCombineMode}
                 onSortByChange={setSortBy}
+                onFreeze={프리징핸들러}
+                freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
+                freezeLoading={freezeStatus === 'running'}
               />
             </div>
           </Col>
@@ -264,18 +292,7 @@ export default function Phase1Pipeline() {
         </Row>
       </Card>
 
-      <div style={{ textAlign: 'center', marginTop: 32 }}>
-        <Button
-          type="primary"
-          size="large"
-          disabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
-          loading={freezeStatus === 'running'}
-          onClick={프리징핸들러}
-          style={{ minWidth: 200, height: 48, fontSize: 16 }}
-        >
-          다음단계로
-        </Button>
-      </div>
+
     </div>
   )
 }

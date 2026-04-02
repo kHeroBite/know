@@ -197,8 +197,9 @@ class 검색로그정제기:
                     continue
                 원본키워드목록.append(질의어)
 
-        # 정제 필터링
+        # 정제 필터링 (원본 순서 유지)
         정제결과: set[str] = set()
+        정제_순서목록: list[str] = []
         for 질의어 in 원본키워드목록:
             for 전처리된_질의어 in self._전처리_변형(질의어):
                 if self._기본필터(전처리된_질의어):
@@ -207,11 +208,13 @@ class 검색로그정제기:
                     continue
                 if self._스팸여부(전처리된_질의어):
                     continue
-                정제결과.add(전처리된_질의어)
+                if 전처리된_질의어 not in 정제결과:
+                    정제결과.add(전처리된_질의어)
+                    정제_순서목록.append(전처리된_질의어)
 
-        # 키워드만 출력 (중복 제거)
+        # 키워드만 출력 (원본 순서 유지, 중복 제거)
         with 출력파일.open("w", encoding="utf-8") as f:
-            for 질의어 in sorted(정제결과):
+            for 질의어 in 정제_순서목록:
                 f.write(f"{질의어}\n")
 
         return 출력파일
