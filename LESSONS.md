@@ -177,6 +177,13 @@ elif os.path.isdir(path):
 **재발방지**: 단축키/이벤트 카운터 상태 구현 시 관련 상태 변수 쌍(keyword+count)을 함께 체크리스트로 확인. AC 검증 항목에서 미구현 상태 조기 발견 필요.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-025: Python 3.8 서버 환경에서 PEP 585 타입 힌트 사용으로 빌드 오류 (2026-04-02)
+
+**현상**: `api/llm_settings.py`에서 `list[Dict[str, Any]]` 형식 PEP 585 타입 힌트 사용으로 Python 3.8 서버에서 TypeError 발생 — ktest 빌드 단계에서 발견·수정.
+**원인**: kdev 단계에서 서버 Python 버전(3.8)을 확인하지 않고 Python 3.9+ built-in 제네릭(list[T], dict[K,V]) 사용.
+**재발방지**: Python 신규 파일 작성 시 서버 Python 버전(3.8) 사전 확인 필수. `list[T]`/`dict[K,V]` 금지 — 반드시 `from typing import List, Dict, Optional` 임포트 후 사용.
+**Level**: 1 (ktest에서 즉시 발견·수정, docs 기록)
+
 ---
 
 ## 반영 추적 테이블

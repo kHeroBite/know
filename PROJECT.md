@@ -237,14 +237,16 @@ know-api/
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
 │   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
-│   └── ai_analysis_service.py # AI 분석 서비스 (DuckDuckGo+Wikipedia API — 크롤링 없는 안정적 검색)
+│   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
+│   └── ai_analysis_service.py # AI 분석 서비스 (LLM + Wikipedia — LLM탭/Wikipedia탭 2종)
 ├── api/                       # FastAPI 라우터
 │   ├── auth.py, domain.py, dictionary.py, category.py, statistics.py
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag)
-│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — DuckDuckGo+Wikipedia API, 프롬프트 GET/PUT 관리자 API)
+│   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
+│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
 ├── migrations/                # DB 마이그레이션 SQL
 │   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 ├── pipeline/                  # Celery 태스크 모듈
@@ -258,12 +260,13 @@ know-api/
 │   └── install_redis.sh       # Redis 설치 스크립트
 ├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
-    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스 페이지
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
     │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시)
+    │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트)
     │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
     ├── src/components/workspace/ # 작업실 컴포넌트
-    │   ├── AIAnalysis.tsx     # AI 분석 패널 (직접입력+URL표시+관리자프롬프트수정)
+    │   ├── AIAnalysis.tsx     # AI 분석 패널 (LLM탭+Wikipedia탭 2탭 구조 — Google/Perplexity 제거)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
     │   └── HotkeySettings.tsx # 핫키 설정 모달 (15개 단축키)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
@@ -274,6 +277,7 @@ know-api/
     ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함)
+    ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
@@ -302,4 +306,6 @@ know-api/
 | /work-history/undo/{id} | 작업이력 undo/rollback (POST) |
 | /assignments | 키워드 할당 목록 조회 (GET) |
 | /assignments/flag | 키워드 읽음/작업 flag 업데이트 (PUT) — R/W/'' |
-| /ai-analysis/search | AI 분석 검색 — DuckDuckGo+Wikipedia API (GET) |
+| /ai-analysis/search | AI 분석 검색 — LLM+Wikipedia (GET) |
+| /llm-settings | LLM 설정 4종 조회 (GET) |
+| /llm-settings/{provider} | LLM 설정 저장 (PUT) — openai/claude/gemini/local |

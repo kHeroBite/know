@@ -104,7 +104,29 @@ def 테이블생성():
         except Exception:
             pass  # 이미 존재하면 무시
 
-        # 5. work_history (작업이력)
+        # 5. llm_settings (LLM 설정)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS llm_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL UNIQUE,
+                api_key TEXT DEFAULT '',
+                base_url TEXT DEFAULT '',
+                model TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 0,
+                test_passed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                updated_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        # 초기 시드: 4개 provider
+        for provider in ('openai', 'claude', 'gemini', 'local'):
+            conn.execute(text(
+                "INSERT OR IGNORE INTO llm_settings (provider) VALUES (:p)"
+            ), {"p": provider})
+        conn.commit()
+        print("  [OK] llm_settings 테이블 생성 + 시드 4행")
+
+        # 6. work_history (작업이력)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS work_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -21,6 +21,7 @@ from api.assignment import 라우터 as 할당라우터
 from api.morpheme import 라우터 as 형태소라우터
 from api.work_history import 라우터 as 작업이력라우터
 from api.ai_analysis import 라우터 as AI분석라우터
+from api.llm_settings import 라우터 as LLM설정라우터
 
 
 앱 = FastAPI(
@@ -57,6 +58,7 @@ from api.ai_analysis import 라우터 as AI분석라우터
 앱.include_router(형태소라우터, prefix="/api", tags=["형태소분석"])
 앱.include_router(작업이력라우터, prefix="/api", tags=["작업이력"])
 앱.include_router(AI분석라우터, prefix="/api", tags=["AI분석"])
+앱.include_router(LLM설정라우터, prefix="/api/llm-settings", tags=["LLM설정"])
 
 
 

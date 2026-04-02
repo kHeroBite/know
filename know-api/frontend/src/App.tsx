@@ -17,6 +17,7 @@ import Phase1Pipeline from './pages/Phase1Pipeline'
 import Manual from './pages/Manual'
 import Assignment from './pages/Assignment'
 import KnowledgeWork from './pages/KnowledgeWork'
+import LLMSettings from './pages/LLMSettings'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -33,6 +34,7 @@ function isMenuEnabled(path: string, ctx: { wsSelected: boolean; isFrozen: boole
     '/statistics': true,
     '/build-history': true,
     '/accounts': true,
+    '/llm-settings': true,
     '/manual': true,
   }
   return rules[path] ?? false
@@ -81,6 +83,7 @@ export default function App() {
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="build-history" element={<BuildHistory />} />
         <Route path="accounts" element={<AccountManagement />} />
+        <Route path="llm-settings" element={<LLMSettings />} />
         <Route path="manual" element={<Manual />} />
       </Route>
     </Routes>

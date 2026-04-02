@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { LogoutOutlined } from '@ant-design/icons'
+import { LogoutOutlined, ApiOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
@@ -95,6 +95,8 @@ export default function Layout() {
         { key: '/domain-manage', label: '도메인 관리' },
         { key: '/statistics', label: '통계' },
         { key: '/build-history', label: '빌드 이력' },
+        { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
+        { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
       ],
     },

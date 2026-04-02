@@ -17,7 +17,7 @@ async def AI검색처리(
     keyword: str = Query(..., min_length=1),
     _current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
-    """키워드로 Google + Perplexity 검색 수행."""
+    """키워드로 LLM + Wikipedia 검색 수행."""
     return await AI검색(keyword)
 
 

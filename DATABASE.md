@@ -89,9 +89,38 @@ EPOST_CATEGORY   -- 카테고리 사전 (word, category)
 
 ---
 
+### llm_settings 테이블 (2026-04-02 신규)
+
+```sql
+CREATE TABLE IF NOT EXISTS llm_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL UNIQUE,    -- 'openai' | 'claude' | 'gemini' | 'local'
+    api_key TEXT DEFAULT '',           -- API 키 (로컬 LLM은 빈 값)
+    model_name TEXT DEFAULT '',        -- 사용 모델명 (예: gpt-4o-mini)
+    enabled INTEGER DEFAULT 0,         -- 활성화 여부 (0/1)
+    extra_config TEXT DEFAULT '{}',    -- 추가 설정 JSON (base_url 등)
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+```
+
+**시드 데이터** (init_db.py 자동 삽입 — 최초 1회):
+```sql
+INSERT OR IGNORE INTO llm_settings (provider) VALUES
+  ('openai'), ('claude'), ('gemini'), ('local');
+```
+
+**목적**: ChatGPT/Claude/Gemini/로컬LLM 4종 AI 엔진 설정 저장  
+**주요 API**:
+- 전체 조회: `GET /api/llm-settings` → 4개 provider 목록
+- 저장: `PUT /api/llm-settings/{provider}` → api_key/model_name/enabled/extra_config 업데이트
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-02 | llm_settings 테이블 신규 생성 (provider/api_key/model_name/enabled/extra_config) | init_db.py |
 | 2026-04-02 | keyword_assignments.flag 컬럼 추가 (R/W/'') + API PUT /flag | init_db.py, assignment_service.py, api/assignment.py |
 | 2026-04-01 | work_history 테이블 신규 생성 | init_db.py |

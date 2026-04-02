@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Spin, Typography, Empty, Input, Button, Modal, message, Tabs } from 'antd'
-import { EditOutlined } from '@ant-design/icons'
+import { EditOutlined, SettingOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { workspaceAPI } from '../../api/workspace'
 
 const { Text } = Typography
@@ -12,18 +13,21 @@ interface Props {
 }
 
 interface AIResult {
-  google?: string
+  llm?: string
   wikipedia?: string
   query?: string
+  provider?: string
+  model?: string
 }
 
 export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props) {
+  const navigate = useNavigate()
   const [inputValue, setInputValue] = useState(initialKeyword || '')
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AIResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('google')
+  const [activeTab, setActiveTab] = useState('llm')
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
@@ -51,14 +55,14 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
         setResult(data)
         onSearch?.()
         // 자동 탭 전환: 결과 있는 탭으로 이동
-        const hasGoogle = data.google && !data.google.includes('검색 결과가 없습니다')
+        const hasLLM = data.llm && !data.llm.includes('검색 결과가 없습니다')
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
-        if (hasGoogle) {
-          setActiveTab('google')
+        if (hasLLM) {
+          setActiveTab('llm')
         } else if (hasWiki) {
           setActiveTab('wikipedia')
         } else {
-          setActiveTab('google')
+          setActiveTab('llm')
         }
       })
       .catch((err) => {
@@ -99,14 +103,58 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
     }
   }
 
-  // URL 생성: query(프롬프트 포함) 사용
-  const queryText = result?.query || searchKeyword
-  const googleUrl = queryText ? `https://www.google.com/search?q=${encodeURIComponent(queryText)}` : ''
-  const perplexityUrl = queryText ? `https://www.perplexity.ai/search?q=${encodeURIComponent(queryText)}` : ''
   const wikiUrl = searchKeyword ? `https://ko.wikipedia.org/wiki/${encodeURIComponent(searchKeyword)}` : ''
 
-  const renderResult = (content: string | undefined | null, linkUrl: string, linkLabel: string) => {
-    const hasContent = content && !content.includes('검색 결과가 없습니다') && !content.includes('정보를 찾을 수 없습니다')
+  const renderLLMResult = () => {
+    // LLM 미설정 에러 감지
+    if (error && (error.includes('설정되지 않았습니다') || error.includes('설정이 필요'))) {
+      return (
+        <div style={{ textAlign: 'center', padding: '24px 0' }}>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            LLM이 설정되지 않았습니다. 설정 페이지에서 API를 등록해주세요.
+          </Text>
+          <Button
+            type="primary"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => navigate('/llm-settings')}
+          >
+            LLM 설정으로 이동
+          </Button>
+        </div>
+      )
+    }
+    const content = result?.llm
+    const hasContent = content && !content.includes('검색 결과가 없습니다')
+    return (
+      <div style={{ padding: '0 4px' }}>
+        {hasContent ? (
+          <>
+            <pre style={{
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12,
+              margin: '4px 0', lineHeight: 1.5, background: '#f8f9fa',
+              padding: 8, borderRadius: 4,
+            }}>
+              {content}
+            </pre>
+            {result?.provider && (
+              <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                {result.provider}{result.model ? ` · ${result.model}` : ''}
+              </Text>
+            )}
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <Text type="secondary">결과 없음</Text>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderWikiResult = () => {
+    const content = result?.wikipedia
+    const hasContent = content && !content.includes('정보를 찾을 수 없습니다')
     return (
       <div style={{ padding: '0 4px' }}>
         {hasContent ? (
@@ -122,9 +170,9 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
             <Text type="secondary">결과 없음</Text>
           </div>
         )}
-        {linkUrl && (
-          <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11 }}>
-            🔗 {linkLabel}에서 직접 검색
+        {wikiUrl && (
+          <a href={wikiUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11 }}>
+            🔗 Wikipedia에서 직접 검색
           </a>
         )}
       </div>
@@ -161,11 +209,11 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Spin tip="AI 분석 중..." />
           </div>
-        ) : error ? (
+        ) : error && !error.includes('설정되지 않았습니다') && !error.includes('설정이 필요') ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Text type="danger">{error}</Text>
           </div>
-        ) : !result ? (
+        ) : !result && !error ? (
           <Empty description="결과 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <Tabs
@@ -174,28 +222,14 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
             size="small"
             items={[
               {
-                key: 'google',
-                label: <span style={{ fontSize: 12 }}>Google</span>,
-                children: renderResult(result.google, googleUrl, 'Google'),
-              },
-              {
-                key: 'perplexity',
-                label: <span style={{ fontSize: 12 }}>Perplexity</span>,
-                children: (
-                  <div style={{ padding: '12px 4px', textAlign: 'center' }}>
-                    {perplexityUrl && (
-                      <a href={perplexityUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 13 }}>
-                        🔗 Perplexity에서 검색하기
-                      </a>
-                    )}
-                  </div>
-                ),
+                key: 'llm',
+                label: <span style={{ fontSize: 12 }}>LLM</span>,
+                children: renderLLMResult(),
               },
               {
                 key: 'wikipedia',
                 label: <span style={{ fontSize: 12 }}>Wikipedia</span>,
-                children: renderResult(result.wikipedia, wikiUrl, 'Wikipedia'),
+                children: renderWikiResult(),
               },
             ]}
           />

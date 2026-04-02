@@ -1,6 +1,33 @@
 # HISTORY.md — 작업 이력
 
-## 2026-04-02 — 작업실 단축키·포커스·undo·이력 컬럼 개선 5건 (커밋: TBD)
+## 2026-04-02 — LLM 설정 페이지 + AI분석 LLM탭 구현 (커밋: TBD)
+
+### 수정 내용
+
+**신규 기능: LLM 설정 페이지 (4종 AI)**
+- DB: `llm_settings` 테이블 신규 (provider/api_key/model_name/enabled/extra_config)
+- 서비스: `services/llm_settings_service.py` 신규 — 4종 LLM 설정 CRUD + 연결 테스트
+- API: `api/llm_settings.py` 신규 — GET /api/llm-settings, PUT /api/llm-settings/{provider}
+- 프론트: `pages/LLMSettings.tsx` 신규 — ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 UI + 연결 테스트 버튼
+- 프론트: `api/llm.ts` 신규 — LLM 설정 API 클라이언트
+- 라우팅: `/llm-settings` 페이지 추가 (`App.tsx`), 사이드바 "LLM 설정" 메뉴 추가 (`Layout.tsx`)
+
+**변경: AI분석 탭 구조 개선** (`AIAnalysis.tsx`, `ai_analysis_service.py`, `ai_analysis.py`)
+- Google/Perplexity 탭 제거 → LLM/Wikipedia 2탭으로 단순화
+- LLM 탭: 설정된 AI 엔진으로 분석 요청
+- Wikipedia 탭: 한국어 Wikipedia 검색 유지
+
+**버그픽스: Python 3.8 타입 힌트 호환성** (`api/llm_settings.py`)
+- `list[Dict[str, Any]]` → `List[Dict[str, Any]]` (from typing import List 추가)
+- 원인: Python 3.8 서버에서 built-in 제네릭(PEP 585) 미지원
+
+### 수정 파일 (12개)
+- **백엔드 (7):** `init_db.py`, `services/llm_settings_service.py`(신규), `api/llm_settings.py`(신규), `services/ai_analysis_service.py`, `api/ai_analysis.py`, `main.py`, `requirements.txt`
+- **프론트엔드 (5):** `src/api/llm.ts`(신규), `src/pages/LLMSettings.tsx`(신규), `src/components/workspace/AIAnalysis.tsx`, `src/App.tsx`, `src/components/Layout.tsx`
+
+---
+
+## 2026-04-02 — 작업실 단축키·포커스·undo·이력 컬럼 개선 5건 (커밋: 5dec62e)
 
 ### 수정 내용
 
