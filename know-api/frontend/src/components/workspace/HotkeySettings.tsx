@@ -13,8 +13,8 @@ interface HotkeyConfig {
 
 // 편집 가능한 단축키
 const 기본핫키: HotkeyConfig[] = [
-  { id: 'prevKeyword', label: '이전 키워드', key: 'ArrowUp' },
-  { id: 'nextKeyword', label: '다음 키워드', key: 'ArrowDown' },
+  { id: 'prevKeyword', label: '이전 키워드 (Alt)', key: 'Alt+ArrowUp' },
+  { id: 'nextKeyword', label: '다음 키워드 (Alt)', key: 'Alt+ArrowDown' },
   { id: 'prevAnalysis', label: '이전 분석결과', key: 'ArrowLeft' },
   { id: 'nextAnalysis', label: '다음 분석결과', key: 'ArrowRight' },
   { id: 'registerUdic', label: '사용자사전 등록', key: '1' },
@@ -26,7 +26,7 @@ const 기본핫키: HotkeyConfig[] = [
   { id: 'undoHistory', label: '작업취소', key: 'Escape' },
   { id: 'aiTabAI', label: 'AI분석>AI', key: 'PageUp' },
   { id: 'aiTabWikipedia', label: 'AI분석>Wikipedia', key: 'PageDown' },
-  { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '\\' },
+  { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '.' },
 ]
 
 const keyDisplayMap: Record<string, string> = {

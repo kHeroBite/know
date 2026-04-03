@@ -23,8 +23,8 @@ const PAGE_SIZE = 100
 // ─── 핫키 기본값 ────────────────────────────────────────────────
 
 const 기본핫키맵: Record<string, string> = {
-  prevKeyword: 'ArrowUp',
-  nextKeyword: 'ArrowDown',
+  prevKeyword: 'Alt+ArrowUp',
+  nextKeyword: 'Alt+ArrowDown',
   prevAnalysis: 'ArrowLeft',
   nextAnalysis: 'ArrowRight',
   registerUdic: '1',
@@ -36,6 +36,7 @@ const 기본핫키맵: Record<string, string> = {
   undoHistory: 'Escape',
   aiTabAI: 'PageUp',
   aiTabWikipedia: 'PageDown',
+  thesaurusLlm: '.',
 }
 
 function encodeKeyEvent(e: KeyboardEvent): string {
@@ -471,15 +472,15 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
         } catch { /* 미존재 무시 */ }
         message.success(`"${headWord}" 유사어 세트 삭제됨`)
       } else {
-        // 신규 또는 갱신
+        // PUT 우선 시도 (기존 항목 갱신), 404면 POST (신규 등록)
         try {
-          await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
-            head_word: headWord, tail_word: currentList.join(','), memo: '',
+          await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
+            tail_word: currentList.join(','),
           })
         } catch (e: any) {
-          if (e?.response?.status === 400) {
-            await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
-              tail_word: currentList.join(','),
+          if (e?.response?.status === 404) {
+            await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
+              head_word: headWord, tail_word: currentList.join(','), memo: '',
             })
           } else throw e
         }
@@ -1020,6 +1021,23 @@ export default function KnowledgeWork() {
     tabMorpheme: 'Alt+' + (hotkeys.analyzeKeyword || '0'),
   }), [hotkeys.registerUdic, hotkeys.registerCndic, hotkeys.registerThesaurus, hotkeys.analyzeKeyword])
 
+  // ─── 줄별 navigable 토큰 인덱스 ─────────────────────────────
+  const lineTokens = useMemo(() => {
+    if (!tokens.length) return []
+    const lines: number[][] = [[]]
+    tokens.forEach(t => {
+      if (t.lineBreak) {
+        lines.push([])
+      } else {
+        const si = selectableTokens.indexOf(t)
+        if (si >= 0 && isNavigableToken(selectableTokens, si)) {
+          lines[lines.length - 1].push(si)
+        }
+      }
+    })
+    return lines.filter(line => line.length > 0)
+  }, [tokens, selectableTokens])
+
   // ─── 추천 검색 ───────────────────────────────────────────────
 
   const 추천검색 = useCallback(async (keyword: string) => {
@@ -1088,59 +1106,75 @@ export default function KnowledgeWork() {
     // 추천모달 키보드 네비게이션
     if (추천모달열림) {
       const key = e.key
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', '='].includes(key)) {
+      const isAlt = e.altKey
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', '.'].includes(key)) {
         e.preventDefault(); e.stopPropagation()
-        if (key === 'ArrowDown') {
-          set추천포커스(prev => {
-            if (prev.section === 3 && llmModelBoundaries.length > 0) {
-              // section 3: 다음 모델의 첫 항목으로 이동
-              const curModelIdx = llmModelBoundaries.findIndex((b, i) =>
-                prev.item >= b.start && (i === llmModelBoundaries.length - 1 || prev.item < llmModelBoundaries[i + 1].start)
-              )
-              for (let nm = curModelIdx + 1; nm < llmModelBoundaries.length; nm++) {
+
+        // 다음 항목 (현재 섹션 끝이면 다음 섹션 첫 항목)
+        const moveNext = () => set추천포커스(prev => {
+          const maxItems = 추천섹션목록[prev.section]?.count || 0
+          if (prev.item < maxItems - 1) return { ...prev, item: prev.item + 1 }
+          let next = prev.section + 1
+          while (next < 추천섹션목록.length && 추천섹션목록[next].count === 0) next++
+          return next < 추천섹션목록.length ? { section: next, item: 0 } : prev
+        })
+
+        // 이전 항목 (현재 섹션 첫이면 이전 섹션 마지막 항목)
+        const movePrev = () => set추천포커스(prev => {
+          if (prev.item > 0) return { ...prev, item: prev.item - 1 }
+          let next = prev.section - 1
+          while (next >= 0 && 추천섹션목록[next].count === 0) next--
+          return next >= 0 ? { section: next, item: 추천섹션목록[next].count - 1 } : prev
+        })
+
+        // 다음 파티션 강제 이동 (Alt+↓)
+        const moveNextSection = () => set추천포커스(prev => {
+          if (prev.section === 3 && llmModelBoundaries.length > 0) {
+            const curModelIdx = llmModelBoundaries.findIndex((b, i) =>
+              prev.item >= b.start && (i === llmModelBoundaries.length - 1 || prev.item < llmModelBoundaries[i + 1].start)
+            )
+            for (let nm = curModelIdx + 1; nm < llmModelBoundaries.length; nm++) {
+              if (llmModelBoundaries[nm].count > 0) return { section: 3, item: llmModelBoundaries[nm].start }
+            }
+            return prev
+          }
+          let next = prev.section + 1
+          while (next < 추천섹션목록.length && 추천섹션목록[next].count === 0) next++
+          return next < 추천섹션목록.length ? { section: next, item: 0 } : prev
+        })
+
+        // 이전 파티션 강제 이동 (Alt+↑)
+        const movePrevSection = () => set추천포커스(prev => {
+          if (prev.section === 3 && llmModelBoundaries.length > 0) {
+            const curModelIdx = llmModelBoundaries.findIndex((b, i) =>
+              prev.item >= b.start && (i === llmModelBoundaries.length - 1 || prev.item < llmModelBoundaries[i + 1].start)
+            )
+            if (curModelIdx > 0) {
+              for (let nm = curModelIdx - 1; nm >= 0; nm--) {
                 if (llmModelBoundaries[nm].count > 0) return { section: 3, item: llmModelBoundaries[nm].start }
               }
-              return prev // 마지막 모델
             }
-            let next = prev.section + 1
-            while (next < 추천섹션목록.length && 추천섹션목록[next].count === 0) next++
-            return next < 추천섹션목록.length ? { section: next, item: 0 } : prev
-          })
-        } else if (key === 'ArrowUp') {
-          set추천포커스(prev => {
-            if (prev.section === 3 && llmModelBoundaries.length > 0) {
-              // section 3: 이전 모델의 첫 항목으로 이동 (첫 모델이면 이전 섹션으로)
-              const curModelIdx = llmModelBoundaries.findIndex((b, i) =>
-                prev.item >= b.start && (i === llmModelBoundaries.length - 1 || prev.item < llmModelBoundaries[i + 1].start)
-              )
-              if (curModelIdx > 0) {
-                for (let nm = curModelIdx - 1; nm >= 0; nm--) {
-                  if (llmModelBoundaries[nm].count > 0) return { section: 3, item: llmModelBoundaries[nm].start }
-                }
-              }
-              // 첫 번째 모델 → 이전 섹션으로
-              let next = 2
-              while (next >= 0 && 추천섹션목록[next].count === 0) next--
-              return next >= 0 ? { section: next, item: 0 } : prev
-            }
-            let next = prev.section - 1
+            let next = 2
             while (next >= 0 && 추천섹션목록[next].count === 0) next--
             return next >= 0 ? { section: next, item: 0 } : prev
-          })
+          }
+          let next = prev.section - 1
+          while (next >= 0 && 추천섹션목록[next].count === 0) next--
+          return next >= 0 ? { section: next, item: 0 } : prev
+        })
+
+        if (key === 'ArrowDown') {
+          if (isAlt) moveNextSection(); else moveNext()
+        } else if (key === 'ArrowUp') {
+          if (isAlt) movePrevSection(); else movePrev()
         } else if (key === 'ArrowRight') {
-          // 다음 항목
-          set추천포커스(prev => {
-            const max = 추천섹션목록[prev.section]?.count || 0
-            return prev.item < max - 1 ? { ...prev, item: prev.item + 1 } : prev
-          })
+          moveNext()
         } else if (key === 'ArrowLeft') {
-          // 이전 항목
-          set추천포커스(prev => prev.item > 0 ? { ...prev, item: prev.item - 1 } : prev)
+          movePrev()
         } else if (key === 'Enter') {
-          // 현재 포커스 항목 클릭
           const el = document.querySelector(`[data-recommend-section="${추천포커스.section}"][data-recommend-item="${추천포커스.item}"]`) as HTMLElement
           el?.click()
-        } else if (key === '=') {
+        } else if (key === '.') {
           LLM분석()
         }
         return
@@ -1154,7 +1188,6 @@ export default function KnowledgeWork() {
       {},
     )
     const action = actionMap[encoded]
-    if (!action) return
 
     // Home(focusAnalysis)는 항상 동작
     if (action === 'focusAnalysis') {
@@ -1180,6 +1213,52 @@ export default function KnowledgeWork() {
     // 나머지 핫키는 포커스 모드에서만
     if (!isCenterFocused) return
     e.preventDefault()
+
+    // 줄바꿈 이동: ArrowUp/ArrowDown (Alt 없이)
+    if (e.key === 'ArrowUp' && !e.altKey) {
+      if (!selectableTokens.length) return
+      const curLine = lineTokens.findIndex(line => line.includes(selectedTokenIdx))
+      if (curLine <= 0) {
+        // 첫 줄 → 이전 키워드
+        if (!filteredItems.length) return
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+        const newIdx = curIdx > 0 ? curIdx - 1 : 0
+        setSelected(filteredItems[newIdx])
+        if (!filteredItems[newIdx].flag) {
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
+        }
+      } else {
+        const curPosInLine = lineTokens[curLine].indexOf(selectedTokenIdx)
+        const prevLine = lineTokens[curLine - 1]
+        const targetPos = Math.min(curPosInLine, prevLine.length - 1)
+        setSelectedTokenIdx(prevLine[targetPos])
+      }
+      return
+    }
+    if (e.key === 'ArrowDown' && !e.altKey) {
+      if (!selectableTokens.length) return
+      const curLine = lineTokens.findIndex(line => line.includes(selectedTokenIdx))
+      if (curLine < 0 || curLine >= lineTokens.length - 1) {
+        // 마지막 줄 → 다음 키워드
+        if (!filteredItems.length) return
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+        const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
+        setSelected(filteredItems[newIdx])
+        if (!filteredItems[newIdx].flag) {
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
+        }
+      } else {
+        const curPosInLine = lineTokens[curLine].indexOf(selectedTokenIdx)
+        const nextLine = lineTokens[curLine + 1]
+        const targetPos = Math.min(curPosInLine, nextLine.length - 1)
+        setSelectedTokenIdx(nextLine[targetPos])
+      }
+      return
+    }
+
+    if (!action) return
 
     switch (action) {
       case 'prevKeyword': {
@@ -1255,6 +1334,7 @@ export default function KnowledgeWork() {
           set추천결과([])
           setLlm결과([])
           set등록키워드셋([])
+          set추천포커스({ section: 0, item: 0 })
           set추천모달열림(true)
           추천검색(selectedWord)
           setActiveTab('thesaurus')
@@ -1263,6 +1343,7 @@ export default function KnowledgeWork() {
             .then(({ data }) => {
               const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
               set등록키워드셋(items)
+              if (items.length === 0) set추천포커스({ section: 1, item: 0 })
             }).catch(() => {})
         } else {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
@@ -1300,6 +1381,7 @@ export default function KnowledgeWork() {
         if (!selectedWord || !selectedDomain) break
         set추천키워드(selectedWord)
         set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
+        set추천포커스({ section: 0, item: 0 })
         set추천모달열림(true)
         추천검색(selectedWord)
         setActiveTab('thesaurus')
@@ -1307,6 +1389,7 @@ export default function KnowledgeWork() {
           .then(({ data }) => {
             const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
             set등록키워드셋(items)
+            if (items.length === 0) set추천포커스({ section: 1, item: 0 })
           }).catch(() => {})
         // AI분석 자동 실행
         setTimeout(() => LLM분석(), 100)
@@ -1342,7 +1425,7 @@ export default function KnowledgeWork() {
         break
       }
     }
-  }, [hotkeys, derivedHotkeys, isCenterFocused, items, filteredItems, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries])
+  }, [hotkeys, derivedHotkeys, isCenterFocused, items, filteredItems, selected, selectableTokens, selectedTokenIdx, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries, lineTokens])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -1598,11 +1681,13 @@ export default function KnowledgeWork() {
                 }},
                 { label: '유사어 추천', key: hotkeys.registerThesaurus || '3', action: () => {
                   set추천키워드(컨텍스트메뉴.word); set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
+                  set추천포커스({ section: 0, item: 0 })
                   set추천모달열림(true); 추천검색(컨텍스트메뉴.word); setActiveTab('thesaurus')
                   클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: 컨텍스트메뉴.word, size: 100 } })
                     .then(({ data }) => {
                       const items = (data?.items || []).filter((i: any) => i.head_word === 컨텍스트메뉴.word || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(컨텍스트메뉴.word))
                       set등록키워드셋(items)
+                      if (items.length === 0) set추천포커스({ section: 1, item: 0 })
                     }).catch(() => {})
                 }},
               ].map((item: any, idx) => item.divider ? (
@@ -1708,118 +1793,109 @@ export default function KnowledgeWork() {
       >
 
         {/* 등록 키워드셋 */}
-        <div style={{
-          border: 등록키워드셋.length > 0 ? '2px solid #EF5350' : '1px solid #FFCDD2',
-          borderRadius: 6, marginBottom: 13, overflow: 'hidden',
-        }}>
-        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: 등록키워드셋.length > 0 ? '#C62828' : '#E57373', background: 등록키워드셋.length > 0 ? '#FFEBEE' : '#FFF5F5', borderBottom: 등록키워드셋.length > 0 ? '2px solid #EF5350' : '1px solid #FFCDD2' }}>
-          등록 키워드셋 <Tag color="red" style={{ fontSize: 10, marginLeft: 4 }}>{등록키워드셋.length}</Tag>
-        </div>
-        <div style={{ padding: '4px 8px', background: 등록키워드셋.length > 0 ? '#FFF5F5' : undefined }}>
-        {등록키워드셋.length === 0 ? (
-          <Text type="secondary" style={{ fontSize: 12 }}>등록된 유사어 없음</Text>
-        ) : (
-          <div style={{ maxHeight: 150, overflowY: 'auto' }}>
-            {등록키워드셋.map((item: any, idx: number) => (
-              <div
-                key={idx}
-                data-recommend-section={0} data-recommend-item={idx}
-                style={{ padding: '6px 8px', borderBottom: '1px solid #FFCDD2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderRadius: 4, outline: 추천포커스.section === 0 && 추천포커스.item === idx ? '3px solid #1677ff' : undefined, outlineOffset: 추천포커스.section === 0 && 추천포커스.item === idx ? '-1px' : undefined, background: 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                onClick={() => {
-                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1, editMode: true } as any))
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFCDD2' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-              >
-                <span>
-                  <Tag color="purple" style={{ marginRight: 4 }}>{item.head_word}</Tag>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{(item.tail_word || '').split(',').map((s: string) => s.trim()).filter(Boolean).join(', ')}</Text>
-                </span>
-              </div>
-            ))}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 등록키워드셋.length > 0 ? '#C62828' : '#999', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 3, height: 12, background: 등록키워드셋.length > 0 ? '#EF5350' : '#ddd', borderRadius: 2 }} />
+            등록 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({등록키워드셋.length})</span>
           </div>
-        )}
-        </div></div>
-
-        {/* 추천 키워드셋 */}
-        <div style={{ border: '1px solid #C5E1A5', borderRadius: 6, marginBottom: 13, overflow: 'hidden' }}>
-        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#558B2F', background: '#F1F8E9', borderBottom: '1px solid #C5E1A5' }}>
-          추천 키워드셋 {!추천로딩 && <Tag color="green" style={{ fontSize: 10, marginLeft: 4 }}>{추천결과.filter((item: any) => item.head_word !== 추천키워드).length}</Tag>}
-        </div>
-        <div style={{ padding: '4px 8px' }}>
-          <Spin spinning={추천로딩}>
-            {추천결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
-            <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-              {추천결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
-                <div
-                  key={idx}
-                  data-recommend-section={1} data-recommend-item={idx}
-                  style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #DCEDC8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 4, outline: 추천포커스.section === 1 && 추천포커스.item === idx ? '3px solid #1677ff' : undefined, outlineOffset: 추천포커스.section === 1 && 추천포커스.item === idx ? '-1px' : undefined, background: 추천포커스.section === 1 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                  onClick={() => {
-                    setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: 추천키워드, n: (prev?.n || 0) + 1, editMode: true } as any))
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#DCEDC8' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-                >
-                  <span>
-                    {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}
-                    <Tag color="blue" style={{ marginRight: 4 }}>{item.head_word}</Tag>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
-                  </span>
-                  <Tag color="green" style={{ fontSize: 10 }}>{item.score}</Tag>
-                </div>
-              ))}
-            </div>
-          </Spin>
-        </div></div>
-
-        {/* 한영오타 키워드 */}
-        <div style={{ border: '1px solid #B3E5FC', borderRadius: 6, marginBottom: 13, overflow: 'hidden' }}>
-        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#0277BD', background: '#E1F5FE', borderBottom: '1px solid #B3E5FC' }}>
-          한영오타 키워드 <Tag color="cyan" style={{ fontSize: 10, marginLeft: 4 }}>{getTypoVariants(추천키워드).length}</Tag>
-        </div>
-        <div style={{ padding: '4px 8px' }}>
-          {getTypoVariants(추천키워드).length === 0 ? (
-            <Text type="secondary" style={{ fontSize: 12 }}>변환 결과 없음</Text>
+          {등록키워드셋.length === 0 ? (
+            <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>등록된 유사어 없음</Text>
           ) : (
-            <div>
-              {getTypoVariants(추천키워드).map((v, idx) => (
-                <div
-                  key={idx}
-                  data-recommend-section={2} data-recommend-item={idx}
-                  style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #B3E5FC', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 4, outline: 추천포커스.section === 2 && 추천포커스.item === idx ? '3px solid #1677ff' : undefined, outlineOffset: 추천포커스.section === 2 && 추천포커스.item === idx ? '-1px' : undefined, background: 추천포커스.section === 2 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                  onClick={() => {
-                    setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#B3E5FC' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+            <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 150, overflowY: 'auto', background: 등록키워드셋.length > 0 ? '#FFEBEE' : undefined }}>
+              {등록키워드셋.map((item: any, idx: number) => (
+                <div key={idx} data-recommend-section={0} data-recommend-item={idx}
+                  style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
+                  onClick={() => setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1, editMode: true } as any))}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
                 >
-                  {등록키워드Set.has(v.value) && <LinkOutlined style={{ color: '#52c41a', marginRight: 2, fontSize: 10 }} />}
-                  <Tag color="orange" style={{ fontSize: 10 }}>{v.label}</Tag>
-                  <Text style={{ fontSize: 13, fontWeight: 500 }}>{추천키워드}</Text>
-                  <Text type="secondary">→</Text>
-                  <Text style={{ fontSize: 13, fontWeight: 500 }}>{v.value}</Text>
+                  <span style={{ fontSize: 12 }}>
+                    <Text strong>{item.head_word}</Text>
+                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{(item.tail_word || '').split(',').map((s: string) => s.trim()).filter(Boolean).join(', ')}</Text>
+                  </span>
                 </div>
               ))}
             </div>
           )}
-        </div></div>
+        </div>
+
+        {/* 추천 키워드셋 */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#558B2F', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 3, height: 12, background: '#8BC34A', borderRadius: 2 }} />
+            추천 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({추천결과.filter((i: any) => i.head_word !== 추천키워드).length})</span>
+          </div>
+          <Spin spinning={추천로딩}>
+            {추천결과.filter((i: any) => i.head_word !== 추천키워드).length === 0 && !추천로딩 ? (
+              <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>결과 없음</Text>
+            ) : (
+              <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 180, overflowY: 'auto' }}>
+                {추천결과.filter((i: any) => i.head_word !== 추천키워드).map((item: any, idx: number) => (
+                  <div key={idx} data-recommend-section={1} data-recommend-item={idx}
+                    style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 추천포커스.section === 1 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
+                    onClick={() => setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: 추천키워드, n: (prev?.n || 0) + 1, editMode: true } as any))}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 1 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
+                  >
+                    <span style={{ fontSize: 12 }}>
+                      {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}
+                      <Text strong>{item.head_word}</Text>
+                      <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
+                    </span>
+                    <Text type="secondary" style={{ fontSize: 10 }}>{item.score}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Spin>
+        </div>
+
+        {/* 한영오타 키워드 */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#0277BD', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 3, height: 12, background: '#29B6F6', borderRadius: 2 }} />
+            한영오타 키워드 <span style={{ fontSize: 10, color: '#999' }}>({getTypoVariants(추천키워드).length})</span>
+          </div>
+          {getTypoVariants(추천키워드).length === 0 ? (
+            <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>변환 결과 없음</Text>
+          ) : (
+            <div style={{ border: '1px solid #f0f0f0', borderRadius: 4 }}>
+              {getTypoVariants(추천키워드).map((v, idx) => (
+                <div key={idx} data-recommend-section={2} data-recommend-item={idx}
+                  style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, background: 추천포커스.section === 2 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
+                  onClick={() => setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 2 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
+                >
+                  {등록키워드Set.has(v.value) && <LinkOutlined style={{ color: '#52c41a', marginRight: 2, fontSize: 10 }} />}
+                  <Text type="secondary" style={{ fontSize: 10 }}>{v.label}</Text>
+                  <Text>{추천키워드}</Text>
+                  <Text type="secondary">→</Text>
+                  <Text strong>{v.value}</Text>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* AI추천 키워드 */}
-        <div style={{ border: '1px solid #FFCC80', borderRadius: 6, marginBottom: 13, overflow: 'hidden' }}>
-        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#E65100', background: '#FFF3E0', borderBottom: '1px solid #FFCC80', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>AI추천 키워드 {!llm로딩 && llm모델별결과.length > 0 && <Tag color="orange" style={{ fontSize: 10 }}>{llm모델별결과.reduce((sum: number, m: any) => sum + (m.items || []).filter((i: any) => i.head_word !== 추천키워드).length, 0)}</Tag>}</span>
-          <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.thesaurusLlm || '=')}</KbdKey></Button>
-        </div>
-        <div style={{ padding: '4px 8px' }}>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#E65100', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 3, height: 12, background: '#FF9800', borderRadius: 2 }} />
+              AI추천 키워드 <span style={{ fontSize: 10, color: '#999' }}>({llm모델별결과.reduce((s: number, m: any) => s + (m.items || []).filter((i: any) => i.head_word !== 추천키워드).length, 0)})</span>
+            </span>
+            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.thesaurusLlm || '.')}</KbdKey></Button>
+          </div>
+          <div>
         <Spin spinning={llm로딩}>
-          {llm모델별결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
+          {llm모델별결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>분석 실행 버튼을 클릭하세요</Text>}
           {llm모델별결과.length > 0 && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
               {(() => { let globalIdx = 0; return llm모델별결과.map((modelResult: any, mIdx: number) => (
-                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #FFCC80', borderRadius: 4 }}>
-                  <div style={{ padding: '4px 8px', background: '#FFF3E0', borderBottom: '1px solid #FFCC80', fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {modelResult.model}
+                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #f0f0f0', borderRadius: 4 }}>
+                  <div style={{ padding: '3px 8px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', fontWeight: 600, fontSize: 10, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(modelResult.model || '').split('/').pop()}
                   </div>
                   <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                     {(modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).length === 0 ? (
@@ -1829,12 +1905,10 @@ export default function KnowledgeWork() {
                       <div
                         key={idx}
                         data-recommend-section={3} data-recommend-item={gi}
-                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #FFE0B2', fontSize: 12, outline: 추천포커스.section === 3 && 추천포커스.item === gi ? '3px solid #1677ff' : undefined, outlineOffset: 추천포커스.section === 3 && 추천포커스.item === gi ? '-1px' : undefined, background: 추천포커스.section === 3 && 추천포커스.item === gi ? '#E6F4FF' : undefined }}
-                        onClick={() => {
-                          setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFE0B2' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f5f5f5', fontSize: 12, background: 추천포커스.section === 3 && 추천포커스.item === gi ? '#E6F4FF' : undefined }}
+                        onClick={() => setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 3 && 추천포커스.item === gi ? '#E6F4FF' : '' }}
                       >
                         {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}{item.head_word}
                       </div>

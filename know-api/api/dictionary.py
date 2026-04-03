@@ -74,85 +74,7 @@ def 임포트진행률(domain: str, _: dict = Depends(현재사용자가져오�
     return 임포트진행률조회(domain.upper())
 
 
-# ─── UDIC / CNDIC ─────────────────────────────────────────────────
-
-
-@라우터.get("/{domain}/{type}", response_model=페이지응답[사전항목응답])
-def 사전목록(
-    domain: str,
-    type: str,
-    page: int = 1,
-    size: int = 50,
-    search: Optional[str] = Query(default=None),
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
-):
-    """사전 항목 목록 조회 (udic/cndic)."""
-    결과 = 사전목록조회(db, domain, type, page=page, size=size, search=search)
-    return 페이지응답[사전항목응답](
-        items=[사전항목응답(**item) for item in 결과["items"]],
-        total=결과["total"],
-        page=결과["page"],
-        size=결과["size"],
-    )
-
-
-@라우터.post("/{domain}/{type}", response_model=사전항목응답, status_code=status.HTTP_201_CREATED)
-def 사전항목등록(
-    domain: str,
-    type: str,
-    요청: 사전항목생성,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
-):
-    """사전 항목 추가 (udic/cndic)."""
-    결과 = 사전항목추가(db, domain, type, 요청.word, 요청.memo, user_id=current.get("user_id"))
-    return 사전항목응답(**결과)
-
-
-@라우터.put("/{domain}/{type}/{word}", response_model=사전항목응답)
-def 사전항목변경(
-    domain: str,
-    type: str,
-    word: str,
-    요청: 사전항목수정,
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
-):
-    """사전 항목 수정 (udic/cndic)."""
-    결과 = 서비스사전항목수정(db, domain, type, word, 요청.memo)
-    return 사전항목응답(**결과)
-
-
-@라우터.delete("/{domain}/{type}/{word}", response_model=성공응답)
-def 사전항목제거(
-    domain: str,
-    type: str,
-    word: str,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
-):
-    """사전 항목 삭제 (udic/cndic)."""
-    if current.get("auth") not in ("W", "A"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
-    사전항목삭제(db, domain, type, word)
-    return 성공응답(message=f"삭제 완료: {word}")
-
-
-@라우터.post("/{domain}/{type}/bulk", response_model=성공응답)
-def 사전일괄등록(
-    domain: str,
-    type: str,
-    items: List[일괄항목],
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
-):
-    """사전 항목 일괄 등록 (udic/cndic)."""
-    결과 = 일괄항목추가(db, domain, type, [i.model_dump() for i in items], user_id=current.get("user_id"))
-    return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
-
-
-# ─── THESAURUS ─────────────────────────────────────────────────────
+# ─── THESAURUS (먼저 등록 — 동적 라우트보다 구체적인 경로 우선) ──────
 
 
 @라우터.get("/{domain}/thesaurus/list", response_model=페이지응답[유의어항목응답])
@@ -257,3 +179,81 @@ async def 유사어LLM추천(
     """LLM 기반 의미 재순위 (Phase 2)."""
     결과 = await LLM재순위(요청.keyword, 요청.candidates, 요청.context, 요청.prompt, user_id=current.get('user_id', ''))
     return 결과
+
+
+# ─── UDIC / CNDIC ─────────────────────────────────────────────────
+
+
+@라우터.get("/{domain}/{type}", response_model=페이지응답[사전항목응답])
+def 사전목록(
+    domain: str,
+    type: str,
+    page: int = 1,
+    size: int = 50,
+    search: Optional[str] = Query(default=None),
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 목록 조회 (udic/cndic)."""
+    결과 = 사전목록조회(db, domain, type, page=page, size=size, search=search)
+    return 페이지응답[사전항목응답](
+        items=[사전항목응답(**item) for item in 결과["items"]],
+        total=결과["total"],
+        page=결과["page"],
+        size=결과["size"],
+    )
+
+
+@라우터.post("/{domain}/{type}", response_model=사전항목응답, status_code=status.HTTP_201_CREATED)
+def 사전항목등록(
+    domain: str,
+    type: str,
+    요청: 사전항목생성,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 추가 (udic/cndic)."""
+    결과 = 사전항목추가(db, domain, type, 요청.word, 요청.memo, user_id=current.get("user_id"))
+    return 사전항목응답(**결과)
+
+
+@라우터.put("/{domain}/{type}/{word}", response_model=사전항목응답)
+def 사전항목변경(
+    domain: str,
+    type: str,
+    word: str,
+    요청: 사전항목수정,
+    db: Session = Depends(DB세션),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 수정 (udic/cndic)."""
+    결과 = 서비스사전항목수정(db, domain, type, word, 요청.memo)
+    return 사전항목응답(**결과)
+
+
+@라우터.delete("/{domain}/{type}/{word}", response_model=성공응답)
+def 사전항목제거(
+    domain: str,
+    type: str,
+    word: str,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 삭제 (udic/cndic)."""
+    if current.get("auth") not in ("W", "A"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
+    사전항목삭제(db, domain, type, word)
+    return 성공응답(message=f"삭제 완료: {word}")
+
+
+@라우터.post("/{domain}/{type}/bulk", response_model=성공응답)
+def 사전일괄등록(
+    domain: str,
+    type: str,
+    items: List[일괄항목],
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+):
+    """사전 항목 일괄 등록 (udic/cndic)."""
+    결과 = 일괄항목추가(db, domain, type, [i.model_dump() for i in items], user_id=current.get("user_id"))
+    return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
