@@ -59,7 +59,7 @@ async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
             resp = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "test"}],
-                max_tokens=5,
+                max_completion_tokens=5,
             )
             result = resp.choices[0].message.content
             # 테스트 성공 시 test_passed 업데이트
@@ -88,6 +88,17 @@ async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                # OpenAI 호환 (vLLM 등) 먼저 시도
+                try:
+                    resp = await client.get(f"{url}/v1/models")
+                    resp.raise_for_status()
+                    data = resp.json()
+                    model_count = len(data.get("data", []))
+                    _테스트결과저장(provider, 1)
+                    return {"success": True, "message": f"OpenAI 호환 연결 성공 (vLLM 등): {model_count}개 모델"}
+                except Exception:
+                    pass
+                # Ollama fallback
                 resp = await client.get(f"{url}/api/tags")
                 resp.raise_for_status()
             data = resp.json()
@@ -145,6 +156,15 @@ async def 모델목록조회(provider: str, api_key: str, base_url: str) -> list
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                # OpenAI 호환 (vLLM 등) 먼저 시도
+                try:
+                    resp = await client.get(f"{url}/v1/models")
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return sorted([m["id"] for m in data.get("data", [])])
+                except Exception:
+                    pass
+                # Ollama fallback
                 resp = await client.get(f"{url}/api/tags")
                 resp.raise_for_status()
             data = resp.json()
@@ -188,7 +208,7 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
             resp = await client.chat.completions.create(
                 model=model or "gpt-4o-mini",
                 messages=[{"role": "user", "content": query}],
-                max_tokens=500,
+                max_completion_tokens=500,
             )
             result = resp.choices[0].message.content
             return {"result": result, "provider": provider, "model": model or "gpt-4o-mini", "error": None}
@@ -214,16 +234,31 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
 
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
+            used_model = model or "llama3"
             async with httpx.AsyncClient(timeout=30.0) as client:
+                # OpenAI 호환 (vLLM 등) 먼저 시도
+                try:
+                    resp = await client.post(f"{url}/v1/chat/completions", json={
+                        "model": used_model,
+                        "messages": [{"role": "user", "content": query}],
+                        "max_tokens": 500,
+                    })
+                    resp.raise_for_status()
+                    data = resp.json()
+                    result = data["choices"][0]["message"]["content"]
+                    return {"result": result, "provider": provider, "model": used_model, "error": None}
+                except Exception:
+                    pass
+                # Ollama fallback
                 resp = await client.post(f"{url}/api/generate", json={
-                    "model": model or "llama3",
+                    "model": used_model,
                     "prompt": query,
                     "stream": False,
                 })
                 resp.raise_for_status()
             data = resp.json()
             result = data.get("response", "")
-            return {"result": result, "provider": provider, "model": model or "llama3", "error": None}
+            return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         else:
             return {"result": None, "provider": provider, "model": model, "error": f"알 수 없는 provider: {provider}"}
