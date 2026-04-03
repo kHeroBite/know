@@ -26,6 +26,7 @@ const 기본핫키: HotkeyConfig[] = [
   { id: 'undoHistory', label: '작업취소', key: 'Escape' },
   { id: 'aiTabAI', label: 'AI분석>AI', key: 'PageUp' },
   { id: 'aiTabWikipedia', label: 'AI분석>Wikipedia', key: 'PageDown' },
+  { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '\\' },
 ]
 
 const keyDisplayMap: Record<string, string> = {

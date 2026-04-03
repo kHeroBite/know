@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Typography, Card, Tabs, Input, Button, Form, Modal,
+  Table, Typography, Card, Tabs, Input, Button, Form, Modal, Dropdown,
   Popconfirm, message, Spin, Switch, Tag, Space, Tooltip, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined, EditOutlined,
-  SwapOutlined, CheckCircleOutlined,
+  SwapOutlined, CheckCircleOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
@@ -758,6 +758,7 @@ export default function KnowledgeWork() {
 
   // 포커스/토큰
   const [isCenterFocused, setIsCenterFocused] = useState(false)
+  const [컨텍스트메뉴, set컨텍스트메뉴] = useState<{ open: boolean; x: number; y: number; word: string; tokenIdx: number; ts: number }>({ open: false, x: 0, y: 0, word: '', tokenIdx: -1, ts: 0 })
   const [selectedTokenIdx, setSelectedTokenIdx] = useState(-1)
 
   // 핫키
@@ -784,6 +785,15 @@ export default function KnowledgeWork() {
   const [추천키워드, set추천키워드] = useState('')
   const [추천결과, set추천결과] = useState<any[]>([])
   const [등록키워드셋, set등록키워드셋] = useState<any[]>([])
+  // 이미 유사어에 등록된 키워드 Set (head + 모든 tail 포함)
+  const 등록키워드Set = useMemo(() => {
+    const s = new Set<string>()
+    등록키워드셋.forEach((item: any) => {
+      if (item.head_word) s.add(item.head_word)
+      if (item.tail_word) item.tail_word.split(',').forEach((t: string) => { const v = t.trim(); if (v) s.add(v) })
+    })
+    return s
+  }, [등록키워드셋])
   const [추천로딩, set추천로딩] = useState(false)
   const [llm결과, setLlm결과] = useState<any[]>([])
   const [llm모델별결과, setLlm모델별결과] = useState<any[]>([])
@@ -1183,6 +1193,22 @@ export default function KnowledgeWork() {
         }
         break
       }
+      case 'thesaurusLlm': {
+        if (!selectedWord || !selectedDomain) break
+        set추천키워드(selectedWord)
+        set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
+        set추천모달열림(true)
+        추천검색(selectedWord)
+        setActiveTab('thesaurus')
+        클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100 } })
+          .then(({ data }) => {
+            const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
+            set등록키워드셋(items)
+          }).catch(() => {})
+        // AI분석 자동 실행
+        setTimeout(() => LLM분석(), 100)
+        break
+      }
       case 'analyzeKeyword': {
         const kw = selectedWord || selected?.keyword
         if (kw) {
@@ -1273,7 +1299,11 @@ export default function KnowledgeWork() {
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}
-      onClick={() => { if (!추천모달열림) setIsCenterFocused(false) }}
+      onClick={() => {
+        // 방금(100ms 이내) 열린 메뉴는 닫지 않음
+        set컨텍스트메뉴(prev => (Date.now() - prev.ts < 100) ? prev : { ...prev, open: false })
+        if (!추천모달열림) setIsCenterFocused(false)
+      }}
     >
       {/* 배너 */}
       <div style={{
@@ -1390,7 +1420,24 @@ export default function KnowledgeWork() {
                   return (
                     <span
                       key={i}
-                      onClick={(e) => { e.stopPropagation(); setSelectedTokenIdx(selIdx); setIsCenterFocused(true) }}
+                      onClick={(e) => {
+                        e.stopPropagation(); e.preventDefault()
+                        setSelectedTokenIdx(selIdx); setIsCenterFocused(true)
+                        if (isWordToken(token.text)) {
+                          const cleaned = token.text.replace(/^<<|>>$/g, '').replace(/,$/g, '').replace(/^,/g, '')
+                          const rect = (e.target as HTMLElement).getBoundingClientRect()
+                          set컨텍스트메뉴({ open: true, x: rect.left, y: rect.bottom + 4, word: cleaned, tokenIdx: selIdx, ts: Date.now() })
+                        } else {
+                          set컨텍스트메뉴(prev => ({ ...prev, open: false }))
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        if (!isWordToken(token.text)) return
+                        e.preventDefault(); e.stopPropagation()
+                        setSelectedTokenIdx(selIdx); setIsCenterFocused(true)
+                        const cleaned = token.text.replace(/^<<|>>$/g, '').replace(/,$/g, '').replace(/^,/g, '')
+                        set컨텍스트메뉴({ open: true, x: e.clientX, y: e.clientY, word: cleaned, tokenIdx: selIdx, ts: Date.now() })
+                      }}
                       style={{
                         cursor: 'pointer', padding: '1px 2px', borderRadius: 3, marginRight: 4,
                         transition: 'background 0.15s',
@@ -1409,6 +1456,60 @@ export default function KnowledgeWork() {
             )}
             </div>
           </Card>
+
+          {/* 토큰 우클릭 컨텍스트 메뉴 */}
+          {컨텍스트메뉴.open && (
+            <div
+              style={{
+                position: 'fixed', left: 컨텍스트메뉴.x, top: 컨텍스트메뉴.y, zIndex: 1050,
+                background: '#fff', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                padding: '3px 0', minWidth: 160, fontSize: 11,
+              }}
+              onClick={() => set컨텍스트메뉴(prev => ({ ...prev, open: false }))}
+            >
+              <div style={{ padding: '4px 10px', fontWeight: 600, fontSize: 11, borderBottom: '1px solid #f0f0f0', color: '#1677ff' }}>
+                "{컨텍스트메뉴.word}"
+              </div>
+              {[
+                { label: '키워드 분석', key: hotkeys.analyzeKeyword || '0', action: () => { setMorphPrefillKw(컨텍스트메뉴.word); setMorphTrigger(p => p + 1) } },
+                { label: 'AI 분석', key: hotkeys.aiAnalysis || 'F2', action: () => setAiKeyword(컨텍스트메뉴.word) },
+                { divider: true },
+                { label: '사용자사전 등록', key: hotkeys.registerUdic || '1', action: () => {
+                  클라이언트.post(`/dictionaries/${selectedDomain}/udic`, { word: 컨텍스트메뉴.word, memo: '' })
+                    .then(() => { message.success(`사용자사전에 "${컨텍스트메뉴.word}" 등록`); setDicRefreshKey(p => p + 1) })
+                    .catch(() => message.error('등록 실패'))
+                }},
+                { label: '복합명사사전 등록', key: hotkeys.registerCndic || '2', action: () => {
+                  클라이언트.post(`/dictionaries/${selectedDomain}/cndic`, { word: 컨텍스트메뉴.word, memo: '' })
+                    .then(() => { message.success(`복합명사사전에 "${컨텍스트메뉴.word}" 등록`); setDicRefreshKey(p => p + 1) })
+                    .catch(() => message.error('등록 실패'))
+                }},
+                { label: '유사어 추천', key: hotkeys.registerThesaurus || '3', action: () => {
+                  set추천키워드(컨텍스트메뉴.word); set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
+                  set추천모달열림(true); 추천검색(컨텍스트메뉴.word); setActiveTab('thesaurus')
+                  클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: 컨텍스트메뉴.word, size: 100 } })
+                    .then(({ data }) => {
+                      const items = (data?.items || []).filter((i: any) => i.head_word === 컨텍스트메뉴.word || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(컨텍스트메뉴.word))
+                      set등록키워드셋(items)
+                    }).catch(() => {})
+                }},
+              ].map((item: any, idx) => item.divider ? (
+                <div key={idx} style={{ borderTop: '1px solid #f0f0f0', margin: '2px 0' }} />
+              ) : (
+                <div
+                  key={idx}
+                  style={{ padding: '3px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}
+                  onClick={item.action}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                >
+                  <span>{item.label}</span>
+                  <span style={{ transform: 'scale(0.85)', transformOrigin: 'right center', display: 'inline-block' }}><KbdKey>{displayKey(item.key)}</KbdKey></span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <Card
             size="small"
             style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
@@ -1495,7 +1596,14 @@ export default function KnowledgeWork() {
       >
 
         {/* 등록 키워드셋 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>등록 키워드셋</Divider>
+        <div style={{
+          border: 등록키워드셋.length > 0 ? '2px solid #EF5350' : '1px solid #FFCDD2',
+          borderRadius: 6, marginBottom: 8, overflow: 'hidden',
+        }}>
+        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: 등록키워드셋.length > 0 ? '#C62828' : '#E57373', background: 등록키워드셋.length > 0 ? '#FFEBEE' : '#FFF5F5', borderBottom: 등록키워드셋.length > 0 ? '2px solid #EF5350' : '1px solid #FFCDD2' }}>
+          등록 키워드셋 <Tag color="red" style={{ fontSize: 10, marginLeft: 4 }}>{등록키워드셋.length}</Tag>
+        </div>
+        <div style={{ padding: '4px 8px', background: 등록키워드셋.length > 0 ? '#FFF5F5' : undefined }}>
         {등록키워드셋.length === 0 ? (
           <Text type="secondary" style={{ fontSize: 12 }}>등록된 유사어 없음</Text>
         ) : (
@@ -1503,12 +1611,12 @@ export default function KnowledgeWork() {
             {등록키워드셋.map((item: any, idx: number) => (
               <div
                 key={idx}
-                style={{ padding: '6px 8px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                style={{ padding: '6px 8px', borderBottom: '1px solid #FFCDD2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderRadius: 4 }}
                 onClick={() => {
                   set추천모달열림(false); setIsCenterFocused(true)
                   setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1, editMode: true } as any))
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFCDD2' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
               >
                 <span>
@@ -1519,75 +1627,86 @@ export default function KnowledgeWork() {
             ))}
           </div>
         )}
+        </div></div>
 
         {/* 추천 키워드셋 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>추천 키워드셋</Divider>
-        <Spin spinning={추천로딩}>
-          {추천결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
-          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-            {추천결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
-              <div
-                key={idx}
-                style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                onClick={() => {
-                  set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-              >
-                <span>
-                  <Tag color="blue" style={{ marginRight: 4 }}>{item.head_word}</Tag>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
-                </span>
-                <Tag color="green" style={{ fontSize: 10 }}>{item.score}</Tag>
-              </div>
-            ))}
-          </div>
-        </Spin>
+        <div style={{ border: '1px solid #C5E1A5', borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#558B2F', background: '#F1F8E9', borderBottom: '1px solid #C5E1A5' }}>
+          추천 키워드셋 {!추천로딩 && <Tag color="green" style={{ fontSize: 10, marginLeft: 4 }}>{추천결과.filter((item: any) => item.head_word !== 추천키워드).length}</Tag>}
+        </div>
+        <div style={{ padding: '4px 8px' }}>
+          <Spin spinning={추천로딩}>
+            {추천결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
+            <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+              {추천결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
+                <div
+                  key={idx}
+                  style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #DCEDC8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 4 }}
+                  onClick={() => {
+                    set추천모달열림(false); setIsCenterFocused(true)
+                    setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#DCEDC8' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                >
+                  <span>
+                    {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}
+                    <Tag color="blue" style={{ marginRight: 4 }}>{item.head_word}</Tag>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
+                  </span>
+                  <Tag color="green" style={{ fontSize: 10 }}>{item.score}</Tag>
+                </div>
+              ))}
+            </div>
+          </Spin>
+        </div></div>
 
-        {/* 한영오타키워드 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>한영오타키워드</Divider>
-        {getTypoVariants(추천키워드).length === 0 ? (
-          <Text type="secondary" style={{ fontSize: 12 }}>변환 결과 없음</Text>
-        ) : (
-          <div>
-            {getTypoVariants(추천키워드).map((v, idx) => (
-              <div
-                key={idx}
-                style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}
-                onClick={() => {
-                  set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-              >
-                <Tag color="orange" style={{ fontSize: 10 }}>{v.label}</Tag>
-                <Text style={{ fontSize: 13, fontWeight: 500 }}>{추천키워드}</Text>
-                <Text type="secondary">→</Text>
-                <Text style={{ fontSize: 13, fontWeight: 500 }}>{v.value}</Text>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* 한영오타 키워드 */}
+        <div style={{ border: '1px solid #B3E5FC', borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#0277BD', background: '#E1F5FE', borderBottom: '1px solid #B3E5FC' }}>
+          한영오타 키워드 <Tag color="cyan" style={{ fontSize: 10, marginLeft: 4 }}>{getTypoVariants(추천키워드).length}</Tag>
+        </div>
+        <div style={{ padding: '4px 8px' }}>
+          {getTypoVariants(추천키워드).length === 0 ? (
+            <Text type="secondary" style={{ fontSize: 12 }}>변환 결과 없음</Text>
+          ) : (
+            <div>
+              {getTypoVariants(추천키워드).map((v, idx) => (
+                <div
+                  key={idx}
+                  style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #B3E5FC', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 4 }}
+                  onClick={() => {
+                    set추천모달열림(false); setIsCenterFocused(true)
+                    setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#B3E5FC' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                >
+                  {등록키워드Set.has(v.value) && <LinkOutlined style={{ color: '#52c41a', marginRight: 2, fontSize: 10 }} />}
+                  <Tag color="orange" style={{ fontSize: 10 }}>{v.label}</Tag>
+                  <Text style={{ fontSize: 13, fontWeight: 500 }}>{추천키워드}</Text>
+                  <Text type="secondary">→</Text>
+                  <Text style={{ fontSize: 13, fontWeight: 500 }}>{v.value}</Text>
+                </div>
+              ))}
+            </div>
+          )}
+        </div></div>
 
-        {/* AI추천 키워드 — 모델별 세로 컬럼 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>
-          <Space>
-            AI추천 키워드
-            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>
-              분석 실행
-            </Button>
-          </Space>
-        </Divider>
+        {/* AI추천 키워드 */}
+        <div style={{ border: '1px solid #FFCC80', borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#E65100', background: '#FFF3E0', borderBottom: '1px solid #FFCC80', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>AI추천 키워드 {!llm로딩 && llm모델별결과.length > 0 && <Tag color="orange" style={{ fontSize: 10 }}>{llm모델별결과.reduce((sum: number, m: any) => sum + (m.items || []).filter((i: any) => i.head_word !== 추천키워드).length, 0)}</Tag>}</span>
+          <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.thesaurusLlm || '\\')}</KbdKey></Button>
+        </div>
+        <div style={{ padding: '4px 8px' }}>
         <Spin spinning={llm로딩}>
           {llm모델별결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
           {llm모델별결과.length > 0 && (
             <div style={{ display: 'flex', gap: 8 }}>
               {llm모델별결과.map((modelResult: any, mIdx: number) => (
-                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #f0f0f0', borderRadius: 4 }}>
-                  <div style={{ padding: '4px 8px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #FFCC80', borderRadius: 4 }}>
+                  <div style={{ padding: '4px 8px', background: '#FFF3E0', borderBottom: '1px solid #FFCC80', fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {modelResult.model}
                   </div>
                   <div style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -1596,15 +1715,15 @@ export default function KnowledgeWork() {
                     ) : (modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
                       <div
                         key={idx}
-                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 12 }}
+                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #FFE0B2', fontSize: 12 }}
                         onClick={() => {
                           set추천모달열림(false); setIsCenterFocused(true)
                           setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFE0B2' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
                       >
-                        {item.head_word}
+                        {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}{item.head_word}
                       </div>
                     ))}
                   </div>
@@ -1613,6 +1732,7 @@ export default function KnowledgeWork() {
             </div>
           )}
         </Spin>
+        </div></div>
       </Modal>
 
       {/* 유사어 LLM 프롬프트 편집 모달 */}
