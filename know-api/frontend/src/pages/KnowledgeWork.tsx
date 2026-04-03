@@ -236,9 +236,10 @@ function 사전컬럼(dicType: DicType) {
   }
 }
 
-function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger, thesaurusExternalOpen }: {
+function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger, thesaurusExternalOpen, onModalClose }: {
   dicType: DicType; domain: string; refreshKey?: number; externalSearch?: string; autoFocusTrigger?: number
-  thesaurusExternalOpen?: { head_word: string; tail_word: string; n: number } | null
+  thesaurusExternalOpen?: { head_word: string; tail_word: string; n: number; editMode?: boolean } | null
+  onModalClose?: () => void
 }) {
   const 컨테이너Ref = useRef<HTMLDivElement>(null)
   const [테이블높이, set테이블높이] = useState(160)
@@ -260,6 +261,8 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
   const [유사어키워드확정, set유사어키워드확정] = useState(false)
   const [편집유사어목록, set편집유사어목록] = useState<string[]>([])
   const [새유사어, set새유사어] = useState('')
+  const [신규추가항목, set신규추가항목] = useState<string[]>([])
+  const 유사어목록Ref = useRef<HTMLDivElement>(null)
   const [양방향, set양방향] = useState(false)
   const [편집저장중, set편집저장중] = useState(false)
 
@@ -360,13 +363,15 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
   }
 
   // 유사어 모달 열기 (등록/편집 통합)
+  // record.editMode=true → 편집모드 (기존 유사어 로드), false/undefined → 등록모드 (tail_word pre-fill)
   const 유사어모달열기 = async (record?: any) => {
     set양방향(false)
     set새유사어('')
+    set신규추가항목([])
     if (record && record.head_word) {
-      const isFromTable = !record.n  // 테이블 편집 클릭 (n 없음) vs 추천모달 (n 있음)
-      if (isFromTable) {
-        // 테이블에서 편집 클릭 — 기존 유사어 확정 로드
+      const isEdit = record.editMode === true || !record.n  // 편집 모드 판정
+      if (isEdit) {
+        // 편집 모드: 기존 유사어 확정 로드
         set유사어키워드(record.head_word)
         set유사어키워드확정(true)
         try {
@@ -375,13 +380,20 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
           })
           const matched = (res.data?.items || []).find((i: any) => i.head_word === record.head_word)
           const tails = matched ? 유사어분리(matched.tail_word) : []
+          // tail_word 추가 요청 — 단일 키워드만 추가 (쉼표 포함 원본 문자열 제외)
+          if (record.tail_word && !record.tail_word.includes(',') && !tails.includes(record.tail_word)) {
+            tails.push(record.tail_word)
+            set신규추가항목([record.tail_word])
+            // 스크롤을 하단으로
+            setTimeout(() => 유사어목록Ref.current?.scrollTo({ top: 유사어목록Ref.current.scrollHeight, behavior: 'smooth' }), 100)
+          }
           set편집유사어목록(tails)
           양방향자동감지(record.head_word, tails)
         } catch {
-          set편집유사어목록([])
+          set편집유사어목록(record.tail_word ? [record.tail_word] : [])
         }
       } else {
-        // 추천모달에서 전달 — 키워드 pre-fill + 미확정 (사용자가 수정 가능)
+        // 등록 모드: 키워드 pre-fill + 미확정
         set유사어키워드(record.head_word)
         set유사어키워드확정(false)
         set편집유사어목록([])
@@ -425,7 +437,9 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
       return
     }
     set편집유사어목록(prev => [...prev, word])
+    set신규추가항목(prev => [...prev, word])
     set새유사어('')
+    setTimeout(() => 유사어목록Ref.current?.scrollTo({ top: 유사어목록Ref.current.scrollHeight, behavior: 'smooth' }), 100)
   }
 
   // DB 일괄 저장
@@ -560,6 +574,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
           title={유사어키워드확정 ? `유사어 편집: ${유사어키워드}` : '유사어 등록/편집'}
           open={유사어모달열림}
           onCancel={() => set유사어모달열림(false)}
+          afterClose={() => setTimeout(() => onModalClose?.(), 50)}
           footer={<Space><Button onClick={() => set유사어모달열림(false)}>닫기</Button><Button type="primary" loading={편집저장중} onClick={유사어일괄저장}>저장</Button></Space>}
           width={420}
         >
@@ -594,7 +609,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   등록된 유사어 ({편집유사어목록.length}건):
                 </Text>
-                <div style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 4 }}>
+                <div ref={유사어목록Ref} style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 4 }}>
                   {편집유사어목록.length === 0 ? (
                     <div style={{ padding: '12px', textAlign: 'center' }}>
                       <Text type="secondary">등록된 유사어가 없습니다.</Text>
@@ -603,6 +618,8 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
                     <div key={w} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '4px 8px', borderBottom: '1px solid #f0f0f0',
+                      background: 신규추가항목.includes(w) ? '#FFF9C4' : undefined,
+                      transition: 'background 0.3s',
                     }}>
                       <span style={{ fontSize: 13 }}>{w}</span>
                       <Button size="small" type="text" danger icon={<DeleteOutlined />}
@@ -780,7 +797,7 @@ export default function KnowledgeWork() {
       if (data.prompt) setLlm프롬프트(data.prompt)
     }).catch(() => {})
   }, [])
-  const [thesaurusExternalOpen, setThesaurusExternalOpen] = useState<{ head_word: string; tail_word: string; n: number } | null>(null)
+  const [thesaurusExternalOpen, setThesaurusExternalOpen] = useState<{ head_word: string; tail_word: string; n: number; editMode?: boolean } | null>(null)
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
@@ -1256,7 +1273,7 @@ export default function KnowledgeWork() {
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}
-      onClick={() => setIsCenterFocused(false)}
+      onClick={() => { if (!추천모달열림) setIsCenterFocused(false) }}
     >
       {/* 배너 */}
       <div style={{
@@ -1419,7 +1436,7 @@ export default function KnowledgeWork() {
                 {
                   key: 'thesaurus',
                   label: <span>유사어사전 <KbdKey>{displayTabKey(derivedHotkeys.tabThesaurus)}</KbdKey></span>,
-                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} />,
+                  children: <DicTab dicType="thesaurus" domain={selectedDomain} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} onModalClose={() => setIsCenterFocused(true)} />,
                 },
               ]}
             />
@@ -1469,7 +1486,8 @@ export default function KnowledgeWork() {
           </div>
         }
         open={추천모달열림}
-        onCancel={() => { if (!추천프롬프트모달) { set추천모달열림(false); setIsCenterFocused(true) } }}
+        onCancel={() => { if (!추천프롬프트모달) set추천모달열림(false) }}
+        afterClose={() => setTimeout(() => setIsCenterFocused(true), 50)}
         footer={null}
         width={680}
         keyboard={!추천프롬프트모달}
@@ -1488,7 +1506,7 @@ export default function KnowledgeWork() {
                 style={{ padding: '6px 8px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                 onClick={() => {
                   set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1 }))
+                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1, editMode: true } as any))
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
@@ -1513,7 +1531,7 @@ export default function KnowledgeWork() {
                 style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 onClick={() => {
                   set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
+                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
@@ -1540,7 +1558,7 @@ export default function KnowledgeWork() {
                 style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}
                 onClick={() => {
                   set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1 }))
+                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
@@ -1581,7 +1599,7 @@ export default function KnowledgeWork() {
                         style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 12 }}
                         onClick={() => {
                           set추천모달열림(false); setIsCenterFocused(true)
-                          setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
+                          setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))
                         }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
