@@ -232,6 +232,7 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
             activeKey={activeTab}
             onChange={setActiveTab}
             size="small"
+            tabBarStyle={{ paddingLeft: 20 }}
             items={[
               {
                 key: 'llm',

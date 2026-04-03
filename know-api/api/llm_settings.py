@@ -94,6 +94,29 @@ async def 모델목록조회(
     return {"provider": provider, "models": models}
 
 
+class 프롬프트저장요청(BaseModel):
+    prompt: str = ""
+
+
+@라우터.get("/thesaurus-prompt")
+async def 유사어프롬프트조회(
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """유사어 추천 LLM 프롬프트 조회 (공유)."""
+    return llm_settings_service.유사어프롬프트조회()
+
+
+@라우터.put("/thesaurus-prompt")
+async def 유사어프롬프트저장(
+    body: 프롬프트저장요청,
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """유사어 추천 LLM 프롬프트 저장 (관리자만)."""
+    if current.get("auth") != "A":
+        raise HTTPException(status_code=403, detail="관리자만 수정 가능")
+    return llm_settings_service.유사어프롬프트저장(body.prompt)
+
+
 @라우터.put("/active/{provider}")
 async def 활성변경(
     provider: str,

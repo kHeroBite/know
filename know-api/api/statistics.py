@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
-from services.statistics_service import 도메인별사전통계, 전체도메인통계, LLM사용통계조회
+from services.statistics_service import 도메인별사전통계, 전체도메인통계, LLM사용통계조회, LLM월별사용자추이
 
 라우터 = APIRouter(prefix="/api/stats", tags=["통계"])
 
@@ -36,3 +36,11 @@ def LLM사용통계(
 ):
     """월별 사용자/usage_type별 LLM 사용 통계 반환."""
     return LLM사용통계조회(year, month)
+
+
+@라우터.get("/llm-usage-trend")
+def LLM사용추이(
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """최근 12개월 사용자별 월별 LLM 사용 추이 (라인차트용)."""
+    return LLM월별사용자추이()

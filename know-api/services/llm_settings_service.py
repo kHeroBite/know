@@ -1,8 +1,15 @@
 """LLM 설정 서비스 — provider별 API 키/모델 관리 + 통신 테스트 + LLM 질의."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from datetime import datetime
+
+
+def _strip_think(text: str) -> str:
+    """Qwen3 등 thinking 모델의 <think>...</think> 태그 제거."""
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
 import httpx
 from sqlalchemy import text
@@ -15,13 +22,18 @@ _TIMEOUT = 15.0
 
 
 def 설정전체조회() -> list[dict]:
-    """4개 provider 설정 반환."""
+    """4개 provider 설정 반환 (category 포함)."""
     with 엔진.connect() as conn:
         rows = conn.execute(text(
             "SELECT id, provider, api_key, base_url, model, is_active, test_passed, "
             "created_at, updated_at FROM llm_settings ORDER BY id"
         )).fetchall()
-    return [dict(r._mapping) for r in rows]
+    결과 = []
+    for r in rows:
+        d = dict(r._mapping)
+        d["category"] = "로컬LLM" if d["provider"] == "local" else "범용LLM"
+        결과.append(d)
+    return 결과
 
 
 def 설정저장(provider: str, api_key: str, base_url: str, model: str, is_active: int) -> dict:
@@ -40,14 +52,36 @@ def 설정저장(provider: str, api_key: str, base_url: str, model: str, is_acti
 
 
 def 활성변경(provider: str) -> dict:
-    """해당 provider만 is_active=1, 나머지 0."""
+    """해당 provider is_active 토글 (나머지 유지)."""
     with 엔진.connect() as conn:
-        conn.execute(text("UPDATE llm_settings SET is_active=0"))
+        row = conn.execute(text(
+            "SELECT is_active FROM llm_settings WHERE provider=:p"
+        ), {"p": provider}).first()
+        현재 = row[0] if row else 0
+        새값 = 0 if 현재 == 1 else 1
         conn.execute(text(
-            "UPDATE llm_settings SET is_active=1, updated_at=:now WHERE provider=:p"
-        ), {"now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "p": provider})
+            "UPDATE llm_settings SET is_active=:v, updated_at=:now WHERE provider=:p"
+        ), {"v": 새값, "now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "p": provider})
         conn.commit()
-    return {"provider": provider, "is_active": True}
+    return {"provider": provider, "is_active": 새값 == 1}
+
+
+def 유사어프롬프트조회() -> dict:
+    """활성 LLM 설정의 thesaurus_prompt 반환."""
+    with 엔진.connect() as conn:
+        row = conn.execute(text("SELECT thesaurus_prompt FROM llm_settings WHERE is_active=1 LIMIT 1")).fetchone()
+    prompt = (row[0] if row and row[0] else "")
+    return {"prompt": prompt}
+
+
+def 유사어프롬프트저장(prompt: str) -> dict:
+    """활성 LLM 설정의 thesaurus_prompt 저장."""
+    with 엔진.connect() as conn:
+        conn.execute(text(
+            "UPDATE llm_settings SET thesaurus_prompt=:p, updated_at=:now WHERE is_active=1"
+        ), {"p": prompt, "now": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        conn.commit()
+    return {"success": True}
 
 
 async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
@@ -62,7 +96,6 @@ async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
                 max_completion_tokens=5,
             )
             result = resp.choices[0].message.content
-            # 테스트 성공 시 test_passed 업데이트
             _테스트결과저장(provider, 1)
             return {"success": True, "message": f"OpenAI 연결 성공: {result}"}
 
@@ -87,24 +120,29 @@ async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
 
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            server_root = f"{parsed.scheme}://{parsed.netloc}"
+            models_urls = [f"{url.rsplit('/v1/', 1)[0]}/v1/models"] if "/v1/" in url else []
+            models_urls += [f"{server_root}/v1/models", f"{server_root}/api/tags"]
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                # OpenAI 호환 (vLLM 등) 먼저 시도
-                try:
-                    resp = await client.get(f"{url}/v1/models")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    model_count = len(data.get("data", []))
-                    _테스트결과저장(provider, 1)
-                    return {"success": True, "message": f"OpenAI 호환 연결 성공 (vLLM 등): {model_count}개 모델"}
-                except Exception:
-                    pass
-                # Ollama fallback
-                resp = await client.get(f"{url}/api/tags")
-                resp.raise_for_status()
-            data = resp.json()
-            model_count = len(data.get("models", []))
-            _테스트결과저장(provider, 1)
-            return {"success": True, "message": f"Ollama 연결 성공: {model_count}개 모델"}
+                for mu in models_urls:
+                    try:
+                        resp = await client.get(mu)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        if "data" in data:
+                            model_count = len(data["data"])
+                            _테스트결과저장(provider, 1)
+                            return {"success": True, "message": f"OpenAI 호환 연결 성공: {model_count}개 모델 ({mu})"}
+                        elif "models" in data:
+                            model_count = len(data["models"])
+                            _테스트결과저장(provider, 1)
+                            return {"success": True, "message": f"Ollama 연결 성공: {model_count}개 모델"}
+                    except Exception:
+                        continue
+            _테스트결과저장(provider, 0)
+            return {"success": False, "message": f"연결 실패: 시도한 URL — {', '.join(models_urls)}"}
 
         else:
             return {"success": False, "message": f"알 수 없는 provider: {provider}"}
@@ -174,20 +212,24 @@ async def 모델목록조회(provider: str, api_key: str, base_url: str) -> list
 
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            server_root = f"{parsed.scheme}://{parsed.netloc}"
+            models_urls = [f"{url.rsplit('/v1/', 1)[0]}/v1/models"] if "/v1/" in url else []
+            models_urls += [f"{server_root}/v1/models", f"{server_root}/api/tags"]
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                # OpenAI 호환 (vLLM 등) 먼저 시도
-                try:
-                    resp = await client.get(f"{url}/v1/models")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    return sorted([m["id"] for m in data.get("data", [])])
-                except Exception:
-                    pass
-                # Ollama fallback
-                resp = await client.get(f"{url}/api/tags")
-                resp.raise_for_status()
-            data = resp.json()
-            return [m["name"] for m in data.get("models", [])]
+                for mu in models_urls:
+                    try:
+                        resp = await client.get(mu)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        if "data" in data:
+                            return sorted([m["id"] for m in data["data"]])
+                        elif "models" in data:
+                            return [m["name"] for m in data["models"]]
+                    except Exception:
+                        continue
+            return []
 
         else:
             return []
@@ -198,7 +240,7 @@ async def 모델목록조회(provider: str, api_key: str, base_url: str) -> list
 
 
 def _활성설정조회() -> dict | None:
-    """활성 provider 설정 1건 조회."""
+    """활성 provider 설정 1건 조회 (하위 호환)."""
     with 엔진.connect() as conn:
         row = conn.execute(text(
             "SELECT provider, api_key, base_url, model FROM llm_settings WHERE is_active=1 LIMIT 1"
@@ -208,12 +250,17 @@ def _활성설정조회() -> dict | None:
     return dict(row._mapping)
 
 
-async def LLM질의(keyword: str, prompt: str, user_id: str = '', usage_type: str = '') -> dict:
-    """활성 provider로 LLM 질의. 반환: {result, provider, model, error}."""
-    설정 = _활성설정조회()
-    if not 설정:
-        return {"result": None, "provider": None, "model": None, "error": "활성화된 LLM provider가 없습니다"}
+def _활성설정목록조회() -> list[dict]:
+    """활성 provider 설정 전체 조회."""
+    with 엔진.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT provider, api_key, base_url, model FROM llm_settings WHERE is_active=1"
+        )).fetchall()
+    return [dict(r._mapping) for r in rows]
 
+
+async def _단일LLM질의(설정: dict, keyword: str, prompt: str, user_id: str, usage_type: str) -> dict:
+    """단일 provider LLM 질의 (내부 헬퍼)."""
     provider = 설정["provider"]
     api_key = 설정["api_key"]
     base_url = 설정["base_url"]
@@ -264,32 +311,42 @@ async def LLM질의(keyword: str, prompt: str, user_id: str = '', usage_type: st
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
             used_model = model or "llama3"
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                # OpenAI 호환 (vLLM 등) 먼저 시도
-                try:
-                    resp = await client.post(f"{url}/v1/chat/completions", json={
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                if "/v1/chat/completions" in url:
+                    resp = await client.post(url, json={
                         "model": used_model,
                         "messages": [{"role": "user", "content": query}],
-                        "max_tokens": 500,
+                        "max_completion_tokens": 2000,
                     })
                     resp.raise_for_status()
                     data = resp.json()
-                    result = data["choices"][0]["message"]["content"]
+                    result = _strip_think(data["choices"][0]["message"]["content"])
                     _사용로그기록(user_id, usage_type, used_model, 0, 0)
                     return {"result": result, "provider": provider, "model": used_model, "error": None}
-                except Exception:
-                    pass
-                # Ollama fallback
-                resp = await client.post(f"{url}/api/generate", json={
-                    "model": used_model,
-                    "prompt": query,
-                    "stream": False,
-                })
-                resp.raise_for_status()
-            data = resp.json()
-            result = data.get("response", "")
-            _사용로그기록(user_id, usage_type, used_model, 0, 0)
-            return {"result": result, "provider": provider, "model": used_model, "error": None}
+                else:
+                    try:
+                        resp = await client.post(f"{url}/v1/chat/completions", json={
+                            "model": used_model,
+                            "messages": [{"role": "user", "content": query}],
+                            "max_completion_tokens": 2000,
+                        })
+                        resp.raise_for_status()
+                        data = resp.json()
+                        result = _strip_think(data["choices"][0]["message"]["content"])
+                        _사용로그기록(user_id, usage_type, used_model, 0, 0)
+                        return {"result": result, "provider": provider, "model": used_model, "error": None}
+                    except Exception:
+                        pass
+                    resp = await client.post(f"{url}/api/generate", json={
+                        "model": used_model,
+                        "prompt": query,
+                        "stream": False,
+                    })
+                    resp.raise_for_status()
+                    data = resp.json()
+                    result = data.get("response", "")
+                    _사용로그기록(user_id, usage_type, used_model, 0, 0)
+                    return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         else:
             return {"result": None, "provider": provider, "model": model, "error": f"알 수 없는 provider: {provider}"}
@@ -297,3 +354,24 @@ async def LLM질의(keyword: str, prompt: str, user_id: str = '', usage_type: st
     except Exception as e:
         logger.error("[LLM질의] 실패 (%s/%s): %s", provider, model, e)
         return {"result": None, "provider": provider, "model": model, "error": str(e)}
+
+
+async def LLM질의(keyword: str, prompt: str, user_id: str = '', usage_type: str = '') -> dict:
+    """활성 provider들로 LLM 질의 (병렬). 반환: {result, provider, model, error, results}."""
+    설정목록 = _활성설정목록조회()
+    if not 설정목록:
+        return {"result": None, "provider": None, "model": None, "error": "활성화된 LLM provider가 없습니다", "results": []}
+
+    tasks = [_단일LLM질의(s, keyword, prompt, user_id, usage_type) for s in 설정목록]
+    결과목록 = list(await asyncio.gather(*tasks))
+
+    성공결과 = [r for r in 결과목록 if r.get("error") is None]
+    첫번째 = 성공결과[0] if 성공결과 else 결과목록[0]
+
+    return {
+        "result": 첫번째.get("result"),
+        "provider": 첫번째.get("provider"),
+        "model": 첫번째.get("model"),
+        "error": 첫번째.get("error"),
+        "results": 결과목록,
+    }

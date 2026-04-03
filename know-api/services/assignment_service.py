@@ -176,10 +176,10 @@ def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict
 
 
 def 전체_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """할당된 모든 키워드를 완료(W) 처리 후 반납."""
+    """할당된 모든 키워드를 완료(W) 처리 후 작업자 제거(반납)."""
     now = datetime.now().isoformat()
     result = db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', flag='W', completed_at=:now
+        UPDATE keyword_assignments SET status='completed', flag='W', completed_at=:now, assigned_to=NULL
         WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
     """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
     db.commit()
@@ -187,23 +187,28 @@ def 전체_완료처리(db: Session, workspace: str, domain: str, user_id: str) 
 
 
 def 전체_미완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """할당된 모든 키워드를 미완료('') 처리 후 반납."""
-    now = datetime.now().isoformat()
+    """할당된 모든 키워드를 미완료 처리 후 작업자 제거(반납) — pending으로 복귀."""
     result = db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', flag='', completed_at=:now
+        UPDATE keyword_assignments SET status='pending', flag='', assigned_to=NULL, assigned_at=NULL, completed_at=NULL
         WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
-    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    """), {"ws": workspace, "dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "mode": "all_incomplete"}
 
 
 def 작업이력대로_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """현재 flag 상태 유지하고 할당 반납 (status만 completed로 변경)."""
+    """현재 flag 상태 유지하고 작업자 제거(반납) — 작업한(W)은 completed, 나머지는 pending."""
     now = datetime.now().isoformat()
-    result = db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', completed_at=:now
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    # 작업완료(W) 키워드 → completed
+    db.execute(text("""
+        UPDATE keyword_assignments SET status='completed', completed_at=:now, assigned_to=NULL
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned' AND flag='W'
     """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    # 미작업 키워드 → pending 복귀
+    result = db.execute(text("""
+        UPDATE keyword_assignments SET status='pending', assigned_to=NULL, assigned_at=NULL
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"ws": workspace, "dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "mode": "by_history"}
 

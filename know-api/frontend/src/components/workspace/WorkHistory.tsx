@@ -28,7 +28,7 @@ interface Props {
   onUndo?: (item: WorkHistoryItem) => void
 }
 
-const DIC_LABEL: Record<string, string> = { udic: '사용자', cndic: '복합명사', thesaurus: '유사어' }
+const DIC_LABEL: Record<string, string> = { udic: '사용자사전', cndic: '복합명사사전', thesaurus: '유사어사전' }
 const ACT_LABEL: Record<string, string> = { add: '+', delete: '-' }
 
 export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo }, ref) {
@@ -93,12 +93,12 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
     {
       title: '사전',
       dataIndex: 'dic_type',
-      width: 70,
+      width: 100,
       render: (v: string) => <span style={{ fontSize: 11 }}>{DIC_LABEL[v] || v}</span>,
     },
     {
       dataIndex: 'action_type',
-      width: 28,
+      width: 50,
       align: 'center' as const,
       render: (v: string) => ACT_LABEL[v] || v,
     },
@@ -134,7 +134,7 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
         columns={columns}
         rowKey="id"
         pagination={false}
-        scroll={{ y: 테이블높이 }}
+        scroll={{ y: 120 }}
         onRow={(record) => ({
           style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
         })}

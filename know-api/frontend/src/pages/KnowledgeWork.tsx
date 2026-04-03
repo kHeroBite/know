@@ -48,6 +48,81 @@ function encodeKeyEvent(e: KeyboardEvent): string {
   return parts.join('+')
 }
 
+// ─── 한↔영 키보드 변환 (오타추천용) ─────────────────────────────
+const KO_MAP = 'ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ'
+const EN_MAP = 'qwertyuiopasdfghjklzxcvbnm'
+const KO_SHIFT = 'ㅃㅉㄸㄲㅆㅛㅕㅑㅒㅖㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ'
+const EN_SHIFT = 'QWERTYUIOPASDFGHJKLZXCVBNM'
+
+function koToEn(text: string): string {
+  // 한글 자모 → 영문 키보드
+  const 초성 = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+  const 중성 = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ'
+  const 종성 = ['', 'ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ']
+  const 종성분해: Record<string, string[]> = {
+    'ㄳ':['ㄱ','ㅅ'],'ㄵ':['ㄴ','ㅈ'],'ㄶ':['ㄴ','ㅎ'],'ㄺ':['ㄹ','ㄱ'],'ㄻ':['ㄹ','ㅁ'],
+    'ㄼ':['ㄹ','ㅂ'],'ㄽ':['ㄹ','ㅅ'],'ㄾ':['ㄹ','ㅌ'],'ㄿ':['ㄹ','ㅍ'],'ㅀ':['ㄹ','ㅎ'],
+    'ㅄ':['ㅂ','ㅅ'],'ㄲ':['ㄱ','ㄱ'],'ㅆ':['ㅅ','ㅅ']
+  }
+  const 중성분해: Record<string, string[]> = {
+    'ㅘ':['ㅗ','ㅏ'],'ㅙ':['ㅗ','ㅐ'],'ㅚ':['ㅗ','ㅣ'],'ㅝ':['ㅜ','ㅓ'],'ㅞ':['ㅜ','ㅔ'],
+    'ㅟ':['ㅜ','ㅣ'],'ㅢ':['ㅡ','ㅣ'],'ㅒ':['ㅑ','ㅣ'],'ㅖ':['ㅕ','ㅣ']
+  }
+  const jamoToEn = (c: string): string => {
+    let i = KO_MAP.indexOf(c)
+    if (i >= 0) return EN_MAP[i] || c
+    i = KO_SHIFT.indexOf(c)
+    if (i >= 0) return EN_SHIFT[i] || c
+    return c
+  }
+  let result = ''
+  for (const ch of text) {
+    const code = ch.charCodeAt(0)
+    if (code >= 0xAC00 && code <= 0xD7A3) {
+      const offset = code - 0xAC00
+      const cho = Math.floor(offset / (21 * 28))
+      const jung = Math.floor((offset % (21 * 28)) / 28)
+      const jong = offset % 28
+      result += jamoToEn(초성[cho])
+      const jungChar = 중성[jung]
+      if (중성분해[jungChar]) 중성분해[jungChar].forEach(j => result += jamoToEn(j))
+      else result += jamoToEn(jungChar)
+      if (jong > 0) {
+        const jongChar = 종성[jong]
+        if (종성분해[jongChar]) 종성분해[jongChar].forEach(j => result += jamoToEn(j))
+        else result += jamoToEn(jongChar)
+      }
+    } else {
+      const ki = KO_MAP.indexOf(ch)
+      if (ki >= 0) result += EN_MAP[ki] || ch
+      else result += ch
+    }
+  }
+  return result
+}
+
+function enToKo(text: string): string {
+  // 영문 키보드 → 한글 자모 (조합 없이 자모 나열)
+  let result = ''
+  for (const ch of text) {
+    const lower = ch.toLowerCase()
+    const i = EN_MAP.indexOf(lower)
+    if (i >= 0) result += (ch === ch.toUpperCase() && ch !== ch.toLowerCase()) ? (KO_SHIFT[i] || KO_MAP[i]) : KO_MAP[i]
+    else result += ch
+  }
+  return result
+}
+
+function getTypoVariants(keyword: string): { label: string; value: string }[] {
+  if (!keyword) return []
+  const results: { label: string; value: string }[] = []
+  const hasKorean = /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(keyword)
+  const hasEnglish = /[a-zA-Z]/.test(keyword)
+  if (hasKorean) results.push({ label: '한→영', value: koToEn(keyword) })
+  if (hasEnglish) results.push({ label: '영→한', value: enToKo(keyword) })
+  return results
+}
+
 // ─── 분석결과 토큰 파싱 ─────────────────────────────────────────
 
 interface Token {
@@ -64,8 +139,12 @@ function parseAnalysisText(text: string): Token[] {
   lines.forEach((line, li) => {
     const words = line.split(/\s+/).filter(Boolean)
     words.forEach(w => {
-      tokens.push({ text: w, index: idx })
-      idx++
+      // <<, >> 를 별도 토큰으로 분리 (표시는 그대로, 네비게이션 시 스킵)
+      const parts = w.split(/(<<|>>|,)/).filter(Boolean)
+      parts.forEach(part => {
+        tokens.push({ text: part, index: idx })
+        idx++
+      })
     })
     if (li < lines.length - 1) {
       tokens.push({ text: '\n', index: -1, lineBreak: true })
@@ -190,7 +269,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
     try {
       const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
       const res = await 클라이언트.get(`/dictionaries/${domain}/${경로}`, {
-        params: { page: 현재페이지, size: 50, ...(검색쿼리 ? { search: 검색쿼리 } : {}) },
+        params: { page: 현재페이지, size: 5, ...(검색쿼리 ? { search: 검색쿼리 } : {}) },
       })
       set데이터(res.data?.items || [])
       set총건수(res.data?.total || 0)
@@ -260,22 +339,53 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
   const 유사어분리 = (tailWord: string): string[] =>
     (tailWord || '').split(',').map(s => s.trim()).filter(Boolean)
 
+  // 양방향 자동 감지: 모든 키워드가 양방향 pair로 존재하는지 확인
+  const 양방향자동감지 = async (headWord: string, tailWords: string[]) => {
+    if (tailWords.length === 0) { set양방향(false); return }
+    try {
+      const allWords = [headWord, ...tailWords]
+      let isBidirectional = true
+      for (const tw of tailWords) {
+        const res = await 클라이언트.get(`/dictionaries/${domain}/thesaurus/list`, {
+          params: { search: tw, size: 100 },
+        })
+        const matched = (res.data?.items || []).find((i: any) => i.head_word === tw)
+        if (!matched) { isBidirectional = false; break }
+        const existingTails = 유사어분리(matched.tail_word)
+        const others = allWords.filter(w => w !== tw)
+        if (!others.every(o => existingTails.includes(o))) { isBidirectional = false; break }
+      }
+      set양방향(isBidirectional)
+    } catch { set양방향(false) }
+  }
+
   // 유사어 모달 열기 (등록/편집 통합)
   const 유사어모달열기 = async (record?: any) => {
     set양방향(false)
     set새유사어('')
-    if (record) {
-      // 편집 모드: 기존 키워드의 유사어 로드
-      set유사어키워드(record.head_word)
-      set유사어키워드확정(true)
-      try {
-        const res = await 클라이언트.get(`/dictionaries/${domain}/thesaurus/list`, {
-          params: { search: record.head_word, size: 100 },
-        })
-        const matched = (res.data?.items || []).find((i: any) => i.head_word === record.head_word)
-        set편집유사어목록(matched ? 유사어분리(matched.tail_word) : [])
-      } catch {
-        set편집유사어목록(record.tail_word ? 유사어분리(record.tail_word) : [])
+    if (record && record.head_word) {
+      const isFromTable = !record.n  // 테이블 편집 클릭 (n 없음) vs 추천모달 (n 있음)
+      if (isFromTable) {
+        // 테이블에서 편집 클릭 — 기존 유사어 확정 로드
+        set유사어키워드(record.head_word)
+        set유사어키워드확정(true)
+        try {
+          const res = await 클라이언트.get(`/dictionaries/${domain}/thesaurus/list`, {
+            params: { search: record.head_word, size: 100 },
+          })
+          const matched = (res.data?.items || []).find((i: any) => i.head_word === record.head_word)
+          const tails = matched ? 유사어분리(matched.tail_word) : []
+          set편집유사어목록(tails)
+          양방향자동감지(record.head_word, tails)
+        } catch {
+          set편집유사어목록([])
+        }
+      } else {
+        // 추천모달에서 전달 — 키워드 pre-fill + 미확정 (사용자가 수정 가능)
+        set유사어키워드(record.head_word)
+        set유사어키워드확정(false)
+        set편집유사어목록([])
+        if (record.tail_word) set새유사어(record.tail_word)
       }
     } else {
       // 등록 모드: 빈 상태
@@ -444,7 +554,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
         rowKey={dicType === 'thesaurus' ? (r: any) => `${r.head_word}-${r.tail_word}` : 'word'}
         loading={로딩} size="small" scroll={{ y: 테이블높이 }}
         pagination={{
-          current: 현재페이지, pageSize: 50, total: 총건수,
+          current: 현재페이지, pageSize: 5, total: 총건수,
           showTotal: (total) => `총 ${total.toLocaleString()}건`,
           showSizeChanger: false, size: 'small',
           onChange: (page) => set현재페이지(page),
@@ -468,8 +578,8 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
           width={420}
         >
           {/* 키워드 입력 */}
-          {!유사어키워드확정 ? (
-            <div style={{ marginBottom: 16 }}>
+          {!유사어키워드확정 && (
+            <div style={{ marginBottom: 12 }}>
               <Text strong style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>키워드</Text>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Input
@@ -485,7 +595,8 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
                   disabled={!유사어키워드.trim()}>확인</Button>
               </div>
             </div>
-          ) : (
+          )}
+          {(유사어키워드확정 || 유사어키워드.trim()) && (
             <>
               {/* 등록된 유사어 목록 */}
               <div style={{ marginBottom: 12 }}>
@@ -607,17 +718,17 @@ function MorphemeTab({ domain, prefillKeyword, prefillTrigger, autoFocusTrigger 
 
 // ─── 메인 페이지 ─────────────────────────────────────────────────
 
-const 기본추천프롬프트 = `당신은 검색엔진 유사어 사전 전문가입니다.
-아래 키워드가 의미적으로 가장 잘 어울리는 유사어 그룹을 상위 5개 선택하세요.
+const 기본추천프롬프트 = `[필수] 반드시 한국어로 응답하라. 영어 설명/사고과정 절대 금지.
 
 키워드: {keyword}
-분석 컨텍스트: {context}
 
-유사어 그룹 후보:
-{candidates}
+이 키워드의 유사어를 콤마로 구분하여 단어만 나열하라.
+한영변환, 동의어, 유의어, 관련어, 오타변형을 포함하여 최대 20개.
+설명/번호/카테고리/사고과정 출력 절대 금지. 단어,단어,단어 형식만 허용.
 
-응답 형식: 번호만 쉼표로 구분하여 답하세요.
-예시: 3,7,12,1,45`
+예시입력: 나이키
+예시출력: nike, 나이크, 나이커, nikey, 운동화, 스포츠브랜드, 나이끼
+/no_think`
 
 export default function KnowledgeWork() {
   const navigate = useNavigate()
@@ -630,6 +741,7 @@ export default function KnowledgeWork() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadingPrev, setLoadingPrev] = useState(false)
+  const [키워드필터, set키워드필터] = useState('')
   const [minPage, setMinPage] = useState(1)
   const [maxPage, setMaxPage] = useState(1)
   const [selected, setSelected] = useState<KeywordItem | null>(null)
@@ -668,6 +780,13 @@ export default function KnowledgeWork() {
   const [llm로딩, setLlm로딩] = useState(false)
   const [llm프롬프트, setLlm프롬프트] = useState(기본추천프롬프트)
   const [프롬프트접힘, set프롬프트접힘] = useState(true)
+  const [추천프롬프트모달, set추천프롬프트모달] = useState(false)
+  // DB에서 공유 프롬프트 로드
+  useEffect(() => {
+    클라이언트.get('/llm-settings/thesaurus-prompt').then(({ data }) => {
+      if (data.prompt) setLlm프롬프트(data.prompt)
+    }).catch(() => {})
+  }, [])
   const [thesaurusExternalOpen, setThesaurusExternalOpen] = useState<{ head_word: string; tail_word: string; n: number } | null>(null)
 
   // AI분석
@@ -812,19 +931,29 @@ export default function KnowledgeWork() {
     }
   }, [selected])
 
-  // 선택 키워드 자동 중앙 스크롤
+  // 선택 키워드 자동 중앙 스크롤 (필터 해제 시에도 유지)
   useEffect(() => {
-    if (selected && itemRefs.current[selected.id]) {
-      itemRefs.current[selected.id]!.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (selected) {
+      // DOM 렌더 완료 대기 후 스크롤
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          itemRefs.current[selected.id]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }, 100)
+      })
     }
-  }, [selected])
+  }, [selected, 키워드필터])
+
+  // ─── 필터링된 키워드 목록 (검색 + 네비게이션) ─────────────
+  const filteredItems = 키워드필터 ? items.filter(r => r.keyword.includes(키워드필터)) : items
 
   // ─── 토큰 ───────────────────────────────────────────────────
 
   const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
   const selectableTokens = tokens.filter(t => !t.lineBreak)
-  const selectedWord = selectedTokenIdx >= 0 && selectedTokenIdx < selectableTokens.length
+  const selectedWordRaw = selectedTokenIdx >= 0 && selectedTokenIdx < selectableTokens.length
     ? selectableTokens[selectedTokenIdx].text : ''
+  // <<, >>, 쉼표 제거 (표시는 그대로, 선택 시 정제)
+  const selectedWord = selectedWordRaw.replace(/^<<|>>$/g, '').replace(/,$/g, '').replace(/^,/g, '')
 
   // 선택 키워드 자동 클립보드 복사 (HTTP 환경: navigator.clipboard 없을 수 있음)
   useEffect(() => {
@@ -869,20 +998,27 @@ export default function KnowledgeWork() {
   }, [selectedDomain])
 
   const LLM분석 = useCallback(async () => {
-    if (!selectedDomain) return
+    if (!selectedDomain || !추천키워드) return
     setLlm로딩(true)
     try {
       const { data } = await 클라이언트.post(`/dictionaries/${selectedDomain}/thesaurus/recommend/llm`, {
         keyword: 추천키워드,
-        candidates: 추천결과,
+        candidates: [],
         context: selected?.analysis || '',
         prompt: llm프롬프트,
       })
-      setLlm결과(data.items || [])
+      // 응답이 쉼표 구분 텍스트일 수 있으므로 파싱
+      const items = data.items || []
+      if (items.length === 0 && data.raw_response) {
+        const parsed = data.raw_response.split(',').map((s: string) => s.trim()).filter(Boolean)
+        setLlm결과(parsed.map((word: string) => ({ head_word: word, tail_words: [], score: 0 })))
+      } else {
+        setLlm결과(items)
+      }
     } catch (e: any) {
       message.error(e?.response?.data?.detail || 'LLM 분석 실패')
     } finally { setLlm로딩(false) }
-  }, [selectedDomain, 추천키워드, 추천결과, selected, llm프롬프트])
+  }, [selectedDomain, 추천키워드, selected, llm프롬프트])
 
   // ─── 핫키 핸들러 ────────────────────────────────────────────
 
@@ -925,24 +1061,24 @@ export default function KnowledgeWork() {
 
     switch (action) {
       case 'prevKeyword': {
-        if (!items.length) break
-        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+        if (!filteredItems.length) break
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx > 0 ? curIdx - 1 : 0
-        setSelected(items[newIdx])
-        if (!items[newIdx].flag) {
-          assignmentApi.updateFlag(items[newIdx].id, 'R').catch(() => {})
-          setItems(prev => prev.map(i => i.id === items[newIdx].id ? { ...i, flag: 'R' } : i))
+        setSelected(filteredItems[newIdx])
+        if (!filteredItems[newIdx].flag) {
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
         break
       }
       case 'nextKeyword': {
-        if (!items.length) break
-        const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx < items.length - 1 ? curIdx + 1 : items.length - 1
-        setSelected(items[newIdx])
-        if (!items[newIdx].flag) {
-          assignmentApi.updateFlag(items[newIdx].id, 'R').catch(() => {})
-          setItems(prev => prev.map(i => i.id === items[newIdx].id ? { ...i, flag: 'R' } : i))
+        if (!filteredItems.length) break
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+        const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
+        setSelected(filteredItems[newIdx])
+        if (!filteredItems[newIdx].flag) {
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
         break
       }
@@ -953,13 +1089,13 @@ export default function KnowledgeWork() {
         if (prevIdx >= 0) {
           setSelectedTokenIdx(prevIdx)
         } else {
-          const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
+          const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
           if (curIdx > 0) {
             selectLastTokenRef.current = true
-            setSelected(items[curIdx - 1])
-            if (!items[curIdx - 1].flag) {
-              assignmentApi.updateFlag(items[curIdx - 1].id, 'R').catch(() => {})
-              setItems(prev => prev.map(i => i.id === items[curIdx - 1].id ? { ...i, flag: 'R' } : i))
+            setSelected(filteredItems[curIdx - 1])
+            if (!filteredItems[curIdx - 1].flag) {
+              assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R').catch(() => {})
+              setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
             }
           }
         }
@@ -971,12 +1107,12 @@ export default function KnowledgeWork() {
         while (nextIdx < selectableTokens.length && !isNavigableToken(selectableTokens, nextIdx)) nextIdx++
         if (nextIdx >= selectableTokens.length) {
           // REQ-21: 마지막 토큰 → 다음 키워드 자동 이동
-          const curIdx = selected ? items.findIndex(i => i.id === selected.id) : -1
-          if (curIdx >= 0 && curIdx < items.length - 1) {
-            setSelected(items[curIdx + 1])
-            if (!items[curIdx + 1].flag) {
-              assignmentApi.updateFlag(items[curIdx + 1].id, 'R').catch(() => {})
-              setItems(prev => prev.map(i => i.id === items[curIdx + 1].id ? { ...i, flag: 'R' } : i))
+          const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+          if (curIdx >= 0 && curIdx < filteredItems.length - 1) {
+            setSelected(filteredItems[curIdx + 1])
+            if (!filteredItems[curIdx + 1].flag) {
+              assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R').catch(() => {})
+              setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
             }
           } else {
             message.info('모든 키워드를 완료했습니다')
@@ -998,6 +1134,7 @@ export default function KnowledgeWork() {
           setLlm결과([])
           set추천모달열림(true)
           추천검색(selectedWord)
+          setActiveTab('thesaurus')
         } else {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
             .then(() => {
@@ -1060,7 +1197,7 @@ export default function KnowledgeWork() {
         break
       }
     }
-  }, [hotkeys, derivedHotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색])
+  }, [hotkeys, derivedHotkeys, isCenterFocused, items, filteredItems, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -1151,18 +1288,25 @@ export default function KnowledgeWork() {
         {/* 좌측열: 키워드목록 + 키워드분석 */}
         <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
-            title={`키워드(${workedCount}/${totalCount})`}
+            title={`작업키워드(${workedCount}/${totalCount})`}
             size="small"
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
           >
+            <div style={{ padding: '4px 8px', flexShrink: 0 }}>
+              <Input
+                placeholder="키워드 검색..." value={키워드필터} onChange={e => set키워드필터(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); set키워드필터(''); (e.target as HTMLElement).blur() } }}
+                allowClear size="small" style={{ width: '100%' }}
+              />
+            </div>
             <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
               {loadingPrev && (
                 <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
               )}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-              ) : items.map((record, index) => (
+              ) : items.filter(r => !키워드필터 || r.keyword.includes(키워드필터)).map((record, index) => (
                 <div
                   key={record.id}
                   ref={(el) => { itemRefs.current[record.id] = el }}
@@ -1200,8 +1344,8 @@ export default function KnowledgeWork() {
           </Card>
         </div>
 
-        {/* 중앙열: 분석결과 + 사전탭 (50:50) */}
-        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* 중앙열: 분석결과 + 사전탭 */}
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
             title={<span>분석결과 <KbdKey>{displayKey(hotkeys.focusAnalysis)}</KbdKey></span>}
             size="small"
@@ -1251,7 +1395,7 @@ export default function KnowledgeWork() {
           </Card>
           <Card
             size="small"
-            style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px' } }}
           >
             <Tabs
@@ -1284,7 +1428,7 @@ export default function KnowledgeWork() {
         </div>
 
         {/* 우측열: 키워드분석 + AI분석 + 작업이력 (3등분) */}
-        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ width: 450, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
             title={<span>키워드 분석 <KbdKey>{displayTabKey(derivedHotkeys.tabMorpheme)}</KbdKey></span>}
             size="small"
@@ -1304,7 +1448,7 @@ export default function KnowledgeWork() {
           <Card
             title={<span>작업이력 <KbdKey>{displayKey(hotkeys.undoHistory)}</KbdKey></span>}
             size="small"
-            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            style={{ height: 240, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
             <WorkHistory
@@ -1319,41 +1463,32 @@ export default function KnowledgeWork() {
 
       {/* 유사어 추천 모달 */}
       <Modal
-        title={`유사어 추천 — ${추천키워드}`}
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 24 }}>
+            <span>{`유사어 추천 — ${추천키워드}`}</span>
+            <Button size="small" icon={<EditOutlined />} onClick={() => set추천프롬프트모달(true)}>프롬프트</Button>
+          </div>
+        }
         open={추천모달열림}
-        onCancel={() => set추천모달열림(false)}
+        onCancel={() => { if (!추천프롬프트모달) { set추천모달열림(false); setIsCenterFocused(true) } }}
         footer={null}
         width={680}
+        keyboard={!추천프롬프트모달}
         destroyOnClose
       >
-        {/* LLM 프롬프트 */}
-        <div
-          style={{ fontSize: 12, color: '#888', cursor: 'pointer', marginBottom: 4 }}
-          onClick={() => set프롬프트접힘(p => !p)}
-        >
-          LLM 프롬프트 {프롬프트접힘 ? '▶ 펼치기' : '▼ 접기'}
-        </div>
-        {!프롬프트접힘 && (
-          <Input.TextArea
-            value={llm프롬프트}
-            onChange={e => setLlm프롬프트(e.target.value)}
-            rows={5}
-            style={{ marginBottom: 8, fontFamily: 'monospace', fontSize: 11 }}
-          />
-        )}
 
-        {/* 텍스트 매칭 후보 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>텍스트 매칭 후보</Divider>
+        {/* 기존 유사어목록에 추가 */}
+        <Divider orientation="left" style={{ fontSize: 12 }}>기존 유사어목록에 추가</Divider>
         <Spin spinning={추천로딩}>
-          {추천결과.length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
-          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-            {추천결과.map((item: any, idx: number) => (
+          {추천결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
+          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {추천결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
               <div
                 key={idx}
                 style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 onClick={() => {
-                  set추천모달열림(false)
-                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1 }))
+                  set추천모달열림(false); setIsCenterFocused(true)
+                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
@@ -1368,25 +1503,51 @@ export default function KnowledgeWork() {
           </div>
         </Spin>
 
+        {/* 오타추천 (한↔영 변환) */}
+        <Divider orientation="left" style={{ fontSize: 12 }}>오타추천 (한↔영 변환)</Divider>
+        {getTypoVariants(추천키워드).length === 0 ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>변환 결과 없음</Text>
+        ) : (
+          <div>
+            {getTypoVariants(추천키워드).map((v, idx) => (
+              <div
+                key={idx}
+                style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}
+                onClick={() => {
+                  set추천모달열림(false); setIsCenterFocused(true)
+                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1 }))
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+              >
+                <Tag color="orange" style={{ fontSize: 10 }}>{v.label}</Tag>
+                <Text style={{ fontSize: 13, fontWeight: 500 }}>{추천키워드}</Text>
+                <Text type="secondary">→</Text>
+                <Text style={{ fontSize: 13, fontWeight: 500 }}>{v.value}</Text>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* LLM 추천 */}
         <Divider orientation="left" style={{ fontSize: 12 }}>
           <Space>
             LLM 추천
-            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석} disabled={추천결과.length === 0}>
+            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>
               분석 실행
             </Button>
           </Space>
         </Divider>
         <Spin spinning={llm로딩}>
-          {llm결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
+          {llm결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
           <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-            {llm결과.map((item: any, idx: number) => (
+            {llm결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
               <div
                 key={idx}
                 style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}
                 onClick={() => {
-                  set추천모달열림(false)
-                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1 }))
+                  set추천모달열림(false); setIsCenterFocused(true)
+                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
@@ -1397,6 +1558,33 @@ export default function KnowledgeWork() {
             ))}
           </div>
         </Spin>
+      </Modal>
+
+      {/* 유사어 LLM 프롬프트 편집 모달 */}
+      <Modal
+        title="유사어 추천 LLM 프롬프트"
+        open={추천프롬프트모달}
+        onCancel={() => set추천프롬프트모달(false)}
+        onOk={() => {
+          클라이언트.put('/llm-settings/thesaurus-prompt', { prompt: llm프롬프트 })
+            .then(() => message.success('프롬프트 저장 완료'))
+            .catch(() => message.error('프롬프트 저장 실패'))
+          set추천프롬프트모달(false)
+        }}
+        okText="저장"
+        cancelText="취소"
+        width={600}
+        zIndex={1100}
+      >
+        <Input.TextArea
+          value={llm프롬프트}
+          onChange={e => setLlm프롬프트(e.target.value)}
+          rows={10}
+          style={{ fontFamily: 'monospace', fontSize: 12 }}
+        />
+        <div style={{ marginTop: 8, textAlign: 'right' }}>
+          <Button size="small" onClick={() => setLlm프롬프트(기본추천프롬프트)}>기본값 복원</Button>
+        </div>
       </Modal>
 
       {/* 작업완료 모달 */}

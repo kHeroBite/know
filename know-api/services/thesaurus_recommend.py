@@ -194,22 +194,39 @@ async def LLM재순위(
     LLM 실패 시 점수 기준 상위 5개로 폴백.
     head완전/tail완전 항목은 LLM에 전달하지 않고 결과에 그대로 포함.
     """
+    사용프롬프트 = prompt or _기본프롬프트
+
     if not candidates:
-        return {'items': [], 'provider': None, 'raw_response': ''}
+        # 키워드 직접 추천 모드 — 후보 없이 LLM에 키워드만 전달
+        최종프롬프트 = (사용프롬프트
+                      .replace('{context}', context or '없음')
+                      .replace('{candidates}', '(없음 — 키워드 기반 직접 추천)'))
+        try:
+            llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
+            raw = llm결과.get('result') or ''
+            provider = llm결과.get('provider')
+            error = llm결과.get('error')
+            if error or not raw:
+                return {'items': [], 'provider': provider, 'raw_response': raw or error or ''}
+            # 쉼표 구분 파싱 → head_word 목록으로 변환
+            import re
+            words = [w.strip() for w in re.split(r'[,\n]+', raw) if w.strip()]
+            items = [{'head_word': w, 'tail_words': [], 'score': 0} for w in words]
+            return {'items': items, 'provider': provider, 'raw_response': raw}
+        except Exception as e:
+            logger.error('[LLM직접추천] 예외: %s', e)
+            return {'items': [], 'provider': None, 'raw_response': str(e)}
 
     # head완전/tail완전 분리 — 이미 확정적 매칭이므로 LLM 불필요
     def _is_exact(c: dict) -> bool:
         mt = c.get('match_type', '')
         return mt.startswith('head완전') or mt.startswith('tail완전')
 
-    exact_items = [c for c in candidates if _is_exact(c)]
     llm_candidates = [c for c in candidates if not _is_exact(c)]
 
-    # LLM 후보가 없으면 호출 자체 스킵
+    # LLM 후보가 없으면 호출 자체 스킵 (head완전/tail완전 제외 후)
     if not llm_candidates:
-        return {'items': candidates, 'provider': None, 'raw_response': ''}
-
-    사용프롬프트 = prompt or _기본프롬프트
+        return {'items': [], 'provider': None, 'raw_response': ''}
 
     # 후보 목록 포맷 (번호 1-based, LLM 후보만)
     후보텍스트 = '\n'.join(
@@ -230,7 +247,7 @@ async def LLM재순위(
 
         if error or not raw:
             logger.warning('[LLM재순위] LLM 응답 없음, 점수 기준 폴백: %s', error)
-            return {'items': exact_items + llm_candidates[:5], 'provider': provider, 'raw_response': raw or error or ''}
+            return {'items': llm_candidates[:5], 'provider': provider, 'raw_response': raw or error or ''}
 
         # 응답에서 번호 파싱 (쉼표/공백/줄바꿈 구분)
         import re
@@ -250,9 +267,8 @@ async def LLM재순위(
         if not 선택항목:
             선택항목 = llm_candidates[:5]
 
-        # exact 항목을 앞에 포함
-        return {'items': exact_items + 선택항목, 'provider': provider, 'raw_response': raw}
+        return {'items': 선택항목, 'provider': provider, 'raw_response': raw}
 
     except Exception as e:
         logger.error('[LLM재순위] 예외 발생: %s', e)
-        return {'items': exact_items + llm_candidates[:5], 'provider': None, 'raw_response': str(e)}
+        return {'items': llm_candidates[:5], 'provider': None, 'raw_response': str(e)}
