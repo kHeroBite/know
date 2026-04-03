@@ -197,25 +197,34 @@ async def LLM재순위(
     사용프롬프트 = prompt or _기본프롬프트
 
     if not candidates:
-        # 키워드 직접 추천 모드 — 후보 없이 LLM에 키워드만 전달
+        # 키워드 직접 추천 모드 — 활성 LLM 전체 병렬 호출, 모델별 결과 분리
         최종프롬프트 = (사용프롬프트
                       .replace('{context}', context or '없음')
                       .replace('{candidates}', '(없음 — 키워드 기반 직접 추천)'))
         try:
-            llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
-            raw = llm결과.get('result') or ''
-            provider = llm결과.get('provider')
-            error = llm결과.get('error')
-            if error or not raw:
-                return {'items': [], 'provider': provider, 'raw_response': raw or error or ''}
-            # 쉼표 구분 파싱 → head_word 목록으로 변환
             import re
-            words = [w.strip() for w in re.split(r'[,\n]+', raw) if w.strip()]
-            items = [{'head_word': w, 'tail_words': [], 'score': 0} for w in words]
-            return {'items': items, 'provider': provider, 'raw_response': raw}
+            llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
+            results_by_model = []
+            for r in llm결과.get('results', []):
+                raw = r.get('result') or ''
+                mdl = r.get('model') or r.get('provider') or 'unknown'
+                err = r.get('error')
+                if err or not raw:
+                    results_by_model.append({'model': mdl, 'items': [], 'raw_response': raw or err or ''})
+                    continue
+                words = [w.strip() for w in re.split(r'[,\n]+', raw) if w.strip()]
+                items = [{'head_word': w, 'tail_words': [], 'score': 0} for w in words]
+                results_by_model.append({'model': mdl, 'items': items, 'raw_response': raw})
+
+            # 하위 호환: 첫 번째 성공 결과를 items에도 설정
+            all_items = []
+            for rbm in results_by_model:
+                all_items.extend(rbm.get('items', []))
+            provider = llm결과.get('provider')
+            return {'items': all_items, 'provider': provider, 'raw_response': llm결과.get('result') or '', 'results_by_model': results_by_model}
         except Exception as e:
             logger.error('[LLM직접추천] 예외: %s', e)
-            return {'items': [], 'provider': None, 'raw_response': str(e)}
+            return {'items': [], 'provider': None, 'raw_response': str(e), 'results_by_model': []}
 
     # head완전/tail완전 분리 — 이미 확정적 매칭이므로 LLM 불필요
     def _is_exact(c: dict) -> bool:

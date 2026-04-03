@@ -412,84 +412,70 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
     }
   }
 
-  const 유사어개별삭제 = async (tailWord: string) => {
-    const headWord = 유사어키워드.trim()
-    if (!headWord) return
-    const 새목록 = 편집유사어목록.filter(w => w !== tailWord)
-    try {
-      if (새목록.length === 0) {
-        // 유사어가 모두 삭제되면 행 자체 삭제
-        await 클라이언트.delete(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
-      } else {
-        // 남은 유사어로 갱신
-        await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
-          tail_word: 새목록.join(','),
-        })
-      }
-      set편집유사어목록(새목록)
-      message.success(`"${tailWord}" 삭제됨`)
-      데이터조회()
-    } catch { message.error('삭제 실패') }
+  // 로컬 상태만 변경 (DB 저장은 일괄저장에서)
+  const 유사어개별삭제 = (tailWord: string) => {
+    set편집유사어목록(prev => prev.filter(w => w !== tailWord))
   }
 
-  const 유사어개별추가 = async () => {
-    const headWord = 유사어키워드.trim()
+  const 유사어개별추가 = () => {
     const word = 새유사어.trim()
-    if (!word || !headWord) return
+    if (!word) return
     if (편집유사어목록.includes(word)) {
       message.warning(`"${word}" 이미 등록됨`)
       return
     }
+    set편집유사어목록(prev => [...prev, word])
+    set새유사어('')
+  }
+
+  // DB 일괄 저장
+  const 유사어일괄저장 = async () => {
+    const headWord = 유사어키워드.trim()
+    if (!headWord) { message.warning('키워드를 입력하세요'); return }
     set편집저장중(true)
     try {
-      const 새목록 = [...편집유사어목록, word]
       if (편집유사어목록.length === 0) {
-        // 신규 head_word → POST
+        // 값이 모두 삭제됨 → 키(head)도 삭제
+        try {
+          await 클라이언트.delete(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
+        } catch { /* 미존재 무시 */ }
+        message.success(`"${headWord}" 유사어 세트 삭제됨`)
+      } else {
+        // 신규 또는 갱신
         try {
           await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
-            head_word: headWord, tail_word: 새목록.join(','), memo: '',
+            head_word: headWord, tail_word: 편집유사어목록.join(','), memo: '',
           })
         } catch (e: any) {
-          // 이미 존재하면 PUT으로 갱신
           if (e?.response?.status === 400) {
             await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
-              tail_word: 새목록.join(','),
+              tail_word: 편집유사어목록.join(','),
             })
           } else throw e
         }
-      } else {
-        // 기존 head_word → PUT으로 갱신
-        await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
-          tail_word: 새목록.join(','),
-        })
-      }
-      if (양방향) {
-        // 역방향도 추가: word → headWord
-        try {
-          const res = await 클라이언트.get(`/dictionaries/${domain}/thesaurus/list`, {
-            params: { search: word, size: 1 },
-          })
-          const matched = (res.data?.items || []).find((i: any) => i.head_word === word)
-          if (matched) {
-            const 기존역방향 = 유사어분리(matched.tail_word)
-            if (!기존역방향.includes(headWord)) {
-              await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(word)}`, {
-                tail_word: [...기존역방향, headWord].join(','),
-              })
-            }
-          } else {
-            await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
-              head_word: word, tail_word: headWord, memo: '',
-            })
+        // 양방향 처리
+        if (양방향) {
+          for (const word of 편집유사어목록) {
+            try {
+              const others = [headWord, ...편집유사어목록.filter(w => w !== word)]
+              try {
+                await 클라이언트.post(`/dictionaries/${domain}/thesaurus`, {
+                  head_word: word, tail_word: others.join(','), memo: '',
+                })
+              } catch {
+                await 클라이언트.put(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(word)}`, {
+                  tail_word: others.join(','),
+                })
+              }
+            } catch { /* 역방향 실패 무시 */ }
           }
-        } catch { /* 역방향 실패 무시 */ }
+        }
+        message.success(`"${headWord}" 유사어 저장 완료${양방향 ? ' (양방향)' : ''}`)
       }
-      set편집유사어목록(새목록)
-      set새유사어('')
-      message.success(`"${word}" 추가됨${양방향 ? ' (양방향)' : ''}`)
       데이터조회()
+      set유사어모달열림(false)
     } catch (err: any) {
-      message.error(err?.response?.data?.detail || '추가 실패')
+      message.error(err?.response?.data?.detail || '저장 실패')
     } finally { set편집저장중(false) }
   }
 
@@ -571,16 +557,16 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
       {/* 유사어 통합 모달 (등록/편집 공용) */}
       {dicType === 'thesaurus' && (
         <Modal
-          title={유사어키워드확정 ? `유사어: ${유사어키워드}` : '유사어 등록'}
+          title={유사어키워드확정 ? `유사어 편집: ${유사어키워드}` : '유사어 등록/편집'}
           open={유사어모달열림}
           onCancel={() => set유사어모달열림(false)}
-          footer={<Button onClick={() => set유사어모달열림(false)}>닫기</Button>}
+          footer={<Space><Button onClick={() => set유사어모달열림(false)}>닫기</Button><Button type="primary" loading={편집저장중} onClick={유사어일괄저장}>저장</Button></Space>}
           width={420}
         >
-          {/* 키워드 입력 */}
-          {!유사어키워드확정 && (
-            <div style={{ marginBottom: 12 }}>
-              <Text strong style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>키워드</Text>
+          {/* 키워드 입력 (등록 모드: 편집 가능, 편집 모드: 고정) */}
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>키워드</Text>
+            {!유사어키워드확정 ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 <Input
                   placeholder="키워드를 입력하세요"
@@ -594,9 +580,14 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
                 <Button size="small" type="primary" onClick={유사어키워드확정하기}
                   disabled={!유사어키워드.trim()}>확인</Button>
               </div>
-            </div>
-          )}
-          {(유사어키워드확정 || 유사어키워드.trim()) && (
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Text style={{ fontSize: 14, fontWeight: 600 }}>{유사어키워드}</Text>
+                <Button size="small" type="link" onClick={() => set유사어키워드확정(false)}>변경</Button>
+              </div>
+            )}
+          </div>
+          {true && (
             <>
               {/* 등록된 유사어 목록 */}
               <div style={{ marginBottom: 12 }}>
@@ -632,7 +623,7 @@ function DicTab({ dicType, domain, refreshKey, externalSearch, autoFocusTrigger,
                   style={{ flex: 1 }}
                   autoFocus
                 />
-                <Button size="small" type="primary" onClick={유사어개별추가} loading={편집저장중}>추가</Button>
+                <Button size="small" type="primary" onClick={유사어개별추가}>추가</Button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Switch size="small" checked={양방향} onChange={set양방향} />
@@ -775,8 +766,10 @@ export default function KnowledgeWork() {
   const [추천모달열림, set추천모달열림] = useState(false)
   const [추천키워드, set추천키워드] = useState('')
   const [추천결과, set추천결과] = useState<any[]>([])
+  const [등록키워드셋, set등록키워드셋] = useState<any[]>([])
   const [추천로딩, set추천로딩] = useState(false)
   const [llm결과, setLlm결과] = useState<any[]>([])
+  const [llm모델별결과, setLlm모델별결과] = useState<any[]>([])
   const [llm로딩, setLlm로딩] = useState(false)
   const [llm프롬프트, setLlm프롬프트] = useState(기본추천프롬프트)
   const [프롬프트접힘, set프롬프트접힘] = useState(true)
@@ -988,6 +981,7 @@ export default function KnowledgeWork() {
     if (!selectedDomain) return
     set추천로딩(true)
     setLlm결과([])
+    setLlm모델별결과([])
     try {
       const { data } = await 클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/recommend`, {
         params: { keyword, limit: 50 },
@@ -1000,6 +994,7 @@ export default function KnowledgeWork() {
   const LLM분석 = useCallback(async () => {
     if (!selectedDomain || !추천키워드) return
     setLlm로딩(true)
+    setLlm모델별결과([])
     try {
       const { data } = await 클라이언트.post(`/dictionaries/${selectedDomain}/thesaurus/recommend/llm`, {
         keyword: 추천키워드,
@@ -1007,14 +1002,11 @@ export default function KnowledgeWork() {
         context: selected?.analysis || '',
         prompt: llm프롬프트,
       })
-      // 응답이 쉼표 구분 텍스트일 수 있으므로 파싱
-      const items = data.items || []
-      if (items.length === 0 && data.raw_response) {
-        const parsed = data.raw_response.split(',').map((s: string) => s.trim()).filter(Boolean)
-        setLlm결과(parsed.map((word: string) => ({ head_word: word, tail_words: [], score: 0 })))
-      } else {
-        setLlm결과(items)
-      }
+      // 모델별 결과
+      const byModel = data.results_by_model || []
+      setLlm모델별결과(byModel)
+      // 하위 호환: 전체 items
+      setLlm결과(data.items || [])
     } catch (e: any) {
       message.error(e?.response?.data?.detail || 'LLM 분석 실패')
     } finally { setLlm로딩(false) }
@@ -1132,9 +1124,16 @@ export default function KnowledgeWork() {
           set추천키워드(selectedWord)
           set추천결과([])
           setLlm결과([])
+          set등록키워드셋([])
           set추천모달열림(true)
           추천검색(selectedWord)
           setActiveTab('thesaurus')
+          // 등록 키워드셋 조회 (head/tail 정확일치)
+          클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100 } })
+            .then(({ data }) => {
+              const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
+              set등록키워드셋(items)
+            }).catch(() => {})
         } else {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}`, { word: selectedWord, memo: '' })
             .then(() => {
@@ -1477,8 +1476,34 @@ export default function KnowledgeWork() {
         destroyOnClose
       >
 
-        {/* 기존 유사어목록에 추가 */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>기존 유사어목록에 추가</Divider>
+        {/* 등록 키워드셋 */}
+        <Divider orientation="left" style={{ fontSize: 12 }}>등록 키워드셋</Divider>
+        {등록키워드셋.length === 0 ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>등록된 유사어 없음</Text>
+        ) : (
+          <div style={{ maxHeight: 150, overflowY: 'auto' }}>
+            {등록키워드셋.map((item: any, idx: number) => (
+              <div
+                key={idx}
+                style={{ padding: '6px 8px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                onClick={() => {
+                  set추천모달열림(false); setIsCenterFocused(true)
+                  setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1 }))
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+              >
+                <span>
+                  <Tag color="purple" style={{ marginRight: 4 }}>{item.head_word}</Tag>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{(item.tail_word || '').split(',').map((s: string) => s.trim()).filter(Boolean).join(', ')}</Text>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 추천 키워드셋 */}
+        <Divider orientation="left" style={{ fontSize: 12 }}>추천 키워드셋</Divider>
         <Spin spinning={추천로딩}>
           {추천결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
           <div style={{ maxHeight: 180, overflowY: 'auto' }}>
@@ -1503,8 +1528,8 @@ export default function KnowledgeWork() {
           </div>
         </Spin>
 
-        {/* 오타추천 (한↔영 변환) */}
-        <Divider orientation="left" style={{ fontSize: 12 }}>오타추천 (한↔영 변환)</Divider>
+        {/* 한영오타키워드 */}
+        <Divider orientation="left" style={{ fontSize: 12 }}>한영오타키워드</Divider>
         {getTypoVariants(추천키워드).length === 0 ? (
           <Text type="secondary" style={{ fontSize: 12 }}>변환 결과 없음</Text>
         ) : (
@@ -1529,34 +1554,46 @@ export default function KnowledgeWork() {
           </div>
         )}
 
-        {/* LLM 추천 */}
+        {/* AI추천 키워드 — 모델별 세로 컬럼 */}
         <Divider orientation="left" style={{ fontSize: 12 }}>
           <Space>
-            LLM 추천
+            AI추천 키워드
             <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>
               분석 실행
             </Button>
           </Space>
         </Divider>
         <Spin spinning={llm로딩}>
-          {llm결과.filter((item: any) => item.head_word !== 추천키워드).length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
-          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-            {llm결과.filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
-              <div
-                key={idx}
-                style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}
-                onClick={() => {
-                  set추천모달열림(false); setIsCenterFocused(true)
-                  setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-              >
-                <Tag color="purple" style={{ marginRight: 4 }}>{item.head_word}</Tag>
-                <Text type="secondary" style={{ fontSize: 11 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
-              </div>
-            ))}
-          </div>
+          {llm모델별결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 12 }}>LLM 분석 전</Text>}
+          {llm모델별결과.length > 0 && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {llm모델별결과.map((modelResult: any, mIdx: number) => (
+                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #f0f0f0', borderRadius: 4 }}>
+                  <div style={{ padding: '4px 8px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {modelResult.model}
+                  </div>
+                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                    {(modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).length === 0 ? (
+                      <div style={{ padding: 8, textAlign: 'center' }}><Text type="secondary" style={{ fontSize: 11 }}>{modelResult.raw_response ? '결과 없음' : '오류'}</Text></div>
+                    ) : (modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => (
+                      <div
+                        key={idx}
+                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 12 }}
+                        onClick={() => {
+                          set추천모달열림(false); setIsCenterFocused(true)
+                          setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1 }))
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f5f5f5' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                      >
+                        {item.head_word}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Spin>
       </Modal>
 

@@ -90,60 +90,106 @@ def LLM사용통계조회(year: int, month: int) -> dict:
     }
 
 
-def LLM월별사용자추이() -> dict:
-    """최근 12개월 사용자별 월별 LLM 사용 추이 (라인차트용)."""
-    from datetime import datetime
+def LLM월별사용자추이(mode: str = "monthly", start: str = "", end: str = "") -> dict:
+    """기간별 사용자+모델별 LLM 사용 추이. mode: daily/monthly."""
+    from datetime import datetime, timedelta
 
-    # 최근 12개월 목록 생성
     now = datetime.now()
-    months_list = []
-    for i in range(11, -1, -1):
-        y, m = now.year, now.month - i
-        while m <= 0:
-            m += 12
-            y -= 1
-        months_list.append(f"{y:04d}-{m:02d}")
+    is_daily = mode == "daily"
 
-    start_month = months_list[0]
+    if is_daily:
+        # 일간: 기본 30일
+        fmt = '%Y-%m-%d'
+        strftime_fmt = '%Y-%m-%d'
+        end_dt = datetime.strptime(end, fmt) if end else now
+        start_dt = datetime.strptime(start, fmt) if start else end_dt - timedelta(days=29)
+        period_list = []
+        d = start_dt
+        while d <= end_dt:
+            period_list.append(d.strftime(fmt))
+            d += timedelta(days=1)
+        start_str = period_list[0]
+    else:
+        # 월간: 기본 12개월
+        strftime_fmt = '%Y-%m'
+        if start and end:
+            # 사용자 지정 기간
+            sy, sm = int(start[:4]), int(start[5:7])
+            ey, em = int(end[:4]), int(end[5:7])
+            period_list = []
+            y, m = sy, sm
+            while (y, m) <= (ey, em):
+                period_list.append(f"{y:04d}-{m:02d}")
+                m += 1
+                if m > 12:
+                    m = 1; y += 1
+        else:
+            period_list = []
+            for i in range(11, -1, -1):
+                y, m = now.year, now.month - i
+                while m <= 0:
+                    m += 12; y -= 1
+                period_list.append(f"{y:04d}-{m:02d}")
+        start_str = period_list[0]
 
     with 엔진.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT strftime('%Y-%m', created_at) as month,
-                   user_id,
-                   COUNT(*) as count
-            FROM llm_usage_log
-            WHERE strftime('%Y-%m', created_at) >= :start
-            GROUP BY strftime('%Y-%m', created_at), user_id
-            ORDER BY month
-        """), {"start": start_month}).fetchall()
+        user_rows = conn.execute(text(f"""
+            SELECT strftime('{strftime_fmt}', created_at) as period, user_id, COUNT(*) as count
+            FROM llm_usage_log WHERE strftime('{strftime_fmt}', created_at) >= :start
+              AND strftime('{strftime_fmt}', created_at) <= :end
+            GROUP BY period, user_id ORDER BY period
+        """), {"start": start_str, "end": period_list[-1]}).fetchall()
 
-    # 사용자 목록
-    user_ids = sorted(set(r.user_id for r in rows))
+        model_rows = conn.execute(text(f"""
+            SELECT strftime('{strftime_fmt}', created_at) as period, model, COUNT(*) as count
+            FROM llm_usage_log WHERE strftime('{strftime_fmt}', created_at) >= :start
+              AND strftime('{strftime_fmt}', created_at) <= :end
+            GROUP BY period, model ORDER BY period
+        """), {"start": start_str, "end": period_list[-1]}).fetchall()
 
-    # 사용자 이름 매핑 (accounts 테이블)
+    # 사용자 라벨
+    user_ids = sorted(set(r.user_id for r in user_rows))
     with 엔진.connect() as conn2:
         name_rows = conn2.execute(
             select(계정테이블.c._USER_ID, 계정테이블.c._NAME)
             .where(계정테이블.c._USER_ID.in_(user_ids))
         ).fetchall()
     name_map = {r._USER_ID: r._NAME for r in name_rows}
-
-    # 표시용 라벨: "이름(id)"
-    label_map = {}
+    user_label = {}
     for uid in user_ids:
         name = name_map.get(uid)
-        label_map[uid] = f"{name}({uid})" if name else uid
+        user_label[uid] = f"{name}({uid})" if name else uid
 
-    # 피벗: [{month: "2025-05", "관리자(admin)": 10, ...}, ...]
-    lookup: dict[tuple[str, str], int] = {}
-    for r in rows:
-        lookup[(r.month, r.user_id)] = r.count
+    # 모델 목록
+    models = sorted(set(r.model for r in model_rows if r.model))
 
-    monthly = []
-    for m in months_list:
-        entry: dict = {"month": m}
+    # 사용자별 피벗
+    user_lookup: dict[tuple[str, str], int] = {}
+    for r in user_rows:
+        user_lookup[(r.period, r.user_id)] = r.count
+    user_data = []
+    for p in period_list:
+        entry: dict = {"period": p}
         for uid in user_ids:
-            entry[label_map[uid]] = lookup.get((m, uid), 0)
-        monthly.append(entry)
+            entry[user_label[uid]] = user_lookup.get((p, uid), 0)
+        user_data.append(entry)
 
-    return {"users": [label_map[uid] for uid in user_ids], "monthly": monthly}
+    # 모델별 피벗
+    model_lookup: dict[tuple[str, str], int] = {}
+    for r in model_rows:
+        model_lookup[(r.period, r.model)] = r.count
+    model_data = []
+    for p in period_list:
+        entry: dict = {"period": p}
+        for mdl in models:
+            entry[mdl] = model_lookup.get((p, mdl), 0)
+        model_data.append(entry)
+
+    return {
+        "mode": mode,
+        "users": [user_label[uid] for uid in user_ids],
+        "models": models,
+        "user_monthly": user_data,
+        "model_monthly": model_data,
+        "monthly": user_data,
+    }

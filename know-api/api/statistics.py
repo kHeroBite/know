@@ -40,7 +40,10 @@ def LLM사용통계(
 
 @라우터.get("/llm-usage-trend")
 def LLM사용추이(
+    mode: str = Query("monthly", description="daily 또는 monthly"),
+    start: str = Query("", description="시작일 (YYYY-MM-DD 또는 YYYY-MM)"),
+    end: str = Query("", description="종료일 (YYYY-MM-DD 또는 YYYY-MM)"),
     _current: dict = Depends(현재사용자가져오기),
 ):
-    """최근 12개월 사용자별 월별 LLM 사용 추이 (라인차트용)."""
-    return LLM월별사용자추이()
+    """기간별 사용자/모델별 LLM 사용 추이."""
+    return LLM월별사용자추이(mode=mode, start=start, end=end)

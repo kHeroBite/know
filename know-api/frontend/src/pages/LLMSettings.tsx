@@ -167,6 +167,7 @@ export default function LLMSettings() {
                 onChange={(checked) => 활성토글(provider, checked)}
                 checkedChildren="활성"
                 unCheckedChildren="비활성"
+                disabled={!s.테스트통과}
               />
             </div>
           }
