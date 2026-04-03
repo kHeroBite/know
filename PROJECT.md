@@ -309,6 +309,8 @@ know-api/
 | /work-history/undo/{id} | 작업이력 undo/rollback (POST) |
 | /assignments | 키워드 할당 목록 조회 (GET) |
 | /assignments/flag | 키워드 읽음/작업 flag 업데이트 (PUT) — R/W/'' |
+| /assignments/complete-with-mode | 키워드 완료 처리 모드 선택 (POST) |
 | /ai-analysis/search | AI 분석 검색 — LLM+Wikipedia (GET) |
 | /llm-settings | LLM 설정 4종 조회 (GET) |
 | /llm-settings/{provider} | LLM 설정 저장 (PUT) — openai/claude/gemini/local |
+| /stats/llm-usage | LLM 사용량 통계 조회 — provider별/기간별 집계 (GET) |

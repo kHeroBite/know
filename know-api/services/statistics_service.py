@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func, text, MetaData
 from models.domain import 도메인테이블
 from models.dictionary import 사이트명검증, 사전테이블가져오기
+from core.database import 엔진
 
 
 def _테이블존재확인(db: Session, table_name: str) -> bool:
@@ -53,3 +54,23 @@ def 전체도메인통계(db: Session) -> List[dict]:
     """모든 도메인의 사전 현황 반환."""
     rows = db.execute(select(도메인테이블.c._SITE)).scalars().all()
     return [도메인별사전통계(db, site) for site in rows]
+
+
+def LLM사용통계조회(year: int, month: int) -> List[dict]:
+    """연월별 사용자/usage_type별 LLM 사용 통계 집계."""
+    with 엔진.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT user_id, usage_type, model,
+                   COUNT(*) as count,
+                   SUM(prompt_tokens) as prompt_tokens,
+                   SUM(completion_tokens) as completion_tokens
+            FROM llm_usage_log
+            WHERE strftime('%Y', created_at) = :year
+              AND strftime('%m', created_at) = :month
+            GROUP BY user_id, usage_type, model
+            ORDER BY count DESC
+        """), {
+            "year": str(year),
+            "month": f"{month:02d}",
+        }).fetchall()
+    return [dict(r._mapping) for r in rows]

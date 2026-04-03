@@ -15,6 +15,11 @@
 
 ## 에이전트 패턴
 
+### PLAN 상태 서브에이전트 spawn 금지 (L-027)
+- PLAN 상태에서 팀에이전트/서브에이전트 spawn 시도 → no_team_agent_guard.sh 차단
+- **kplan 실행 중 spawn이 필요한 경우 DEV 등 다른 상태 전환 후 시도**
+- L-023(1차) → L-027(2차 재발) — PLAN 상태 spawn 불가 원칙 재확인
+
 ### 팀에이전트 spawn 시 subagent_type 반드시 명시 (L-017)
 - `subagent_type` 빈 값 → no_team_agent_guard.sh 차단
 - **general-purpose 포함 모든 에이전트 spawn 시 subagent_type 명시 필수**

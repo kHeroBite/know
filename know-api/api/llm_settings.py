@@ -35,10 +35,8 @@ def _키마스킹(key: str) -> str:
 async def 설정전체조회(
     _current: dict = Depends(현재사용자가져오기),
 ) -> List[Dict[str, Any]]:
-    """전체 LLM provider 설정 조회 (api_key 마스킹)."""
+    """전체 LLM provider 설정 조회."""
     설정목록 = llm_settings_service.설정전체조회()
-    for s in 설정목록:
-        s["api_key"] = _키마스킹(s.get("api_key", ""))
     return 설정목록
 
 

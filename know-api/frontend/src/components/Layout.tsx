@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { LogoutOutlined, ApiOutlined } from '@ant-design/icons'
+import {
+  LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
+  TeamOutlined, EditOutlined, TagsOutlined, RocketOutlined, BulbOutlined,
+  SettingOutlined, BarChartOutlined, HistoryOutlined, UserOutlined, QuestionCircleOutlined,
+} from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
@@ -78,32 +82,35 @@ export default function Layout() {
     {
       key: 'knowledge-group',
       label: '지식 작업',
+      icon: <BulbOutlined />,
       children: [
-        { key: '/workspace', label: '워크스페이스' },
-        { key: '/preprocess', label: '데이터 전처리', disabled: !wsSelected || isFrozen },
-        { key: '/assignment', label: '데이터 할당', disabled: !wsSelected || !isFrozen || isAssigned },
-        { key: '/knowledge-work', label: '작업실', disabled: !wsSelected || !isAssigned },
-        { key: '/category', label: '카테고리 관리', disabled: !wsSelected || !isAssigned },
-        { key: '/pipeline', label: '파이프라인', disabled: !wsSelected || !isAssigned },
-        { key: '/knowledge', label: '지식작업', disabled: !wsSelected || !isAssigned },
+        { key: '/workspace', label: '워크스페이스', icon: <AppstoreOutlined /> },
+        { key: '/preprocess', label: '데이터 전처리', icon: <FilterOutlined />, disabled: !wsSelected || isFrozen },
+        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || !isFrozen || isAssigned },
+        { key: '/knowledge-work', label: '작업실', icon: <EditOutlined />, disabled: !wsSelected || !isAssigned },
+        { key: '/category', label: '카테고리 관리', icon: <TagsOutlined />, disabled: !wsSelected || !isAssigned },
+        { key: '/pipeline', label: '파이프라인', icon: <RocketOutlined />, disabled: !wsSelected || !isAssigned },
+        { key: '/knowledge', label: '지식작업', icon: <BulbOutlined />, disabled: !wsSelected || !isAssigned },
       ],
     },
     {
       key: 'admin-group',
       label: '관리',
+      icon: <SettingOutlined />,
       children: [
-        { key: '/domain-manage', label: '도메인 관리' },
-        { key: '/statistics', label: '통계' },
-        { key: '/build-history', label: '빌드 이력' },
+        { key: '/domain-manage', label: '도메인 관리', icon: <SettingOutlined /> },
+        { key: '/statistics', label: '통계', icon: <BarChartOutlined /> },
+        { key: '/build-history', label: '빌드 이력', icon: <HistoryOutlined /> },
         { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
-        ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리' }] : []),
+        ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리', icon: <UserOutlined /> }] : []),
       ],
     },
     {
       key: 'help-group',
       label: '도움말',
+      icon: <QuestionCircleOutlined />,
       children: [
-        { key: '/manual', label: '매뉴얼' },
+        { key: '/manual', label: '매뉴얼', icon: <QuestionCircleOutlined /> },
       ],
     },
   ]

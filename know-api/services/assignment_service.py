@@ -173,3 +173,49 @@ def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict
     """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "user_id": user_id}
+
+
+def 전체_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """할당된 모든 키워드를 완료(W) 처리 후 반납."""
+    now = datetime.now().isoformat()
+    result = db.execute(text("""
+        UPDATE keyword_assignments SET status='completed', flag='W', completed_at=:now
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    db.commit()
+    return {"completed": result.rowcount, "mode": "all_complete"}
+
+
+def 전체_미완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """할당된 모든 키워드를 미완료('') 처리 후 반납."""
+    now = datetime.now().isoformat()
+    result = db.execute(text("""
+        UPDATE keyword_assignments SET status='completed', flag='', completed_at=:now
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    db.commit()
+    return {"completed": result.rowcount, "mode": "all_incomplete"}
+
+
+def 작업이력대로_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """현재 flag 상태 유지하고 할당 반납 (status만 completed로 변경)."""
+    now = datetime.now().isoformat()
+    result = db.execute(text("""
+        UPDATE keyword_assignments SET status='completed', completed_at=:now
+        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    db.commit()
+    return {"completed": result.rowcount, "mode": "by_history"}
+
+
+def 작업완료모드처리(db: Session, workspace: str, domain: str, user_id: str, mode: str) -> dict:
+    """모드에 따라 완료처리 함수 분기."""
+    if mode == "all_complete":
+        return 전체_완료처리(db, workspace, domain, user_id)
+    elif mode == "all_incomplete":
+        return 전체_미완료처리(db, workspace, domain, user_id)
+    elif mode == "by_history":
+        return 작업이력대로_완료처리(db, workspace, domain, user_id)
+    else:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"알 수 없는 mode: {mode}")

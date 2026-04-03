@@ -252,8 +252,8 @@ def 유사어추천(
 async def 유사어LLM추천(
     domain: str,
     요청: LLM추천요청,
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ):
     """LLM 기반 의미 재순위 (Phase 2)."""
-    결과 = await LLM재순위(요청.keyword, 요청.candidates, 요청.context, 요청.prompt)
+    결과 = await LLM재순위(요청.keyword, 요청.candidates, 요청.context, 요청.prompt, user_id=current.get('user_id', ''))
     return 결과

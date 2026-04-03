@@ -145,8 +145,23 @@ def 테이블생성():
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_wh_ws ON work_history(workspace, domain, user_id)"))
 
+        # 7. llm_usage_log (LLM 사용 로그)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS llm_usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT DEFAULT '',
+                usage_type TEXT DEFAULT '',
+                model TEXT DEFAULT '',
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_llm_log_user ON llm_usage_log(user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_llm_log_created ON llm_usage_log(created_at)"))
+
         conn.commit()
-    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history 테이블 생성")
+    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log 테이블 생성")
 
 
 def 도메인사전테이블생성(도메인목록: list[str]):

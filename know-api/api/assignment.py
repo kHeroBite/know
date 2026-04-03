@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from core.database import DB세션
@@ -73,6 +74,25 @@ def flag_업데이트처리(
 def 완료(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
     return assignment_service.완료처리(db, workspace, domain, current["user_id"])
+
+
+class 완료모드요청(BaseModel):
+    workspace: str
+    domain: str
+    mode: str  # all_complete | all_incomplete | by_history
+
+
+@라우터.post("/complete-with-mode")
+def 완료처리_모드(body: 완료모드요청, db: Session = Depends(DB세션),
+                  current: dict = Depends(현재사용자가져오기)):
+    """작업완료 모드별 처리: all_complete / all_incomplete / by_history."""
+    result = assignment_service.작업완료모드처리(db, body.workspace, body.domain, current["user_id"], body.mode)
+    mode_labels = {
+        "all_complete": "전체 완료처리",
+        "all_incomplete": "전체 미완료처리",
+        "by_history": "작업이력대로 완료처리",
+    }
+    return {"success": True, "message": mode_labels.get(body.mode, body.mode), **result}
 
 @라우터.post("/reset")
 def 초기화(workspace: str = Query(...), domain: str = Query(...),

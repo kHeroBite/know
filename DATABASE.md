@@ -117,10 +117,32 @@ INSERT OR IGNORE INTO llm_settings (provider) VALUES
 
 ---
 
+### llm_usage_log 테이블 (2026-04-03 신규)
+
+```sql
+CREATE TABLE IF NOT EXISTS llm_usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,           -- 'openai' | 'claude' | 'gemini' | 'local'
+    model TEXT,                       -- 사용 모델명
+    user_id TEXT,                     -- 호출자 사용자 ID
+    tokens_used INTEGER DEFAULT 0,    -- 사용 토큰 수
+    duration_ms INTEGER DEFAULT 0,    -- 응답 시간 (ms)
+    success INTEGER DEFAULT 1,        -- 성공 여부 (0/1)
+    error_msg TEXT,                   -- 오류 메시지 (실패 시)
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+```
+
+**목적**: LLM 호출 로그 영구 저장 → 통계 페이지에서 provider별/기간별 사용량 집계  
+**주요 API**: `GET /api/stats/llm-usage` — provider별 총 호출 수/토큰/평균 응답시간 통계
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-03 | llm_usage_log 테이블 신규 생성 (provider/model/user_id/tokens_used/duration_ms/success) | init_db.py |
 | 2026-04-02 | llm_settings 테이블 신규 생성 (provider/api_key/model_name/enabled/extra_config) | init_db.py |
 | 2026-04-02 | keyword_assignments.flag 컬럼 추가 (R/W/'') + API PUT /flag | init_db.py, assignment_service.py, api/assignment.py |
 | 2026-04-01 | work_history 테이블 신규 생성 | init_db.py |

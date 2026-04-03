@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Table, Typography, Card, Tabs, Input, Button, Form, Modal,
   Popconfirm, message, Spin, Switch, Tag, Space, Tooltip, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined, EditOutlined,
-  SwapOutlined,
+  SwapOutlined, CheckCircleOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
@@ -33,6 +34,8 @@ const 기본핫키맵: Record<string, string> = {
   focusAnalysis: 'Home',
   aiAnalysis: '/',
   undoHistory: 'Escape',
+  aiTabAI: 'PageUp',
+  aiTabWikipedia: 'PageDown',
 }
 
 function encodeKeyEvent(e: KeyboardEvent): string {
@@ -617,7 +620,8 @@ const 기본추천프롬프트 = `당신은 검색엔진 유사어 사전 전문
 예시: 3,7,12,1,45`
 
 export default function KnowledgeWork() {
-  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
+  const navigate = useNavigate()
+  const { selectedWorkspace, selectedDomain, selectedColor, setAssigned } = useWorkspaceStore()
   const user = useAuthStore(s => s.user)
 
   // 키워드 목록
@@ -668,6 +672,11 @@ export default function KnowledgeWork() {
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
+  const [aiForcedTab, setAiForcedTab] = useState<{ tab: string; n: number } | undefined>(undefined)
+
+  // 작업완료 모달
+  const [completeModalOpen, setCompleteModalOpen] = useState(false)
+  const [completeLoading, setCompleteLoading] = useState(false)
 
   // 키워드 카운트
   const [workedCount, setWorkedCount] = useState(0)
@@ -1007,8 +1016,7 @@ export default function KnowledgeWork() {
                 workspaceAPI.addWorkHistory({
                   workspace: selectedWorkspace, domain: selectedDomain,
                   action_type: 'add', dic_type: dicType, head_word: selectedWord, word: selectedWord,
-                })
-                historyRef.current?.reload()
+                }).then(() => { historyRef.current?.reload() }).catch(() => { historyRef.current?.reload() })
               }
             })
             .catch((err: any) => {
@@ -1043,6 +1051,14 @@ export default function KnowledgeWork() {
         }
         break
       }
+      case 'aiTabAI': {
+        setAiForcedTab(prev => ({ tab: 'llm', n: (prev?.n || 0) + 1 }))
+        break
+      }
+      case 'aiTabWikipedia': {
+        setAiForcedTab(prev => ({ tab: 'wikipedia', n: (prev?.n || 0) + 1 }))
+        break
+      }
     }
   }, [hotkeys, derivedHotkeys, isCenterFocused, items, selected, selectableTokens, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색])
 
@@ -1072,6 +1088,23 @@ export default function KnowledgeWork() {
     setDicRefreshKey(prev => prev + 1)
   }, [])
 
+  // ─── 작업완료 처리 ────────────────────────────────────────────
+  const handleCompleteWithMode = useCallback(async (mode: 'all_complete' | 'all_incomplete' | 'by_history') => {
+    if (!selectedWorkspace || !selectedDomain) return
+    setCompleteLoading(true)
+    try {
+      await assignmentApi.완료모드(selectedWorkspace, selectedDomain, mode)
+      message.success('작업이 완료 처리되었습니다.')
+      setAssigned(false)
+      setCompleteModalOpen(false)
+      navigate('/assignment')
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '완료 처리 실패')
+    } finally {
+      setCompleteLoading(false)
+    }
+  }, [selectedWorkspace, selectedDomain, setAssigned, navigate])
+
   // ─── Guard ──────────────────────────────────────────────────
 
   if (!selectedWorkspace || !selectedDomain) {
@@ -1096,12 +1129,21 @@ export default function KnowledgeWork() {
         background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderRadius: 6,
       }}>
         <Title level={4} style={{ margin: 0 }}>📋 작업실</Title>
-        <Button
-          icon={<SettingOutlined />}
-          onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
-        >
-          단축키설정
-        </Button>
+        <Space>
+          <Button
+            icon={<SettingOutlined />}
+            onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
+          >
+            단축키설정
+          </Button>
+          <Button
+            icon={<CheckCircleOutlined />}
+            type="primary"
+            onClick={(e) => { e.stopPropagation(); setCompleteModalOpen(true) }}
+          >
+            작업완료
+          </Button>
+        </Space>
       </div>
 
       {/* 3컬럼 메인 */}
@@ -1143,7 +1185,7 @@ export default function KnowledgeWork() {
                 >
                   <div style={{ display: 'flex', gap: 6 }}>
                     <span style={{ width: 28, flexShrink: 0, textAlign: 'right', color: '#999', fontSize: 12 }}>
-                      {index + 1}
+                      {record.line_num}
                     </span>
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {record.keyword}
@@ -1159,7 +1201,7 @@ export default function KnowledgeWork() {
         </div>
 
         {/* 중앙열: 분석결과 + 사전탭 (50:50) */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
             title={<span>분석결과 <KbdKey>{displayKey(hotkeys.focusAnalysis)}</KbdKey></span>}
             size="small"
@@ -1257,7 +1299,7 @@ export default function KnowledgeWork() {
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: 8 } }}
           >
-            <AIAnalysis initialKeyword={aiKeyword} isAdmin={user?.auth === 'A'} />
+            <AIAnalysis initialKeyword={aiKeyword} isAdmin={user?.auth === 'A'} forcedTab={aiForcedTab} />
           </Card>
           <Card
             title={<span>작업이력 <KbdKey>{displayKey(hotkeys.undoHistory)}</KbdKey></span>}
@@ -1304,7 +1346,7 @@ export default function KnowledgeWork() {
         <Divider orientation="left" style={{ fontSize: 12 }}>텍스트 매칭 후보</Divider>
         <Spin spinning={추천로딩}>
           {추천결과.length === 0 && !추천로딩 && <Text type="secondary" style={{ fontSize: 12 }}>결과 없음</Text>}
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
             {추천결과.map((item: any, idx: number) => (
               <div
                 key={idx}
@@ -1355,6 +1397,46 @@ export default function KnowledgeWork() {
             ))}
           </div>
         </Spin>
+      </Modal>
+
+      {/* 작업완료 모달 */}
+      <Modal
+        title="작업 완료 처리"
+        open={completeModalOpen}
+        onCancel={() => setCompleteModalOpen(false)}
+        footer={null}
+        width={420}
+      >
+        <div style={{ marginBottom: 16, color: '#666', fontSize: 13 }}>
+          처리 대상: <strong>{workedCount}</strong> / {totalCount} 키워드 작업됨
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Button
+            block
+            type="primary"
+            loading={completeLoading}
+            onClick={() => handleCompleteWithMode('all_complete')}
+          >
+            전체 완료 처리
+          </Button>
+          <Button
+            block
+            loading={completeLoading}
+            onClick={() => handleCompleteWithMode('all_incomplete')}
+          >
+            전체 미완료 처리
+          </Button>
+          <Button
+            block
+            loading={completeLoading}
+            onClick={() => handleCompleteWithMode('by_history')}
+          >
+            작업이력 기준 처리
+          </Button>
+          <Button block onClick={() => setCompleteModalOpen(false)}>
+            취소
+          </Button>
+        </div>
       </Modal>
 
       {/* 핫키 설정 모달 */}

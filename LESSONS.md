@@ -191,6 +191,13 @@ elif os.path.isdir(path):
 **재발방지**: 디렉토리 생성 시 항상 `mcp__kio__dir_create` 사용 (write_guard 차단 → 즉시 kio로 대체 패턴).
 **Level**: 1 (write_guard가 즉시 차단·대체 처리, docs 기록)
 
+### L-027: PLAN 상태 서브에이전트 spawn hook 차단 재발 (L-023 2차) (2026-04-03)
+
+**현상**: kplan 실행 중 PLAN 상태에서 서브에이전트 spawn 시도 시 no_team_agent_guard.sh가 차단됨 (L-023과 동일 패턴 2차 발생).
+**원인**: L-023에서 Level 1(LESSONS.md 기록)으로만 처리되어 규칙 인지 강화 조치가 없었음.
+**재발방지**: PLAN 상태에서 팀에이전트/서브에이전트 spawn 불가 원칙 재확인. kplan 실행 중 spawn이 필요한 경우 파이프라인 상태 전환(DEV 등) 후 시도.
+**Level**: 2 (MEMORY.md 반영)
+
 ---
 
 ## 반영 추적 테이블
@@ -210,3 +217,4 @@ elif os.path.isdir(path):
 | L-021 | Agent spawn subagent_type 빈 값 3회 재발 | LESSONS+MEMORY+skill | LESSONS.md+MEMORY.md+ko/SKILL.md | 2026-04-02 | ✅ |
 | L-022 | 역라우팅 1회 — action_type 상수값 사전 확인 누락 | LESSONS | LESSONS.md | 2026-04-02 | ✅ |
 | L-018 | DB 테이블 부재 OperationalError 미처리 | LESSONS | LESSONS.md | 2026-04-01 | ✅ |
+| L-027 | PLAN 상태 spawn hook 차단 재발 (L-023 2차) | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-03 | ✅ |

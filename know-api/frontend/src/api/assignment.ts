@@ -38,4 +38,6 @@ export const assignmentApi = {
     클라이언트.put('/assignments/flag', null, { params: { keyword_id: id, flag } }),
   마지막읽은위치: (workspace: string, domain: string, size: number = 100) =>
     클라이언트.get('/assignments/last-read', { params: { workspace, domain, size } }),
+  완료모드: (workspace: string, domain: string, mode: 'all_complete' | 'all_incomplete' | 'by_history') =>
+    클라이언트.post('/assignments/complete-with-mode', null, { params: { workspace, domain, mode } }),
 }

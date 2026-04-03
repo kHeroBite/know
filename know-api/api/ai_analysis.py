@@ -15,10 +15,10 @@ from services.ai_analysis_service import AI검색, 프롬프트로드, 프롬프
 @라우터.get("/search")
 async def AI검색처리(
     keyword: str = Query(..., min_length=1),
-    _current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
     """키워드로 LLM + Wikipedia 검색 수행."""
-    return await AI검색(keyword)
+    return await AI검색(keyword, user_id=current.get('user_id', ''))
 
 
 @라우터.get("/prompt")

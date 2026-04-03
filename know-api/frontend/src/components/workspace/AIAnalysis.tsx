@@ -10,6 +10,7 @@ interface Props {
   initialKeyword: string
   isAdmin?: boolean
   onSearch?: () => void
+  forcedTab?: { tab: string; n: number }
 }
 
 interface AIResult {
@@ -20,7 +21,7 @@ interface AIResult {
   model?: string
 }
 
-export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props) {
+export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTab }: Props) {
   const navigate = useNavigate()
   const [inputValue, setInputValue] = useState(initialKeyword || '')
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -28,11 +29,18 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
   const [result, setResult] = useState<AIResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('llm')
+  const [hasAiResult, setHasAiResult] = useState(false)
+  const [hasWikiResult, setHasWikiResult] = useState(false)
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
   const [promptText, setPromptText] = useState('')
   const prevInitialRef = useRef(initialKeyword)
+
+  // forcedTab: 외부에서 탭 강제 전환 (PageUp/PageDown 핫키)
+  useEffect(() => {
+    if (forcedTab && forcedTab.tab) setActiveTab(forcedTab.tab)
+  }, [forcedTab?.n])
 
   // initialKeyword prop 변경 시 입력값만 업데이트 (자동검색 안 함)
   useEffect(() => {
@@ -50,6 +58,8 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
     setSearchKeyword(kw)
     setLoading(true)
     setError(null)
+    setHasAiResult(false)
+    setHasWikiResult(false)
     workspaceAPI.searchAI(kw)
       .then(({ data }) => {
         setResult(data)
@@ -57,6 +67,8 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
         // 자동 탭 전환: 결과 있는 탭으로 이동
         const hasLLM = data.llm && !data.llm.includes('검색 결과가 없습니다')
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
+        setHasAiResult(!!hasLLM)
+        setHasWikiResult(!!hasWiki)
         if (hasLLM) {
           setActiveTab('llm')
         } else if (hasWiki) {
@@ -189,7 +201,7 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
           onSearch={handleSearch}
           placeholder="키워드 입력 후 Enter"
           size="small"
-          style={{ flex: 1 }}
+          style={{ flex: 1, maxWidth: 'calc(100% - 10px)' }}
           enterButton
         />
         {isAdmin && (
@@ -223,12 +235,14 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch }: Props)
             items={[
               {
                 key: 'llm',
-                label: <span style={{ fontSize: 12 }}>LLM</span>,
+                label: <span style={{ fontSize: 12, color: !hasAiResult ? '#ccc' : undefined }}>AI</span>,
+                disabled: !hasAiResult,
                 children: renderLLMResult(),
               },
               {
                 key: 'wikipedia',
-                label: <span style={{ fontSize: 12 }}>Wikipedia</span>,
+                label: <span style={{ fontSize: 12, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
+                disabled: !hasWikiResult,
                 children: renderWikiResult(),
               },
             ]}

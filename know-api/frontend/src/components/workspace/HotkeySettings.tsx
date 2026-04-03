@@ -24,11 +24,13 @@ const 기본핫키: HotkeyConfig[] = [
   { id: 'focusAnalysis', label: '분석결과 포커스', key: 'Home' },
   { id: 'aiAnalysis', label: 'AI분석', key: '/' },
   { id: 'undoHistory', label: '작업취소', key: 'Escape' },
+  { id: 'aiTabAI', label: 'AI분석 AI탭', key: 'PageUp' },
+  { id: 'aiTabWikipedia', label: 'AI분석 Wikipedia탭', key: 'PageDown' },
 ]
 
 const keyDisplayMap: Record<string, string> = {
   ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
-  Escape: 'Esc', Home: 'Home',
+  Escape: 'Esc', Home: 'Home', PageUp: 'PgUp', PageDown: 'PgDn',
 }
 
 function displayKey(key: string): string {

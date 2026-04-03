@@ -1,5 +1,41 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-03 — LLM 사용 통계 + AI분석 UI 개선 + 작업완료 모달 + 유사어LLM제외 최적화 (커밋: TBD)
+
+### 수정 내용
+
+**신규: llm_usage_log 테이블** (`init_db.py`)
+- LLM 호출 로그 영구 저장 (provider/model/user_id/tokens_used/duration_ms/success/error_msg)
+
+**신규: LLM 통계 API + 페이지** (`api/statistics.py`, `services/statistics_service.py`, `frontend/src/pages/Statistics.tsx`)
+- `GET /api/stats/llm-usage` — provider별/기간별 LLM 사용량 통계
+- Statistics 페이지 recharts 그래프로 시각화 (recharts 의존성 추가)
+
+**개선: 유사어추천 LLM 제외 최적화** (`services/thesaurus_recommend.py`)
+- head완전 또는 tail완전 텍스트 매칭 시 LLM 재순위 단계 스킵 → 응답 속도 향상
+
+**개선: LLM 사용 로그 기록 + user_id 전달** (`services/llm_settings_service.py`, `services/ai_analysis_service.py`, `api/ai_analysis.py`, `api/dictionary.py`)
+- 모든 LLM 호출 시 llm_usage_log에 user_id + 결과 기록
+
+**개선: AI분석 UI 개선** (`frontend/src/components/workspace/AIAnalysis.tsx`)
+- 너비/레이아웃 조정, 탭명 변경, disabled 처리, forcedTab 지원
+
+**신규: 작업완료 버튼 + 모달** (`api/assignment.py`, `services/assignment_service.py`, `frontend/src/pages/KnowledgeWork.tsx`, `frontend/src/api/assignment.ts`)
+- `POST /api/assignments/complete-with-mode` — 완료 처리 모드 선택 API
+- 작업완료 모달 UI (완료 처리 방식 선택)
+
+**버그픽스: 복합명사 등록 race condition 수정** (`frontend/src/pages/KnowledgeWork.tsx`)
+- 동시 등록 시 상태 불일치 버그 수정
+
+**신규: AI/Wikipedia 탭 단축키** (`frontend/src/components/workspace/HotkeySettings.tsx`, `frontend/src/pages/KnowledgeWork.tsx`)
+- PageUp/PageDown으로 AI분석/Wikipedia 탭 전환 단축키 추가
+
+### 수정 파일 (16개)
+- **백엔드 (10):** `init_db.py`, `services/llm_settings_service.py`, `services/thesaurus_recommend.py`, `services/statistics_service.py`, `api/statistics.py`, `api/ai_analysis.py`, `services/ai_analysis_service.py`, `api/dictionary.py`, `api/assignment.py`, `services/assignment_service.py`
+- **프론트엔드 (6):** `frontend/src/components/workspace/AIAnalysis.tsx`, `frontend/src/pages/KnowledgeWork.tsx`, `frontend/src/components/workspace/HotkeySettings.tsx`, `frontend/src/api/assignment.ts`, `frontend/src/pages/Statistics.tsx`, `frontend/package.json`(recharts 추가)
+
+---
+
 ## 2026-04-03 — 작업실 유사어 추천 시스템: 오타변형 텍스트매칭 + LLM 의미기반 재순위 하이브리드 (커밋: adb3583)
 
 ### 수정 내용

@@ -100,7 +100,7 @@ def 유사어추천후보검색(
 
     # 3. 매칭 + 점수 계산
     후보들: list[dict] = []
-    seen_keys: set[frozenset] = set()
+    seen_keys: dict[frozenset, int] = {}  # 정규화키 → 후보들 인덱스
 
     for row in rows:
         head = (row['_HEAD_WORD'] or '').strip()
@@ -150,11 +150,21 @@ def 유사어추천후보검색(
         if best_score < 0:
             continue
 
-        # 양방향 중복 제거
+        # 양방향 중복 제거 (동일 세트 중 최고 점수 유지)
         정규화키 = 세트정규화키(head, tail_raw)
         if 정규화키 in seen_keys:
+            # 기존 항목보다 점수가 높으면 교체
+            기존idx = seen_keys[정규화키]
+            if best_score > 후보들[기존idx]['score']:
+                후보들[기존idx] = {
+                    'head_word': head,
+                    'tail_words': tail_words,
+                    'score': best_score,
+                    'match_type': best_match_type,
+                    'members': 모든멤버,
+                }
             continue
-        seen_keys.add(정규화키)
+        seen_keys[정규화키] = len(후보들)
 
         후보들.append({
             'head_word': head,
@@ -176,21 +186,35 @@ async def LLM재순위(
     candidates: list[dict],
     context: str = '',
     prompt: str = '',
+    user_id: str = '',
 ) -> dict:
     """LLM에 후보 전달 → 상위 5개 선택.
 
     반환: {"items": [...], "provider": str, "raw_response": str}
     LLM 실패 시 점수 기준 상위 5개로 폴백.
+    head완전/tail완전 항목은 LLM에 전달하지 않고 결과에 그대로 포함.
     """
     if not candidates:
         return {'items': [], 'provider': None, 'raw_response': ''}
 
+    # head완전/tail완전 분리 — 이미 확정적 매칭이므로 LLM 불필요
+    def _is_exact(c: dict) -> bool:
+        mt = c.get('match_type', '')
+        return mt.startswith('head완전') or mt.startswith('tail완전')
+
+    exact_items = [c for c in candidates if _is_exact(c)]
+    llm_candidates = [c for c in candidates if not _is_exact(c)]
+
+    # LLM 후보가 없으면 호출 자체 스킵
+    if not llm_candidates:
+        return {'items': candidates, 'provider': None, 'raw_response': ''}
+
     사용프롬프트 = prompt or _기본프롬프트
 
-    # 후보 목록 포맷 (번호 1-based)
+    # 후보 목록 포맷 (번호 1-based, LLM 후보만)
     후보텍스트 = '\n'.join(
         f"{i + 1}. [{c['head_word']}] → {', '.join(c['tail_words'][:5])}"
-        for i, c in enumerate(candidates)
+        for i, c in enumerate(llm_candidates)
     )
 
     # {context}, {candidates} 치환 — {keyword}는 LLM질의 내부에서 처리
@@ -199,14 +223,14 @@ async def LLM재순위(
                   .replace('{candidates}', 후보텍스트))
 
     try:
-        llm결과 = await LLM질의(keyword, 최종프롬프트)
+        llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
         raw = llm결과.get('result') or ''
         provider = llm결과.get('provider')
         error = llm결과.get('error')
 
         if error or not raw:
             logger.warning('[LLM재순위] LLM 응답 없음, 점수 기준 폴백: %s', error)
-            return {'items': candidates[:5], 'provider': provider, 'raw_response': raw or error or ''}
+            return {'items': exact_items + llm_candidates[:5], 'provider': provider, 'raw_response': raw or error or ''}
 
         # 응답에서 번호 파싱 (쉼표/공백/줄바꿈 구분)
         import re
@@ -217,17 +241,18 @@ async def LLM재순위(
                 continue
             try:
                 idx = int(token) - 1
-                if 0 <= idx < len(candidates) and idx not in 번호들:
+                if 0 <= idx < len(llm_candidates) and idx not in 번호들:
                     번호들.append(idx)
             except ValueError:
                 continue
 
-        선택항목 = [candidates[i] for i in 번호들[:5]]
+        선택항목 = [llm_candidates[i] for i in 번호들[:5]]
         if not 선택항목:
-            선택항목 = candidates[:5]
+            선택항목 = llm_candidates[:5]
 
-        return {'items': 선택항목, 'provider': provider, 'raw_response': raw}
+        # exact 항목을 앞에 포함
+        return {'items': exact_items + 선택항목, 'provider': provider, 'raw_response': raw}
 
     except Exception as e:
         logger.error('[LLM재순위] 예외 발생: %s', e)
-        return {'items': candidates[:5], 'provider': None, 'raw_response': str(e)}
+        return {'items': exact_items + llm_candidates[:5], 'provider': None, 'raw_response': str(e)}

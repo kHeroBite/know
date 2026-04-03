@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from core.database import DB세션
 from api.auth import 현재사용자가져오기
-from services.statistics_service import 도메인별사전통계, 전체도메인통계
+from services.statistics_service import 도메인별사전통계, 전체도메인통계, LLM사용통계조회
 
 라우터 = APIRouter(prefix="/api/stats", tags=["통계"])
 
@@ -26,3 +26,13 @@ def 전체통계(
 ):
     """전체 도메인 사전 현황 반환."""
     return 전체도메인통계(db)
+
+
+@라우터.get("/llm-usage")
+def LLM사용통계(
+    year: int = Query(..., description="조회 연도 (예: 2026)"),
+    month: int = Query(..., description="조회 월 (1~12)"),
+    _current: dict = Depends(현재사용자가져오기),
+):
+    """월별 사용자/usage_type별 LLM 사용 통계 반환."""
+    return LLM사용통계조회(year, month)

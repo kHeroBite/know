@@ -115,6 +115,25 @@ async def 통신테스트(provider: str, api_key: str, base_url: str) -> dict:
         return {"success": False, "message": str(e)}
 
 
+def _사용로그기록(user_id: str, usage_type: str, model: str, prompt_tokens: int = 0, completion_tokens: int = 0):
+    """LLM 사용 로그 INSERT."""
+    try:
+        with 엔진.connect() as conn:
+            conn.execute(text(
+                "INSERT INTO llm_usage_log (user_id, usage_type, model, prompt_tokens, completion_tokens) "
+                "VALUES (:uid, :utype, :model, :pt, :ct)"
+            ), {
+                "uid": user_id or '',
+                "utype": usage_type or '',
+                "model": model or '',
+                "pt": prompt_tokens,
+                "ct": completion_tokens,
+            })
+            conn.commit()
+    except Exception as e:
+        logger.warning("[LLM사용로그] 기록 실패: %s", e)
+
+
 def _테스트결과저장(provider: str, passed: int):
     """test_passed 플래그 업데이트."""
     with 엔진.connect() as conn:
@@ -189,7 +208,7 @@ def _활성설정조회() -> dict | None:
     return dict(row._mapping)
 
 
-async def LLM질의(keyword: str, prompt: str) -> dict:
+async def LLM질의(keyword: str, prompt: str, user_id: str = '', usage_type: str = '') -> dict:
     """활성 provider로 LLM 질의. 반환: {result, provider, model, error}."""
     설정 = _활성설정조회()
     if not 설정:
@@ -211,7 +230,11 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
                 max_completion_tokens=500,
             )
             result = resp.choices[0].message.content
-            return {"result": result, "provider": provider, "model": model or "gpt-4o-mini", "error": None}
+            used_model = model or "gpt-4o-mini"
+            pt = getattr(getattr(resp, 'usage', None), 'prompt_tokens', 0) or 0
+            ct = getattr(getattr(resp, 'usage', None), 'completion_tokens', 0) or 0
+            _사용로그기록(user_id, usage_type, used_model, pt, ct)
+            return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         elif provider == "claude":
             from anthropic import AsyncAnthropic
@@ -222,7 +245,11 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
                 max_tokens=500,
             )
             result = resp.content[0].text
-            return {"result": result, "provider": provider, "model": model or "claude-haiku-4-5-20251001", "error": None}
+            used_model = model or "claude-haiku-4-5-20251001"
+            pt = getattr(getattr(resp, 'usage', None), 'input_tokens', 0) or 0
+            ct = getattr(getattr(resp, 'usage', None), 'output_tokens', 0) or 0
+            _사용로그기록(user_id, usage_type, used_model, pt, ct)
+            return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         elif provider == "gemini":
             import google.generativeai as genai
@@ -230,7 +257,9 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
             gmodel = genai.GenerativeModel(model or "gemini-2.0-flash")
             resp = await gmodel.generate_content_async(query)
             result = resp.text
-            return {"result": result, "provider": provider, "model": model or "gemini-2.0-flash", "error": None}
+            used_model = model or "gemini-2.0-flash"
+            _사용로그기록(user_id, usage_type, used_model, 0, 0)
+            return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
@@ -246,6 +275,7 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
                     resp.raise_for_status()
                     data = resp.json()
                     result = data["choices"][0]["message"]["content"]
+                    _사용로그기록(user_id, usage_type, used_model, 0, 0)
                     return {"result": result, "provider": provider, "model": used_model, "error": None}
                 except Exception:
                     pass
@@ -258,6 +288,7 @@ async def LLM질의(keyword: str, prompt: str) -> dict:
                 resp.raise_for_status()
             data = resp.json()
             result = data.get("response", "")
+            _사용로그기록(user_id, usage_type, used_model, 0, 0)
             return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         else:
