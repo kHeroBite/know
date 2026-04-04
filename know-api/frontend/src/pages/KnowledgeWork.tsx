@@ -843,6 +843,7 @@ export default function KnowledgeWork() {
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
   const selectLastTokenRef = useRef(false)
+  const selectLastLineFirstRef = useRef(false)  // ↑로 이전 키워드: 마지막 줄의 첫 워드
 
   // ─── 키워드 목록 ────────────────────────────────────────────
 
@@ -957,11 +958,30 @@ export default function KnowledgeWork() {
     if (selected?.analysis) {
       const toks = parseAnalysisText(selected.analysis).filter(t => !t.lineBreak)
       if (selectLastTokenRef.current) {
+        // ←방향키: 마지막 워드 선택
         let lastIdx = toks.length - 1
         while (lastIdx >= 0 && !isNavigableToken(toks, lastIdx)) lastIdx--
         setSelectedTokenIdx(lastIdx >= 0 ? lastIdx : 0)
         selectLastTokenRef.current = false
+      } else if (selectLastLineFirstRef.current) {
+        // ↑방향키: 마지막 줄의 첫 워드 선택
+        const allTokens = parseAnalysisText(selected.analysis)
+        const lines: number[][] = [[]]
+        allTokens.forEach(t => {
+          if (t.lineBreak) { lines.push([]) } else {
+            const si = toks.indexOf(t)
+            if (si >= 0 && isNavigableToken(toks, si)) lines[lines.length - 1].push(si)
+          }
+        })
+        const validLines = lines.filter(l => l.length > 0)
+        if (validLines.length > 0) {
+          setSelectedTokenIdx(validLines[validLines.length - 1][0])
+        } else {
+          setSelectedTokenIdx(0)
+        }
+        selectLastLineFirstRef.current = false
       } else {
+        // 기본: 첫 줄의 첫 워드
         const firstWord = toks.findIndex((_, idx) => isNavigableToken(toks, idx))
         setSelectedTokenIdx(firstWord >= 0 ? firstWord : 0)
       }
@@ -1111,7 +1131,7 @@ export default function KnowledgeWork() {
       const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
       const newIdx = curIdx > 0 ? curIdx - 1 : 0
       setSelected(filteredItems[newIdx])
-      selectLastTokenRef.current = true  // 이전 키워드의 마지막 줄로
+      // Alt+↑: 첫 줄 첫 워드 (기본 동작 — ref 설정 안 함)
       if (!filteredItems[newIdx].flag) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
@@ -1128,6 +1148,21 @@ export default function KnowledgeWork() {
       if (!filteredItems[newIdx].flag) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
+      }
+      return
+    }
+
+    // Alt+←/→ 줄 내 첫/마지막 워드 이동
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !추천모달열림 && isCenterFocused) {
+      e.preventDefault(); e.stopPropagation()
+      if (!selectableTokens.length || !lineTokens.length) return
+      const curLine = lineTokens.findIndex(line => line.includes(selectedTokenIdx))
+      if (curLine < 0) return
+      const line = lineTokens[curLine]
+      if (e.key === 'ArrowLeft') {
+        setSelectedTokenIdx(line[0])
+      } else {
+        setSelectedTokenIdx(line[line.length - 1])
       }
       return
     }
@@ -1248,12 +1283,12 @@ export default function KnowledgeWork() {
       if (!selectableTokens.length) return
       const curLine = lineTokens.findIndex(line => line.includes(selectedTokenIdx))
       if (curLine <= 0) {
-        // 첫 줄 → 이전 키워드 (마지막 줄 선택)
+        // 첫 줄 → 이전 키워드 (마지막 줄의 첫 워드 선택)
         if (!filteredItems.length) return
         const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
         if (curIdx <= 0) return
         const newIdx = curIdx - 1
-        selectLastTokenRef.current = true
+        selectLastLineFirstRef.current = true
         setSelected(filteredItems[newIdx])
         if (!filteredItems[newIdx].flag) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})

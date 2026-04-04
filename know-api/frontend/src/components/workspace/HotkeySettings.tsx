@@ -13,10 +13,8 @@ interface HotkeyConfig {
 
 // 편집 가능한 단축키
 const 기본핫키: HotkeyConfig[] = [
-  { id: 'prevKeyword', label: '이전 키워드 (Alt)', key: 'Alt+ArrowUp' },
-  { id: 'nextKeyword', label: '다음 키워드 (Alt)', key: 'Alt+ArrowDown' },
-  { id: 'prevAnalysis', label: '이전 분석결과', key: 'ArrowLeft' },
-  { id: 'nextAnalysis', label: '다음 분석결과', key: 'ArrowRight' },
+  { id: 'prevAnalysis', label: '← 이전 워드', key: 'ArrowLeft' },
+  { id: 'nextAnalysis', label: '→ 다음 워드', key: 'ArrowRight' },
   { id: 'registerUdic', label: '사용자사전 등록', key: '1' },
   { id: 'registerCndic', label: '복합명사 등록', key: '2' },
   { id: 'registerThesaurus', label: '유사어 등록', key: '3' },
@@ -27,6 +25,16 @@ const 기본핫키: HotkeyConfig[] = [
   { id: 'aiTabAI', label: 'AI분석>AI', key: 'PageUp' },
   { id: 'aiTabWikipedia', label: 'AI분석>Wikipedia', key: 'PageDown' },
   { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '.' },
+  { id: 'prevKeyword', label: 'Alt+↑ 이전 키워드', key: 'Alt+ArrowUp' },
+  { id: 'nextKeyword', label: 'Alt+↓ 다음 키워드', key: 'Alt+ArrowDown' },
+]
+
+// 고정 단축키 (설정 불가, 설명만 표시)
+const 고정단축키 = [
+  { label: '↑ 윗줄 이동', desc: '분석결과 내 윗줄 워드로 이동 (첫줄→이전키워드 마지막줄)' },
+  { label: '↓ 아랫줄 이동', desc: '분석결과 내 아랫줄 워드로 이동 (마지막줄→다음키워드)' },
+  { label: 'Alt+← 줄 첫 워드', desc: '현재 줄의 첫 번째 워드로 이동' },
+  { label: 'Alt+→ 줄 끝 워드', desc: '현재 줄의 마지막 워드로 이동' },
 ]
 
 const keyDisplayMap: Record<string, string> = {
@@ -162,8 +170,19 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
         size="small"
         pagination={false}
         loading={loading}
-        scroll={{ y: 350 }}
+        scroll={{ y: 280 }}
       />
+
+      {/* 고정 단축키 안내 */}
+      <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 6, padding: '8px 12px' }}>
+        <Text strong style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>방향키 (고정)</Text>
+        {고정단축키.map((item, idx) => (
+          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: 11 }}>
+            <Text style={{ fontWeight: 500 }}>{item.label}</Text>
+            <Text type="secondary">{item.desc}</Text>
+          </div>
+        ))}
+      </div>
     </Modal>
   )
 }

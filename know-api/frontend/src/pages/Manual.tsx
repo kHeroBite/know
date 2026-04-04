@@ -188,8 +188,98 @@ export default function Manual() {
           </Paragraph>
         </Panel>
 
-        {/* 8. 통계 */}
-        <Panel header={<span><BarChartOutlined /> 8. 통계</span>} key="8">
+        {/* 8. 작업실 단축키 */}
+        <Panel header={<span><ThunderboltOutlined /> 8. 작업실 단축키</span>} key="8">
+          <Paragraph>
+            작업실에서 키보드 단축키를 사용하여 빠르게 작업할 수 있습니다.
+            단축키 설정은 작업실 상단 <Tag>⚙</Tag> 버튼에서 변경 가능합니다.
+          </Paragraph>
+
+          <Divider orientation="left" plain>워드 이동 (분석결과 포커스 상태)</Divider>
+          <Table
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            dataSource={[
+              { key: '1', shortcut: '← →', desc: '이전/다음 워드로 이동' },
+              { key: '2', shortcut: '↑ ↓', desc: '윗줄/아랫줄의 가장 가까운 워드로 이동. 첫줄↑=이전키워드 마지막줄, 마지막줄↓=다음키워드' },
+              { key: '3', shortcut: 'Alt + ← →', desc: '현재 줄의 첫 워드 / 마지막 워드로 이동' },
+              { key: '4', shortcut: 'Alt + ↑ ↓', desc: '이전/다음 키워드로 바로 이동 (Alt↑=첫줄첫워드, Alt↓=첫줄첫워드)' },
+              { key: '5', shortcut: 'Home', desc: '분석결과 포커스 활성화' },
+            ]}
+            columns={[
+              { title: '단축키', dataIndex: 'shortcut', width: 140 },
+              { title: '설명', dataIndex: 'desc' },
+            ]}
+          />
+
+          <Divider orientation="left" plain>사전 등록 (워드 선택 상태)</Divider>
+          <Table
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            dataSource={[
+              { key: '1', shortcut: '1', desc: '사용자사전에 선택 워드 등록' },
+              { key: '2', shortcut: '2', desc: '복합명사사전에 선택 워드 등록' },
+              { key: '3', shortcut: '3', desc: '유사어 추천 모달 열기' },
+              { key: '4', shortcut: '0', desc: '키워드 분석 (형태소 분석)' },
+              { key: '5', shortcut: '/', desc: 'AI 분석 실행' },
+              { key: '6', shortcut: 'Esc', desc: '작업 취소 (되돌리기)' },
+            ]}
+            columns={[
+              { title: '단축키', dataIndex: 'shortcut', width: 140 },
+              { title: '설명', dataIndex: 'desc' },
+            ]}
+          />
+
+          <Divider orientation="left" plain>유사어추천 모달 (3 또는 우클릭으로 열기)</Divider>
+          <Table
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            dataSource={[
+              { key: '1', shortcut: '↑ ↓ ← →', desc: '항목 간 이동 (파티션 경계 자동 넘김)' },
+              { key: '2', shortcut: 'Alt + ↑ ↓', desc: '파티션 강제 이동 (AI추천 내 모델 간 이동 포함)' },
+              { key: '3', shortcut: 'Enter', desc: '선택 항목 클릭 (유사어 편집창 열기)' },
+              { key: '4', shortcut: '.', desc: 'AI추천 분석 실행' },
+              { key: '5', shortcut: 'Esc', desc: '추천 모달 닫기' },
+            ]}
+            columns={[
+              { title: '단축키', dataIndex: 'shortcut', width: 140 },
+              { title: '설명', dataIndex: 'desc' },
+            ]}
+          />
+
+          <Divider orientation="left" plain>사전탭 전환</Divider>
+          <Table
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            dataSource={[
+              { key: '1', shortcut: 'Alt + 1', desc: '사용자사전 탭으로 전환' },
+              { key: '2', shortcut: 'Alt + 2', desc: '복합명사사전 탭으로 전환' },
+              { key: '3', shortcut: 'Alt + 3', desc: '유사어사전 탭으로 전환' },
+              { key: '4', shortcut: 'Alt + 0', desc: '키워드분석 탭으로 전환' },
+              { key: '5', shortcut: 'PageUp', desc: 'AI분석>AI 탭' },
+              { key: '6', shortcut: 'PageDown', desc: 'AI분석>Wikipedia 탭' },
+            ]}
+            columns={[
+              { title: '단축키', dataIndex: 'shortcut', width: 140 },
+              { title: '설명', dataIndex: 'desc' },
+            ]}
+          />
+
+          <Alert
+            type="info"
+            showIcon
+            message="워드 클릭 컨텍스트 메뉴"
+            description="분석결과의 워드를 클릭하면 컨텍스트 메뉴가 표시됩니다. 키워드분석, AI분석, 사전등록, 유사어추천을 바로 실행할 수 있습니다."
+            style={{ marginBottom: 16 }}
+          />
+        </Panel>
+
+        {/* 9. 통계 */}
+        <Panel header={<span><BarChartOutlined /> 9. 통계</span>} key="9">
           <Image src="/manual/statistics.png" width="100%" style={imgStyle} />
           <Paragraph>
             도메인별 사전 현황을 통계로 확인합니다.
@@ -201,8 +291,8 @@ export default function Manual() {
           </Paragraph>
         </Panel>
 
-        {/* 9. 빌드이력 */}
-        <Panel header={<span><HistoryOutlined /> 9. 빌드이력</span>} key="9">
+        {/* 10. 빌드이력 */}
+        <Panel header={<span><HistoryOutlined /> 10. 빌드이력</span>} key="10">
           <Image src="/manual/buildhistory.png" width="100%" style={imgStyle} />
           <Paragraph>
             사전 빌드 실행 기록을 확인합니다.
@@ -214,8 +304,8 @@ export default function Manual() {
           </Paragraph>
         </Panel>
 
-        {/* 10. 계정 관리 */}
-        <Panel header={<span><UserOutlined /> 10. 계정 관리 (관리자 전용)</span>} key="10">
+        {/* 11. 계정 관리 */}
+        <Panel header={<span><UserOutlined /> 11. 계정 관리 (관리자 전용)</span>} key="11">
           <Image src="/manual/accounts.png" width="100%" style={imgStyle} />
           <Alert
             type="warning"
@@ -254,8 +344,8 @@ export default function Manual() {
           </Paragraph>
         </Panel>
 
-        {/* 11. 서버 CLI 도구 */}
-        <Panel header={<span><CodeOutlined /> 11. 서버 CLI 도구</span>} key="11">
+        {/* 12. 서버 CLI 도구 */}
+        <Panel header={<span><CodeOutlined /> 12. 서버 CLI 도구</span>} key="12">
           <Alert
             type="info"
             showIcon
