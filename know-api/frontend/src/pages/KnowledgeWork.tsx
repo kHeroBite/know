@@ -1103,6 +1103,35 @@ export default function KnowledgeWork() {
     // Alt+숫자 탭 전환은 INPUT 포커스 상태에서도 통과
     if ((tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && !e.altKey) return
 
+    // Alt+↑↓ 키워드 이동 — 최우선 가로채기 (브라우저 기본 동작 차단)
+    if (e.altKey && e.key === 'ArrowUp' && !추천모달열림) {
+      e.preventDefault(); e.stopPropagation()
+      if (!filteredItems.length) return
+      setIsCenterFocused(true)
+      const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+      const newIdx = curIdx > 0 ? curIdx - 1 : 0
+      setSelected(filteredItems[newIdx])
+      selectLastTokenRef.current = true  // 이전 키워드의 마지막 줄로
+      if (!filteredItems[newIdx].flag) {
+        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+        setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
+      }
+      return
+    }
+    if (e.altKey && e.key === 'ArrowDown' && !추천모달열림) {
+      e.preventDefault(); e.stopPropagation()
+      if (!filteredItems.length) return
+      setIsCenterFocused(true)
+      const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+      const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
+      setSelected(filteredItems[newIdx])
+      if (!filteredItems[newIdx].flag) {
+        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+        setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
+      }
+      return
+    }
+
     // 추천모달 키보드 네비게이션
     if (추천모달열림) {
       const key = e.key
@@ -1219,10 +1248,12 @@ export default function KnowledgeWork() {
       if (!selectableTokens.length) return
       const curLine = lineTokens.findIndex(line => line.includes(selectedTokenIdx))
       if (curLine <= 0) {
-        // 첫 줄 → 이전 키워드
+        // 첫 줄 → 이전 키워드 (마지막 줄 선택)
         if (!filteredItems.length) return
         const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx > 0 ? curIdx - 1 : 0
+        if (curIdx <= 0) return
+        const newIdx = curIdx - 1
+        selectLastTokenRef.current = true
         setSelected(filteredItems[newIdx])
         if (!filteredItems[newIdx].flag) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
