@@ -26,13 +26,15 @@ interface Props {
   workspace: string
   domain: string
   onUndo?: (item: WorkHistoryItem) => void
+  onItemClick?: (item: WorkHistoryItem) => void
 }
 
 const DIC_LABEL: Record<string, string> = { udic: '사용자사전', cndic: '복합명사사전', thesaurus: '유사어사전' }
 const ACT_LABEL: Record<string, string> = { add: '+', delete: '-' }
 
-export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo }, ref) {
+export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspace, domain, onUndo, onItemClick }, ref) {
   const [items, setItems] = useState<WorkHistoryItem[]>([])
+  const [assignedAt, setAssignedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const 컨테이너Ref = useRef<HTMLDivElement>(null)
   const [테이블높이, set테이블높이] = useState(200)
@@ -54,6 +56,7 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
     try {
       const { data } = await workspaceAPI.fetchWorkHistory(workspace, domain)
       setItems(data?.items || [])
+      setAssignedAt(data?.assigned_at || null)
     } catch {
       setItems([])
     } finally {
@@ -112,9 +115,12 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
       key: 'undo',
       width: 32,
       align: 'center' as const,
-      render: (_: unknown, record: WorkHistoryItem) => !record.undone ? (
-        <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => handleUndo(record)} />
-      ) : null,
+      render: (_: unknown, record: WorkHistoryItem) => {
+        const old = assignedAt && record.created_at < assignedAt
+        if (record.undone) return null
+        if (old) return <UndoOutlined style={{ color: '#d9d9d9', cursor: 'not-allowed' }} />
+        return <Button size="small" type="text" icon={<UndoOutlined />} onClick={(e) => { e.stopPropagation(); handleUndo(record) }} />
+      },
     },
   ]
 
@@ -135,9 +141,17 @@ export default forwardRef<WorkHistoryRef, Props>(function WorkHistory({ workspac
         rowKey="id"
         pagination={false}
         scroll={{ y: 120 }}
-        onRow={(record) => ({
-          style: record.undone ? { textDecoration: 'line-through', opacity: 0.5 } : {},
-        })}
+        onRow={(record) => {
+          const old = assignedAt && record.created_at < assignedAt
+          return {
+            style: record.undone
+              ? { textDecoration: 'line-through', opacity: 0.4, cursor: 'default' }
+              : old
+                ? { opacity: 0.5, cursor: 'default' }
+                : { cursor: 'pointer' },
+            onClick: () => { if (!record.undone && !old && onItemClick) onItemClick(record) },
+          }
+        }}
       />
     </div>
   )

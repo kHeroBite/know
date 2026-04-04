@@ -28,7 +28,7 @@ _HEADERS = {
 }
 
 _PROMPT_FILE = Path(__file__).parent.parent / "config" / "ai_prompt.json"
-_DEFAULT_PROMPT = "{keyword} 무엇인지 짧게 2줄로 설명해줘"
+_DEFAULT_PROMPT = "{keyword} 무엇인지 짧게 2줄로 설명해줘. 여러의미가 있을경우 중요한 의미순서로 5가지 이내로 모두 말해달라."
 
 
 def 프롬프트로드() -> str:
@@ -94,13 +94,16 @@ async def AI검색(keyword: str, user_id: str = '') -> dict:
     wiki_val = wiki_result.get("result") if wiki_result else None
     provider = llm_result.get("provider") if llm_result else None
     model = llm_result.get("model") if llm_result else None
+    # 모델별 결과
+    llm_results = llm_result.get("results", []) if llm_result else []
 
     logger.info(
-        "[AI분석] 최종 반환: llm=%r, wikipedia=%r, provider=%s, model=%s",
+        "[AI분석] 최종 반환: llm=%r, wikipedia=%r, provider=%s, model=%s, results_count=%d",
         llm_val[:60] if llm_val else None,
         wiki_val[:60] if wiki_val else None,
         provider,
         model,
+        len(llm_results),
     )
     return {
         "llm": llm_val,
@@ -108,4 +111,5 @@ async def AI검색(keyword: str, user_id: str = '') -> dict:
         "query": query,
         "provider": provider,
         "model": model,
+        "llm_results": llm_results,
     }

@@ -19,6 +19,7 @@ interface AIResult {
   query?: string
   provider?: string
   model?: string
+  llm_results?: { result?: string; provider?: string; model?: string; error?: string }[]
 }
 
 export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTab }: Props) {
@@ -64,17 +65,19 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
       .then(({ data }) => {
         setResult(data)
         onSearch?.()
-        // 자동 탭 전환: 결과 있는 탭으로 이동
-        const hasLLM = data.llm && !data.llm.includes('검색 결과가 없습니다')
+        const llmResults = data.llm_results || []
+        const hasLLM = llmResults.some((r: any) => r.result && !r.error)
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
         setHasAiResult(!!hasLLM)
         setHasWikiResult(!!hasWiki)
+        // 첫 번째 결과 있는 모델 탭으로 이동
         if (hasLLM) {
-          setActiveTab('llm')
+          const firstOk = llmResults.find((r: any) => r.result && !r.error)
+          setActiveTab(firstOk?.model || 'wikipedia')
         } else if (hasWiki) {
           setActiveTab('wikipedia')
         } else {
-          setActiveTab('llm')
+          setActiveTab(llmResults[0]?.model || 'wikipedia')
         }
       })
       .catch((err) => {
@@ -117,47 +120,35 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
 
   const wikiUrl = searchKeyword ? `https://ko.wikipedia.org/wiki/${encodeURIComponent(searchKeyword)}` : ''
 
-  const renderLLMResult = () => {
+  const renderModelResult = (modelResult: { result?: string; provider?: string; model?: string; error?: string }) => {
     // LLM 미설정 에러 감지
-    if (error && (error.includes('설정되지 않았습니다') || error.includes('설정이 필요'))) {
+    if (modelResult.error && (modelResult.error.includes('설정되지 않았습니다') || modelResult.error.includes('설정이 필요'))) {
       return (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             LLM이 설정되지 않았습니다. 설정 페이지에서 API를 등록해주세요.
           </Text>
-          <Button
-            type="primary"
-            size="small"
-            icon={<SettingOutlined />}
-            onClick={() => navigate('/llm-settings')}
-          >
+          <Button type="primary" size="small" icon={<SettingOutlined />} onClick={() => navigate('/llm-settings')}>
             LLM 설정으로 이동
           </Button>
         </div>
       )
     }
-    const content = result?.llm
+    const content = modelResult.result
     const hasContent = content && !content.includes('검색 결과가 없습니다')
     return (
       <div style={{ padding: '0 4px' }}>
         {hasContent ? (
-          <>
-            <pre style={{
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12,
-              margin: '4px 0', lineHeight: 1.5, background: '#f8f9fa',
-              padding: 8, borderRadius: 4,
-            }}>
-              {content}
-            </pre>
-            {result?.provider && (
-              <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
-                {result.provider}{result.model ? ` · ${result.model}` : ''}
-              </Text>
-            )}
-          </>
+          <pre style={{
+            whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12,
+            margin: '4px 0', lineHeight: 1.5, background: '#f8f9fa',
+            padding: 8, borderRadius: 4,
+          }}>
+            {content}
+          </pre>
         ) : (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
-            <Text type="secondary">결과 없음</Text>
+            <Text type="secondary">{modelResult.error || '결과 없음'}</Text>
           </div>
         )}
       </div>
@@ -232,17 +223,21 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
             activeKey={activeTab}
             onChange={setActiveTab}
             size="small"
-            tabBarStyle={{ paddingLeft: 20 }}
+            tabBarStyle={{ paddingLeft: 4 }}
             items={[
-              {
-                key: 'llm',
-                label: <span style={{ fontSize: 12, color: !hasAiResult ? '#ccc' : undefined }}>AI</span>,
-                disabled: !hasAiResult,
-                children: renderLLMResult(),
-              },
+              ...(result?.llm_results || []).map((r: any) => {
+                const hasContent = r.result && !r.error
+                const modelName = (r.model || r.provider || 'AI').split('/').pop()
+                return {
+                  key: r.model || r.provider || 'ai',
+                  label: <span style={{ fontSize: 11, color: !hasContent ? '#ccc' : undefined }}>{modelName}</span>,
+                  disabled: !hasContent,
+                  children: renderModelResult(r),
+                }
+              }),
               {
                 key: 'wikipedia',
-                label: <span style={{ fontSize: 12, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
+                label: <span style={{ fontSize: 11, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
                 disabled: !hasWikiResult,
                 children: renderWikiResult(),
               },

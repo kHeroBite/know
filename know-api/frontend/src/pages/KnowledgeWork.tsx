@@ -1836,6 +1836,7 @@ export default function KnowledgeWork() {
               workspace={selectedWorkspace}
               domain={selectedDomain}
               onUndo={handleUndoDone}
+              onItemClick={handleUndoDone}
             />
           </Card>
         </div>

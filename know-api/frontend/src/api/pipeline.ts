@@ -34,14 +34,23 @@ export const 지식작업API = {
 
 // 빌드 API
 export const 빌드API = {
-  빌드시작: (domain: string) =>
-    클라이언트.post(`/build/${domain}`),
+  빌드시작: (domain: string, jianaVersion?: string) =>
+    클라이언트.post(`/build/${domain}`, null, { params: jianaVersion ? { jiana_version: jianaVersion } : {} }),
+
+  jiana버전목록: () =>
+    클라이언트.get('/build/jiana-versions'),
+
+  빌드취소: (domain: string) =>
+    클라이언트.post(`/build/${domain}/cancel`),
 
   상태조회: (domain: string) =>
     클라이언트.get(`/build/${domain}/status`),
 
   이력조회: (domain: string) =>
     클라이언트.get(`/build/${domain}/history`),
+
+  전체이력: () =>
+    클라이언트.get('/build/history-all'),
 }
 
 // 사전 API

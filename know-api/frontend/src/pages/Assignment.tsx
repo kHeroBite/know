@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message, Popconfirm } from 'antd'
-import { UserAddOutlined, CheckOutlined } from '@ant-design/icons'
+import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message } from 'antd'
+import { UserAddOutlined, RocketOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { assignmentApi, KeywordItem, AssignmentStats } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -97,18 +97,6 @@ export default function Assignment() {
       setPage(1)
     } catch (e: any) {
       message.error(e.response?.data?.detail || '할당 실패')
-    }
-  }
-
-  const 완료처리 = async () => {
-    if (!selectedWorkspace || !selectedDomain) return
-    try {
-      const { data } = await assignmentApi.완료(selectedWorkspace, selectedDomain)
-      message.success(data.message || '완료 처리됨')
-      통계조회()
-      목록조회(page)
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '완료 처리 실패')
     }
   }
 
@@ -213,9 +201,18 @@ export default function Assignment() {
                 allowClear
               />
               <Button type="primary" icon={<UserAddOutlined />} onClick={할당실행} disabled={filter !== 'pending'}>할당받기</Button>
-              <Popconfirm title="할당된 키워드를 완료 처리하시겠습니까?" onConfirm={완료처리} okText="실행" cancelText="취소">
-                <Button icon={<CheckOutlined />}>완료처리</Button>
-              </Popconfirm>
+              <Button
+                type="primary"
+                icon={<RocketOutlined />}
+                disabled={stats.assigned > 0}
+                onClick={() => {
+                  useWorkspaceStore.getState().setAssigned(false)
+                  useWorkspaceStore.getState().setBuildPhase(true)
+                  navigate('/build-history')
+                }}
+              >
+                {stats.assigned > 0 ? `다음단계로 (할당 ${stats.assigned}건 남음)` : '다음단계로'}
+              </Button>
             </Space>
           </Col>
         </Row>

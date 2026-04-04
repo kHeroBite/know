@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
-  Card, Tabs, Button, Table, Tag, Typography, Space,
-  Divider, message, Statistic, Row, Col
+  Card, Button, Table, Tag, Typography, Space, Select,
+  message, Statistic, Row, Col, Divider
 } from 'antd'
-import { BuildOutlined, ReloadOutlined } from '@ant-design/icons'
+import { BuildOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import { 빌드API } from '../api/pipeline'
-import { workspaceAPI } from '../api/workspace'
+import 클라이언트 from '../api/client'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 const { Title, Text } = Typography
 
@@ -20,39 +22,126 @@ interface 빌드이력항목 {
   error_message: string | null
 }
 
+interface 도메인통계 {
+  domain: string
+  total: number
+  success: number
+  failed: number
+}
+
+const STATUS_MAP: Record<string, { color: string; label: string }> = {
+  running: { color: 'processing', label: '진행중' },
+  completed: { color: 'success', label: '성공' },
+  failed: { color: 'error', label: '실패' },
+  cancelled: { color: 'warning', label: '중지' },
+}
+const DOMAIN_COLORS: Record<string, string> = {}
+const PALETTE = ['#1890ff', '#52c41a', '#faad14', '#eb2f96', '#722ed1', '#13c2c2', '#fa541c', '#2f54eb']
+function getDomainColor(domain: string): string {
+  if (!DOMAIN_COLORS[domain]) {
+    DOMAIN_COLORS[domain] = PALETTE[Object.keys(DOMAIN_COLORS).length % PALETTE.length]
+  }
+  return DOMAIN_COLORS[domain]
+}
+
+function 파일다운로드(buildId: number, filename: string) {
+  const tk = localStorage.getItem('access_token') || ''
+  const url = `/api/build/${buildId}/download/${filename}?token=${tk}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 export default function BuildHistory() {
-  const [도메인목록, set도메인목록] = useState<string[]>([])
-  const [선택도메인, set선택도메인] = useState<string>('')
-  const [이력, set이력] = useState<빌드이력항목[]>([])
+  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const currentDomain = selectedDomain || ''
+
+  // 현재 워크스페이스 빌드
   const [빌드로그, set빌드로그] = useState<string[]>([])
   const [빌드중, set빌드중] = useState(false)
-  const [이력로딩, set이력로딩] = useState(false)
+  const [최근빌드ID, set최근빌드ID] = useState<number | null>(null)
+  const [최근빌드상태, set최근빌드상태] = useState<string>('')
+  const [현재이력, set현재이력] = useState<빌드이력항목[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    workspaceAPI.도메인목록().then(res => {
-      const list = (res.data as {id: string, name: string | null}[]).map(d => d.id)
-      set도메인목록(list)
-      if (list.length > 0) set선택도메인(list[0])
-    }).catch(() => message.error('도메인 목록 조회 실패'))
-  }, [])
+  // jiana 버전
+  const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
+  const [선택jiana, set선택jiana] = useState<string>('')
 
-  const 이력조회 = async (domain: string) => {
+  // 전체 이력
+  const [전체이력, set전체이력] = useState<빌드이력항목[]>([])
+  const [도메인통계목록, set도메인통계목록] = useState<도메인통계[]>([])
+  const [이력로딩, set이력로딩] = useState(false)
+
+  // jiana 버전 목록 로드 + 도메인별 저장된 버전 복원
+  useEffect(() => {
+    빌드API.jiana버전목록().then(res => {
+      const versions = res.data?.versions || []
+      setJiana버전목록(versions)
+      const saved = localStorage.getItem(`jiana_version_${currentDomain}`)
+      if (saved && versions.includes(saved)) {
+        set선택jiana(saved)
+      } else if (versions.length > 0) {
+        set선택jiana(versions[versions.length - 1])
+      }
+    }).catch(() => {})
+  }, [currentDomain])
+
+  // 현재 도메인 이력 조회 + 최근 빌드 상태 복원
+  const 현재이력조회 = useCallback(async () => {
+    if (!currentDomain) return
+    try {
+      const res = await 빌드API.이력조회(currentDomain)
+      const items = res.data?.items || []
+      set현재이력(items)
+      // 최근 빌드 상태 복원
+      if (items.length > 0) {
+        const latest = items[0]
+        set최근빌드ID(latest.id)
+        set최근빌드상태(latest.status)
+        if (latest.status === 'running') {
+          set빌드중(true)
+        }
+      }
+    } catch { /* 무시 */ }
+  }, [currentDomain])
+
+  // 페이지 진입 시 최근 성공 빌드 로그 복원
+  useEffect(() => {
+    if (!currentDomain) return
+    빌드API.상태조회(currentDomain).then(res => {
+      const d = res.data
+      if (d && d.log_text && (d.status === 'completed' || d.status === 'running')) {
+        const lines = d.log_text.split('\n').filter((l: string) => l.trim())
+        set빌드로그(lines)
+        set최근빌드ID(d.id)
+        set최근빌드상태(d.status)
+        if (d.status === 'running') set빌드중(true)
+      }
+    }).catch(() => {})
+  }, [currentDomain])
+
+  // 전체 이력 조회
+  const 전체이력조회 = useCallback(async () => {
     set이력로딩(true)
     try {
-      const res = await 빌드API.이력조회(domain)
-      set이력(res.data?.items || [])
+      const res = await 빌드API.전체이력()
+      set전체이력(res.data?.items || [])
+      set도메인통계목록(res.data?.domain_stats || [])
     } catch {
-      message.error('이력 조회 실패')
+      message.error('빌드 이력 조회 실패')
     } finally {
       set이력로딩(false)
     }
-  }
+  }, [])
 
-  useEffect(() => {
-    이력조회(선택도메인)
-  }, [선택도메인])
+  useEffect(() => { 현재이력조회() }, [현재이력조회])
+  useEffect(() => { 전체이력조회() }, [전체이력조회])
 
   useEffect(() => {
     if (로그박스Ref.current) {
@@ -60,22 +149,57 @@ export default function BuildHistory() {
     }
   }, [빌드로그])
 
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const 빌드로그조회 = useCallback(async () => {
+    if (!currentDomain) return
+    try {
+      const res = await 빌드API.상태조회(currentDomain)
+      const d = res.data
+      if (d.log_text) {
+        const lines = d.log_text.split('\n').filter((l: string) => l.trim())
+        set빌드로그(lines)
+      }
+      set최근빌드상태(d.status)
+      if (d.id) set최근빌드ID(d.id)
+      // 빌드 중에도 이력 테이블 갱신
+      현재이력조회()
+      전체이력조회()
+      if (d.status !== 'running') {
+        set빌드중(false)
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      }
+    } catch { /* 무시 */ }
+  }, [currentDomain, 현재이력조회, 전체이력조회])
+
   const 빌드웹소켓연결 = (domain: string) => {
     wsRef.current?.close()
+    // DB 폴링 시작 (2초 간격 — WebSocket 누락 시 fallback)
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(빌드로그조회, 2000)
+
     const connect = () => {
       const ws = new WebSocket(`ws://${window.location.host}/ws/build/${domain}`)
       wsRef.current = ws
-
       ws.onmessage = (e) => {
-        set빌드로그(prev => [...prev.slice(-499), e.data])
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type === 'ping') return
+          if (msg.log) {
+            const lines = msg.log.split('\n').filter((l: string) => l.trim())
+            set빌드로그(lines)
+          } else {
+            set빌드로그(prev => [...prev.slice(-499), e.data])
+          }
+        } catch {
+          set빌드로그(prev => [...prev.slice(-499), e.data])
+        }
       }
       ws.onclose = () => {
-        set빌드중(false)
-        이력조회(domain)
+        빌드로그조회()
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
       }
-      ws.onerror = () => {
-        setTimeout(connect, 3000)
-      }
+      ws.onerror = () => setTimeout(connect, 3000)
     }
     connect()
   }
@@ -83,138 +207,212 @@ export default function BuildHistory() {
   const 빌드시작 = async () => {
     set빌드중(true)
     set빌드로그([])
+    // WebSocket 먼저 연결 후 빌드 시작 (빠른 빌드 로그 누락 방지)
+    빌드웹소켓연결(currentDomain)
     try {
-      await 빌드API.빌드시작(선택도메인)
-      빌드웹소켓연결(선택도메인)
-      message.success(`${선택도메인} 빌드 시작`)
+      const startRes = await 빌드API.빌드시작(currentDomain, 선택jiana || undefined)
+      if (선택jiana) localStorage.setItem(`jiana_version_${currentDomain}`, 선택jiana)
+      set최근빌드ID(startRes.data?.build_history_id || null)
+      set최근빌드상태('running')
+      message.success(`${currentDomain} 빌드 시작`)
     } catch (err: any) {
       message.error(err.response?.data?.detail || '빌드 시작 실패')
       set빌드중(false)
+      wsRef.current?.close()
     }
   }
 
-  const diff표시 = (current: number, prev: number | null) => {
-    if (prev === null) return <Tag>첫 빌드</Tag>
-    const diff = current - prev
-    if (diff > 0) return <Tag color="green">+{diff}</Tag>
-    if (diff < 0) return <Tag color="red">{diff}</Tag>
-    return <Tag>변동 없음</Tag>
+  const 빌드중지 = async () => {
+    try {
+      await 빌드API.빌드취소(currentDomain)
+      message.info('빌드가 중지되었습니다')
+      set빌드중(false)
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      wsRef.current?.close()
+      현재이력조회()
+      전체이력조회()
+    } catch {
+      message.error('빌드 중지 실패')
+    }
   }
 
-  const 이력컬럼 = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
+  // 현재 도메인 통계
+  const 최근빌드 = 현재이력[0]
+  const 성공건수 = 현재이력.filter(h => h.status === 'success').length
+  const 실패건수 = 현재이력.filter(h => h.status === 'failed').length
+
+  // 차트 데이터: 도메인별 빌드 현황
+  const 차트데이터 = 도메인통계목록.map(s => ({
+    name: s.domain.toUpperCase(),
+    성공: s.success,
+    실패: s.failed,
+    전체: s.total,
+  }))
+
+  // 전체 이력 컬럼
+  const 전체이력컬럼 = [
+    { title: 'ID', dataIndex: 'id', key: 'id', width: 50 },
     {
-      title: '상태', dataIndex: 'status', key: 'status',
-      render: (v: string) => (
-        <Tag color={v === 'success' ? 'success' : v === 'running' ? 'processing' : 'error'}>{v}</Tag>
-      ),
+      title: '도메인', dataIndex: 'domain', key: 'domain', width: 110,
+      render: (v: string) => <Tag color={getDomainColor(v)}>{v.toUpperCase()}</Tag>,
     },
-    { title: '행 수', dataIndex: 'row_count', key: 'row_count' },
     {
-      title: '변동', key: 'diff',
-      render: (_: any, r: 빌드이력항목) => diff표시(r.row_count, r.prev_row_count),
+      title: '워크스페이스', dataIndex: 'workspace', key: 'workspace', width: 110,
+      render: (v: string | null) => v || '-',
     },
-    { title: '시작', dataIndex: 'started_at', key: 'started_at' },
-    { title: '완료', dataIndex: 'completed_at', key: 'completed_at', render: (v: any) => v || '-' },
     {
-      title: '오류', dataIndex: 'error_message', key: 'error_message',
-      render: (v: string | null) => v ? <Text type="danger" ellipsis style={{ maxWidth: 200 }}>{v}</Text> : '-',
+      title: '실행자', dataIndex: 'started_by_display', key: 'started_by_display', width: 160,
+      render: (v: string | null, r: any) => <span style={{ whiteSpace: 'nowrap' }}>{v || r.started_by || '-'}</span>,
+    },
+    {
+      title: '상태', dataIndex: 'status', key: 'status', width: 80,
+      render: (v: string) => {
+        const s = STATUS_MAP[v] || { color: 'default', label: v }
+        return <Tag color={s.color}>{s.label}</Tag>
+      },
+    },
+    {
+      title: '시작', dataIndex: 'started_at', key: 'started_at',
+      render: (v: string) => v ? v.replace('T', ' ').slice(0, 19) : '-',
+    },
+    {
+      title: '완료', dataIndex: 'completed_at', key: 'completed_at',
+      render: (v: string | null) => v ? v.replace('T', ' ').slice(0, 19) : '-',
+    },
+    {
+      title: '소요', key: 'duration',
+      width: 70,
+      render: (_: any, r: 빌드이력항목) => {
+        if (!r.started_at || !r.completed_at) return r.status === 'running' ? <Tag color="processing">진행중</Tag> : '-'
+        const sec = Math.round((new Date(r.completed_at).getTime() - new Date(r.started_at).getTime()) / 1000)
+        return sec >= 60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`
+      },
+    },
+    {
+      title: '다운로드', key: 'download', width: 160,
+      render: (_: any, r: 빌드이력항목) => {
+        if (r.status !== 'completed') return '-'
+        const dl = (filename: string) => 파일다운로드(r.id, filename)
+        return (
+          <Space size={4}>
+            <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => dl('data.tar')}>data.tar</Button>
+            <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => dl('synonym.UTF-8')}>synonym</Button>
+          </Space>
+        )
+      },
     },
   ]
 
-  // 최근 빌드 통계
-  const 최근빌드 = 이력[0]
-  const 성공건수 = 이력.filter(h => h.status === 'success').length
-  const 실패건수 = 이력.filter(h => h.status === 'failed').length
-
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Title level={3}>빌드 이력</Title>
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      {/* ═══ 상단: 사전 빌드 ═══ */}
+      <Card
+        title={<Title level={4} style={{ margin: 0 }}>워크스페이스:{selectedWorkspace}({currentDomain}) 사전 빌드</Title>}
+        extra={
+          <Space>
+            <Select
+              value={선택jiana}
+              onChange={set선택jiana}
+              style={{ width: 140 }}
+              size="small"
+              options={jiana버전목록.map(v => ({ label: `jiana ${v}`, value: v }))}
+              placeholder="jiana 버전"
+            />
+            {빌드중 ? (
+              <Button danger icon={<StopOutlined />} onClick={빌드중지}>
+                빌드 중지
+              </Button>
+            ) : (
+              <Button type="primary" icon={<BuildOutlined />} onClick={빌드시작} disabled={!currentDomain}>
+                빌드 시작
+              </Button>
+            )}
+          </Space>
+        }
+      >
+        <div
+          ref={로그박스Ref}
+          style={{
+            height: 빌드중 || 빌드로그.length > 0 ? 300 : 60, overflowY: 'auto', background: '#1f1f1f',
+            color: '#d4d4d4', padding: 12, fontFamily: 'monospace',
+            fontSize: 12, borderRadius: 4, transition: 'height 0.3s',
+          }}
+        >
+          {빌드로그.length > 0
+            ? 빌드로그.map((l, i) => <div key={i}>{l}</div>)
+            : 빌드중
+              ? <div style={{ color: '#888' }}>빌드 준비 중...</div>
+              : <div style={{ color: '#555' }}>빌드를 시작하면 실시간 로그가 여기에 표시됩니다.</div>
+          }
+        </div>
+        {최근빌드상태 === 'completed' && 최근빌드ID && (
+          <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+            <Button icon={<ReloadOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'synonym.UTF-8')}>synonym.UTF-8 다운로드</Button>
+            <Button icon={<BuildOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'data.tar')}>data.tar 다운로드</Button>
+          </div>
+        )}
+      </Card>
 
-      <Tabs
-        activeKey={선택도메인}
-        onChange={set선택도메인}
-        items={도메인목록.map(d => ({ key: d, label: d.toUpperCase() }))}
-      />
+      <Divider />
 
-      {/* 통계 */}
+      {/* ═══ 하단: 빌드 이력 ═══ */}
+      <Title level={4}>빌드 이력</Title>
+
       <Row gutter={16}>
         <Col span={6}>
-          <Card>
-            <Statistic title="전체 빌드" value={이력.length} />
+          <Card size="small">
+            <Statistic title="전체 빌드" value={전체이력.length} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic title="성공" value={성공건수} valueStyle={{ color: '#3f8600' }} />
+          <Card size="small">
+            <Statistic title="성공" value={전체이력.filter(h => h.status === 'success' || h.status === 'completed').length} valueStyle={{ color: '#3f8600' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic title="실패" value={실패건수} valueStyle={{ color: '#cf1322' }} />
+          <Card size="small">
+            <Statistic title="실패" value={전체이력.filter(h => h.status === 'failed').length} valueStyle={{ color: '#cf1322' }} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic
-              title="최근 빌드 행 수"
-              value={최근빌드?.row_count ?? '-'}
-            />
+          <Card size="small">
+            <Statistic title="도메인 수" value={도메인통계목록.length} />
           </Card>
         </Col>
       </Row>
 
-      {/* 빌드 실행 */}
-      <Card
-        title={`${선택도메인.toUpperCase()} 사전 빌드`}
-        extra={
-          <Button
-            type="primary"
-            icon={<BuildOutlined />}
-            loading={빌드중}
-            onClick={빌드시작}
-          >
-            빌드 시작
-          </Button>
-        }
-      >
-        {빌드로그.length > 0 && (
-          <div
-            ref={로그박스Ref}
-            style={{
-              height: 250, overflowY: 'auto', background: '#1f1f1f',
-              color: '#d4d4d4', padding: 12, fontFamily: 'monospace',
-              fontSize: 12, borderRadius: 4,
-            }}
-          >
-            {빌드로그.map((l, i) => <div key={i}>{l}</div>)}
-          </div>
-        )}
-        {빌드로그.length === 0 && (
-          <Text type="secondary">빌드를 시작하면 실시간 로그가 여기에 표시됩니다.</Text>
-        )}
-      </Card>
+      {/* 도메인별 빌드 현황 차트 */}
+      {차트데이터.length > 0 && (
+        <Card size="small" title="도메인별 빌드 현황">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={차트데이터} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" fontSize={12} />
+              <YAxis fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="성공" stackId="a" fill="#52c41a" />
+              <Bar dataKey="실패" stackId="a" fill="#ff4d4f" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
-      {/* 이력 테이블 */}
+      {/* 전체 이력 테이블 */}
       <Card
-        title="빌드 이력 목록"
+        size="small"
+        title="전체 빌드 이력"
         extra={
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={() => 이력조회(선택도메인)}
-            loading={이력로딩}
-          >
+          <Button size="small" icon={<ReloadOutlined />} onClick={전체이력조회} loading={이력로딩}>
             새로고침
           </Button>
         }
       >
         <Table
           rowKey="id"
-          dataSource={이력}
-          columns={이력컬럼}
+          dataSource={전체이력}
+          columns={전체이력컬럼}
           size="small"
-          pagination={{ pageSize: 15 }}
+          pagination={{ pageSize: 15, showTotal: t => `총 ${t}건` }}
           loading={이력로딩}
         />
       </Card>

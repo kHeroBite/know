@@ -28,6 +28,7 @@ class BuildService:
         background_tasks: BackgroundTasks,
         domain: str,
         triggered_by: Optional[int] = None,
+        jiana_home: Optional[str] = None,
     ) -> dict:
         """사전 빌드 시작 (백그라운드 태스크)
 
@@ -56,7 +57,7 @@ class BuildService:
         db.commit()
         db.refresh(bh)
 
-        background_tasks.add_task(_run_build_background, bh.id, domain)
+        background_tasks.add_task(_run_build_background, bh.id, domain, jiana_home)
 
         logger.info("빌드 시작 등록: domain=%s, build_history_id=%s", domain, bh.id)
         return {
@@ -123,6 +124,43 @@ class BuildService:
             "domain": domain,
             "items": items,
         }
+
+    # ──────────────────────────────────────────────
+    # 전체 빌드 이력 (도메인 통합)
+    # ──────────────────────────────────────────────
+    def 전체빌드이력(self, db: Session, size: int = 50) -> dict:
+        """모든 도메인의 빌드 이력 통합 조회 (SQLite 직접)."""
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "know.db")
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.execute(
+                "SELECT id, domain, build_type, status, started_at, completed_at, "
+                "started_by, output_path, file_size, entry_count "
+                "FROM build_history ORDER BY id DESC LIMIT ?", (size,))
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+        items = []
+        agg = {}
+        for r in rows:
+            item = {
+                "id": r[0], "domain": r[1], "build_type": r[2], "status": r[3],
+                "started_at": r[4], "completed_at": r[5],
+                "started_by": r[6], "output_path": r[7],
+                "file_size": r[8], "row_count": r[9] or 0,
+            }
+            items.append(item)
+            dom = r[1] or "unknown"
+            if dom not in agg:
+                agg[dom] = {"total": 0, "success": 0, "failed": 0}
+            agg[dom]["total"] += 1
+            if r[3] == "success":
+                agg[dom]["success"] += 1
+            elif r[3] == "failed":
+                agg[dom]["failed"] += 1
+        domain_stats = [{"domain": k, **v} for k, v in agg.items()]
+        return {"items": items, "domain_stats": domain_stats}
 
     # ──────────────────────────────────────────────
     # 사전 동기화
@@ -230,14 +268,17 @@ def _bh_to_dict(bh: BuildHistory) -> dict:
         "output_path": bh.output_path,
         "file_size": bh.file_size,
         "error_message": None,                # 확장 시 bh.error_message 매핑
+        "log_text": bh.log_text or "",
     }
 
 
-async def _run_build_background(build_history_id: int, domain: str):
-    """BackgroundTask로 실행되는 빌드 래퍼"""
+async def _run_build_background(build_history_id: int, domain: str, jiana_home: str = None):
+    """BackgroundTask로 실행되는 빌드 래퍼 (스레드 풀에서 실행)"""
+    import asyncio
     try:
         from pipeline.build_wrapper import run_build
-        await run_build(domain=domain, build_history_id=build_history_id)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: run_build(domain=domain, build_history_id=build_history_id, jiana_home=jiana_home))
     except Exception as exc:
         logger.error(
             "백그라운드 빌드 실패: domain=%s, build_history_id=%s, err=%s",

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
   TeamOutlined, EditOutlined, TagsOutlined, RocketOutlined, BulbOutlined,
@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
+import { isMenuEnabled } from '../App'
 
 const { Sider, Content } = AntLayout
 
@@ -17,7 +18,7 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen, isAssigned } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen, isAssigned, isBuildPhase } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
 
   // ─── 핫키 표시 (REQ-17) ─────────────────────────────
@@ -86,8 +87,9 @@ export default function Layout() {
       children: [
         { key: '/workspace', label: '워크스페이스', icon: <AppstoreOutlined /> },
         { key: '/preprocess', label: '데이터 전처리', icon: <FilterOutlined />, disabled: !wsSelected || isFrozen },
-        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || !isFrozen || isAssigned },
+        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || !isFrozen || isAssigned || isBuildPhase },
         { key: '/knowledge-work', label: '작업실', icon: <EditOutlined />, disabled: !wsSelected || !isAssigned },
+        { key: '/build-history', label: '사전 빌드', icon: <HistoryOutlined />, disabled: !wsSelected || !isFrozen || isAssigned },
         { key: '/category', label: '카테고리 관리', icon: <TagsOutlined />, disabled: !wsSelected || !isAssigned },
         { key: '/pipeline', label: '파이프라인', icon: <RocketOutlined />, disabled: !wsSelected || !isAssigned },
         { key: '/knowledge', label: '지식작업', icon: <BulbOutlined />, disabled: !wsSelected || !isAssigned },
@@ -100,7 +102,6 @@ export default function Layout() {
       children: [
         { key: '/domain-manage', label: '도메인 관리', icon: <SettingOutlined /> },
         { key: '/statistics', label: '통계', icon: <BarChartOutlined /> },
-        { key: '/build-history', label: '빌드 이력', icon: <HistoryOutlined /> },
         { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리', icon: <UserOutlined /> }] : []),
       ],
@@ -191,7 +192,10 @@ export default function Layout() {
       </Sider>
       <AntLayout>
         <Content style={{ margin: 16, marginLeft: 216, overflowX: 'hidden' }}>
-          <Outlet />
+          {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, isFrozen, isAssigned, isBuildPhase })
+            ? <Navigate to="/" replace />
+            : <Outlet />
+          }
         </Content>
       </AntLayout>
     </AntLayout>

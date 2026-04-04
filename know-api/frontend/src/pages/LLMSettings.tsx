@@ -20,6 +20,7 @@ interface 프로바이더상태 {
   테스트중: boolean
   모델로딩중: boolean
   테스트통과: boolean
+  테스트결과: string
   is_active: boolean
 }
 
@@ -45,6 +46,7 @@ export default function LLMSettings() {
           테스트중: false,
           모델로딩중: false,
           테스트통과: s.test_passed === 1,
+          테스트결과: '',
           is_active: s.is_active === 1,
         }
         키맵[s.provider] = s.api_key
@@ -71,7 +73,7 @@ export default function LLMSettings() {
   }
 
   const 연결테스트 = async (provider: string) => {
-    상태업데이트(provider, { 테스트중: true })
+    상태업데이트(provider, { 테스트중: true, 테스트결과: '' })
     try {
       const key = 실제키값(provider)
       const { data } = await llmAPI.통신테스트(provider, {
@@ -80,15 +82,17 @@ export default function LLMSettings() {
       })
       if (data.success) {
         message.success(data.message)
-        상태업데이트(provider, { 테스트통과: true })
+        상태업데이트(provider, { 테스트통과: true, 테스트결과: `✅ ${data.message}` })
         모델목록로드(provider)
       } else {
         message.error(data.message)
-        상태업데이트(provider, { 테스트통과: false })
+        상태업데이트(provider, { 테스트통과: false, 테스트결과: `❌ ${data.message}` })
       }
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || '연결 테스트 실패')
-      상태업데이트(provider, { 테스트통과: false })
+      const detail = e?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : '연결 테스트 실패'
+      message.error(msg)
+      상태업데이트(provider, { 테스트통과: false, 테스트결과: `❌ ${msg}` })
     } finally {
       상태업데이트(provider, { 테스트중: false })
     }
@@ -222,6 +226,13 @@ export default function LLMSettings() {
                 </Button>
               )}
             </Space>
+            {s.테스트결과 && (
+              <div style={{ marginTop: 6 }}>
+                <Text style={{ fontSize: 12, color: s.테스트통과 ? '#52c41a' : '#ff4d4f' }}>
+                  {s.테스트결과}
+                </Text>
+              </div>
+            )}
           </div>
 
           {provider !== 'local' && (

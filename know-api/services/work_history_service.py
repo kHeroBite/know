@@ -13,7 +13,7 @@ from models.dictionary import 사전테이블가져오기
 
 
 def 이력목록조회(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """사용자별 작업이력 목록 조회."""
+    """사용자별 작업이력 목록 조회 + 현재 할당 시작시간."""
     rows = db.execute(
         text(
             "SELECT id, workspace, domain, user_id, action_type, dic_type, "
@@ -25,7 +25,15 @@ def 이력목록조회(db: Session, workspace: str, domain: str, user_id: str) -
         {"ws": workspace, "dom": domain, "uid": user_id},
     ).mappings().all()
     items = [dict(r) for r in rows]
-    return {"items": items, "total": len(items)}
+    # 현재 할당 세션의 시작시간 (가장 이른 assigned_at)
+    assigned_at = db.execute(
+        text(
+            "SELECT MIN(assigned_at) FROM keyword_assignments "
+            "WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'"
+        ),
+        {"ws": workspace, "dom": domain, "uid": user_id},
+    ).scalar()
+    return {"items": items, "total": len(items), "assigned_at": assigned_at}
 
 
 def 이력추가(

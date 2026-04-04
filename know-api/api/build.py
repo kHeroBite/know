@@ -1,7 +1,9 @@
 """api/build.py — 사전 빌드 REST API 라우터"""
 from __future__ import annotations
 
+import os
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from api.auth import 현재사용자가져오기
@@ -19,12 +21,75 @@ from services.build_service import build_service
 def 빌드시작(
     domain: str,
     background_tasks: BackgroundTasks,
+    jiana_version: str = Query(default=""),
     current_user: dict = Depends(현재사용자가져오기),
     db: Session = Depends(DB세션),
 ):
     """사전 빌드 시작 (백그라운드 실행)"""
     triggered_by = current_user.get("id") or current_user.get("user_id")
-    return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by)
+    jiana_home = None
+    if jiana_version:
+        jiana_home = f"/home/know/apps/know-ops/jiana/{jiana_version}"
+        if not os.path.isdir(jiana_home):
+            from fastapi import HTTPException
+            raise HTTPException(400, detail=f"jiana 버전 경로 없음: {jiana_home}")
+    return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home)
+
+
+@라우터.get("/{build_id}/download/{filename}")
+def 빌드파일다운로드(
+    build_id: int,
+    filename: str,
+    token: str = Query(default=""),
+    db: Session = Depends(DB세션),
+):
+    """빌드 결과 파일 다운로드 (data.tar, synonym.UTF-8). 토큰은 쿼리파라미터로 전달."""
+    from fastapi import HTTPException
+    from models.pipeline import BuildHistory
+    # 토큰 검증 (쿼리 파라미터)
+    if not token:
+        raise HTTPException(401, detail="토큰이 필요합니다")
+    from core.security import 토큰검증
+    if not 토큰검증(token):
+        raise HTTPException(401, detail="유효하지 않은 토큰")
+    bh = db.query(BuildHistory).filter_by(id=build_id).first()
+    if not bh or bh.status != "completed":
+        raise HTTPException(404, detail="완료된 빌드를 찾을 수 없습니다")
+    if bh.output_path:
+        jiana_dir = os.path.dirname(bh.output_path)
+    else:
+        jiana_dir = "/home/know/jiana1.5.12"
+    allowed = {"data.tar", "synonym.UTF-8"}
+    if filename not in allowed:
+        raise HTTPException(400, detail=f"허용되지 않는 파일: {filename}")
+    filepath = os.path.join(jiana_dir, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, detail=f"파일 없음: {filepath}")
+    return FileResponse(filepath, filename=filename, media_type="application/octet-stream")
+
+
+@라우터.get("/jiana-versions")
+def jiana버전목록(
+    current_user: dict = Depends(현재사용자가져오기),
+):
+    """jiana 폴더 목록 조회"""
+    import glob
+    base = "/home/know/apps/know-ops/jiana"
+    dirs = sorted([os.path.basename(d.rstrip("/")) for d in glob.glob(f"{base}/*/") if os.path.isdir(d)])
+    return {"versions": dirs, "base": base}
+
+
+@라우터.post("/{domain}/cancel")
+def 빌드취소(
+    domain: str,
+    current_user: dict = Depends(현재사용자가져오기),
+):
+    """진행 중인 빌드 취소"""
+    from pipeline.build_wrapper import cancel_build
+    cancelled = cancel_build()
+    if cancelled:
+        return {"success": True, "message": "빌드가 중지되었습니다."}
+    return {"success": False, "message": "진행 중인 빌드가 없습니다."}
 
 
 @라우터.get("/{domain}/status")
@@ -35,6 +100,58 @@ def 빌드상태조회(
 ):
     """현재 빌드 상태 (최신 BuildHistory)"""
     return build_service.빌드상태(db, domain)
+
+
+@라우터.get("/history-all")
+def 전체빌드이력(
+    current_user: dict = Depends(현재사용자가져오기),
+):
+    """전체 도메인 빌드 이력 통합 조회 (SQLite 직접)"""
+    import sqlite3
+    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "know.db")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # 계정 이름 매핑
+        accts = {}
+        try:
+            for a in conn.execute("SELECT _USER_ID, _NAME FROM accounts").fetchall():
+                accts[a[0]] = a[1]
+        except Exception:
+            pass
+        # 도메인→워크스페이스 매핑
+        dom_ws = {}
+        try:
+            for r in conn.execute("SELECT DISTINCT domain, workspace FROM keyword_assignments").fetchall():
+                dom_ws[r[0]] = r[1]
+        except Exception:
+            pass
+        rows = conn.execute(
+            "SELECT id, domain, build_type, status, started_at, completed_at, "
+            "started_by, output_path, file_size, entry_count "
+            "FROM build_history ORDER BY id DESC LIMIT 50"
+        ).fetchall()
+        items = [dict(r) for r in rows]
+        for it in items:
+            it["row_count"] = it.pop("entry_count", 0) or 0
+            uid = it.get("started_by") or ""
+            name = accts.get(uid, "")
+            it["started_by_display"] = f"{name}({uid})" if name else uid
+            it["workspace"] = dom_ws.get(it.get("domain", ""), "")
+        agg = {}
+        for it in items:
+            d = it.get("domain", "unknown")
+            if d not in agg:
+                agg[d] = {"total": 0, "success": 0, "failed": 0}
+            agg[d]["total"] += 1
+            if it["status"] in ("success", "completed"):
+                agg[d]["success"] += 1
+            elif it["status"] == "failed":
+                agg[d]["failed"] += 1
+        domain_stats = [{"domain": k, **v} for k, v in agg.items()]
+        return {"items": items, "domain_stats": domain_stats}
+    finally:
+        conn.close()
 
 
 @라우터.get("/{domain}/history")
