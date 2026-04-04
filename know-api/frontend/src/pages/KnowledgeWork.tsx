@@ -1341,7 +1341,7 @@ export default function KnowledgeWork() {
           // 등록 키워드셋 조회 (head/tail 정확일치)
           클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100 } })
             .then(({ data }) => {
-              const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
+              const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord)
               set등록키워드셋(items)
               if (items.length === 0) set추천포커스({ section: 1, item: 0 })
             }).catch(() => {})
@@ -1387,7 +1387,7 @@ export default function KnowledgeWork() {
         setActiveTab('thesaurus')
         클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100 } })
           .then(({ data }) => {
-            const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(selectedWord))
+            const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord)
             set등록키워드셋(items)
             if (items.length === 0) set추천포커스({ section: 1, item: 0 })
           }).catch(() => {})
@@ -1685,7 +1685,7 @@ export default function KnowledgeWork() {
                   set추천모달열림(true); 추천검색(컨텍스트메뉴.word); setActiveTab('thesaurus')
                   클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: 컨텍스트메뉴.word, size: 100 } })
                     .then(({ data }) => {
-                      const items = (data?.items || []).filter((i: any) => i.head_word === 컨텍스트메뉴.word || (i.tail_word || '').split(',').map((s: string) => s.trim()).includes(컨텍스트메뉴.word))
+                      const items = (data?.items || []).filter((i: any) => i.head_word === 컨텍스트메뉴.word)
                       set등록키워드셋(items)
                       if (items.length === 0) set추천포커스({ section: 1, item: 0 })
                     }).catch(() => {})
