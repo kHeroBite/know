@@ -32,14 +32,17 @@ MORPHEME_TIMEOUT = 120  # 배치 처리용 충분한 시간
 
 
 def cnlist_로딩(domain: str) -> set:
-    """도메인별 cnlist.ks 파일 로딩 → set 반환."""
-    cnlist_path = f"{DOMAIN_BASE}/{domain}/cnlist.ks"
+    """jiana 빌드 산출물 cnlist.ks 로딩 → set 반환.
+
+    domain 파라미터는 시그니처 유지용 (호환성). 실제로는 공통 cnlist 사용.
+    """
+    cnlist_path = "/home/know/apps/know-ops/jiana/1.5.12/txt_resrc/cndic/cnlist.ks"
     result = set()
     try:
         with open(cnlist_path, "r", encoding="utf-8") as f:
             for line in f:
                 stripped = line.strip()
-                if stripped:
+                if stripped and not stripped.startswith("#"):
                     result.add(stripped)
     except FileNotFoundError:
         logger.warning("cnlist.ks 없음: %s", cnlist_path)
@@ -125,47 +128,67 @@ def 사전검증(keywords: list, domain: str) -> dict:
     # 2. 배치 형태소분석
     분석결과 = 배치_형태소분석(keywords)
 
-    # 3. 분류 (Java Check_Synonym_NonWorkDic 로직)
+    # 3. 원본 라인 + 후속 토큰 그룹핑 파서
+    # 실제 jiana 출력: 원본 키워드 라인 → 후속 "단어 코드" 토큰 라인들 → 다음 원본 반복
+    키워드set = set(kw.strip() for kw in keywords if kw.strip())
+    그룹: dict[str, list[str]] = {}
+    현재키워드 = None
+    for line in 분석결과:
+        stripped = line.rstrip()
+        if not stripped:
+            continue
+        if stripped in 키워드set:
+            현재키워드 = stripped
+            그룹.setdefault(현재키워드, [])
+        elif 현재키워드 is not None:
+            그룹[현재키워드].append(stripped)
+
+    # 4. 분류
     missing = []
     ukall = []
     skipped = []
 
-    for line in 분석결과:
-        # a) 탭 없음 → skip
-        if "\t" not in line:
+    for kw in keywords:
+        kw = kw.strip()
+        if not kw:
+            continue
+        tokens = 그룹.get(kw, [])
+
+        if not tokens:
+            # 형태소분析 결과 없음 → skip
+            skipped.append(kw)
             continue
 
-        parts = line.split("\t")
-        base_kwd = parts[0]
-        analysis = parts[1] if len(parts) > 1 else ""
-
-        # b) 공백 없음 → skip (단일 토큰)
-        if " " not in analysis:
-            skipped.append(base_kwd)
-            continue
-
-        tokens = analysis.split(" ")
-        analyzed_word = tokens[0]
-        code = tokens[1] if len(tokens) > 1 else ""
-
-        if base_kwd == analyzed_word:
-            # c) 코드 "3" → ukall (미등록어)
-            if code == "3":
-                ukall.append(base_kwd)
-            else:
-                # d) 정상 단일어 → skip
-                skipped.append(base_kwd)
-        else:
-            # 분석 결과가 다름 → 복합어 가능성
-            if base_kwd not in cnlist:
-                # e) cnlist 미등록 → missing
-                if "comp : " not in base_kwd:
-                    missing.append({"keyword": base_kwd, "analysis": analysis})
+        if len(tokens) == 1:
+            # 토큰 1개: "단어 코드" 또는 "단어" 형식
+            parts = tokens[0].rsplit(" ", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                단어, 코드 = parts[0], parts[1]
+                if 단어 == kw:
+                    # 원본 == 분析어 (단일어로 분析됨)
+                    if 코드 == "3":
+                        ukall.append(kw)  # 미등록어
+                    else:
+                        skipped.append(kw)  # 정상 단일어
                 else:
-                    skipped.append(base_kwd)
+                    # 원본과 다른 단일 토큰 (부분 분析)
+                    if kw not in cnlist:
+                        missing.append({"keyword": kw, "analysis": tokens[0]})
+                    else:
+                        skipped.append(kw)
             else:
-                # f) cnlist 등록 완료 → skip
-                skipped.append(base_kwd)
+                # 코드 파싱 실패 → skip
+                skipped.append(kw)
+        else:
+            # 토큰 여러 개: 복합어로 분解됨
+            analysis = " ".join(tokens)
+            if kw not in cnlist:
+                if "comp : " not in kw:
+                    missing.append({"keyword": kw, "analysis": analysis})
+                else:
+                    skipped.append(kw)
+            else:
+                skipped.append(kw)
 
     return {
         "missing": missing,
