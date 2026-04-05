@@ -242,8 +242,7 @@ export default function Workspace() {
     try {
       await assignmentApi.초기화(wsName, domain)
       message.success('초기화 완료')
-      useWorkspaceStore.getState().setFrozen(false)
-      useWorkspaceStore.getState().setAssigned(false)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
     } catch (err: any) {
       message.error(err.response?.data?.detail || '초기화 실패')
     }

@@ -4,8 +4,10 @@ import {
   Card, Button, Table, Tag, Typography, Space, Select,
   message, Statistic, Row, Col, Divider
 } from 'antd'
-import { BuildOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
+import { BuildOutlined, ReloadOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { 빌드API } from '../api/pipeline'
+import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
@@ -58,6 +60,7 @@ function 파일다운로드(buildId: number, filename: string) {
 
 export default function BuildHistory() {
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const navigate = useNavigate()
   const currentDomain = selectedDomain || ''
 
   // 현재 워크스페이스 빌드
@@ -80,7 +83,7 @@ export default function BuildHistory() {
 
   // jiana 버전 목록 로드 + 도메인별 저장된 버전 복원
   useEffect(() => {
-    빌드API.jiana버전목록().then(res => {
+    빌드API.jiana버전목록().then((res: any) => {
       const versions = res.data?.versions || []
       setJiana버전목록(versions)
       const saved = localStorage.getItem(`jiana_version_${currentDomain}`)
@@ -114,7 +117,7 @@ export default function BuildHistory() {
   // 페이지 진입 시 최근 성공 빌드 로그 복원
   useEffect(() => {
     if (!currentDomain) return
-    빌드API.상태조회(currentDomain).then(res => {
+    빌드API.상태조회(currentDomain).then((res: any) => {
       const d = res.data
       if (d && d.log_text && (d.status === 'completed' || d.status === 'running')) {
         const lines = d.log_text.split('\n').filter((l: string) => l.trim())
@@ -130,7 +133,7 @@ export default function BuildHistory() {
   const 전체이력조회 = useCallback(async () => {
     set이력로딩(true)
     try {
-      const res = await 빌드API.전체이력()
+      const res: any = await 빌드API.전체이력()
       set전체이력(res.data?.items || [])
       set도메인통계목록(res.data?.domain_stats || [])
     } catch {
@@ -349,6 +352,17 @@ export default function BuildHistory() {
           <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
             <Button icon={<ReloadOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'synonym.UTF-8')}>synonym.UTF-8 다운로드</Button>
             <Button icon={<BuildOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'data.tar')}>data.tar 다운로드</Button>
+            <Button type="primary" icon={<CheckCircleOutlined />} onClick={async () => {
+              if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
+              try {
+                await workspaceAPI.advancePhase(selectedWorkspace, 'verify')
+                await useWorkspaceStore.getState().loadWorkspaceStatus()
+                message.success('검증 단계로 전환되었습니다')
+                navigate('/dict-verify')
+              } catch (e: any) {
+                message.error('phase 전환 실패: ' + (e?.response?.data?.detail || e.message))
+              }
+            }}>검증단계로</Button>
           </div>
         )}
       </Card>

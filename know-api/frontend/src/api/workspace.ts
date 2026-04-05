@@ -81,4 +81,17 @@ export const workspaceAPI = {
 
   saveHotkeys: (hotkeys: Record<string, string>) =>
     클라이언트.put('/workspaces/hotkeys', { hotkeys }),
+
+  // Phase 전이
+  advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify') =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/advance`, { to }),
+
+  getPhase: (workspace: string) =>
+    클라이언트.get(`/workspaces/${encodeURIComponent(workspace)}/phase`),
+
+  getMyPhase: (workspace: string, domain: string) =>
+    클라이언트.get(`/workspaces/${encodeURIComponent(workspace)}/my-phase`, { params: { domain } }),
+
+  setMyPhase: (workspace: string, domain: string, phase: 'idle' | 'working' | 'done') =>
+    클라이언트.put(`/workspaces/${encodeURIComponent(workspace)}/my-phase`, { domain, phase }),
 }

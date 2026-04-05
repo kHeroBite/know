@@ -138,10 +138,34 @@ CREATE TABLE IF NOT EXISTS llm_usage_log (
 
 ---
 
+---
+
+### user_work_phase 테이블 (2026-04-05 신규)
+
+```sql
+CREATE TABLE IF NOT EXISTS user_work_phase (
+    user_id TEXT NOT NULL,            -- 사용자 ID
+    domain TEXT NOT NULL,             -- 워크스페이스 도메인
+    phase TEXT NOT NULL DEFAULT 'idle', -- 'idle' | 'working' | 'done'
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (user_id, domain)
+);
+```
+
+**목적**: 워크스페이스 work 단계에서 사용자별 작업 진행 상태(idle/working/done) 저장  
+**주요 API**:
+- 조회: `GET /api/workspaces/{domain}/my-phase` → `{"phase": "idle|working|done"}`
+- 설정: `POST /api/workspaces/{domain}/my-phase` → phase 갱신
+- (workspace phase가 "work"일 때만 유효)
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-05 | user_work_phase 테이블 신규 생성 (user_id/domain/phase) | migrations/002_user_work_phase.sql |
+| 2026-04-05 | workspace phase enum 도입 (preprocess→work→build→verify) — isFrozen/isAssigned/isBuildPhase 제거 | workspace_service.py |
 | 2026-04-03 | llm_usage_log 테이블 신규 생성 (provider/model/user_id/tokens_used/duration_ms/success) | init_db.py |
 | 2026-04-02 | llm_settings 테이블 신규 생성 (provider/api_key/model_name/enabled/extra_config) | init_db.py |
 | 2026-04-02 | keyword_assignments.flag 컬럼 추가 (R/W/'') + API PUT /flag | init_db.py, assignment_service.py, api/assignment.py |

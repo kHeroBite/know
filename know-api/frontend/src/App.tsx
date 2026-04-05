@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
-import { useWorkspaceStore } from './stores/workspaceStore'
+import { useWorkspaceStore, type Phase, type MyPhase } from './stores/workspaceStore'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import DomainList from './pages/DomainList'
@@ -18,47 +18,55 @@ import Manual from './pages/Manual'
 import Assignment from './pages/Assignment'
 import KnowledgeWork from './pages/KnowledgeWork'
 import LLMSettings from './pages/LLMSettings'
+import DictVerify from './pages/DictVerify'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
-export function isMenuEnabled(path: string, ctx: { wsSelected: boolean; isFrozen: boolean; isAssigned: boolean; isBuildPhase: boolean }) {
+export function isMenuEnabled(
+  path: string,
+  ctx: { wsSelected: boolean; phase: Phase; myPhase: MyPhase }
+) {
+  const { wsSelected, phase, myPhase } = ctx
   const rules: Record<string, boolean> = {
     '/workspace': true,
-    '/preprocess': ctx.wsSelected && !ctx.isFrozen,
-    '/assignment': ctx.wsSelected && ctx.isFrozen && !ctx.isAssigned && !ctx.isBuildPhase,
-    '/knowledge-work': ctx.wsSelected && ctx.isAssigned,
-    '/category': ctx.wsSelected && ctx.isAssigned,
-    '/pipeline': ctx.wsSelected && ctx.isAssigned,
-    '/knowledge': ctx.wsSelected && ctx.isAssigned,
+    '/preprocess': wsSelected && phase === 'preprocess',
+    '/assignment': wsSelected && phase === 'work' && myPhase === 'idle',
+    '/knowledge-work': wsSelected && phase === 'work' && myPhase === 'working',
+    '/category': wsSelected && phase === 'work' && myPhase === 'working',
+    '/pipeline': wsSelected && phase === 'work' && myPhase === 'working',
+    '/knowledge': wsSelected && phase === 'work' && myPhase === 'working',
+    '/build-history': wsSelected && phase === 'build',
+    '/dict-verify': wsSelected && phase === 'verify',
     '/domain-manage': true,
     '/statistics': true,
-    '/build-history': ctx.wsSelected && ctx.isFrozen && !ctx.isAssigned,
     '/accounts': true,
     '/llm-settings': true,
     '/manual': true,
+    '/domains': true,
+    '/dictionary': true,
   }
   return rules[path] ?? false
 }
 
 function DefaultRoute() {
-  const { selectedWorkspace, isFrozen, isAssigned, isBuildPhase, _statusLoaded, lastMenu } = useWorkspaceStore()
+  const { selectedWorkspace, phase, myPhase, _statusLoaded, lastMenu } = useWorkspaceStore()
 
   // 워크스페이스 미선택 → workspace
   if (!selectedWorkspace) return <Navigate to="/workspace" replace />
   // 서버 상태 로드 미완료 → null 반환 (빈 화면으로 대기, re-render 시 올바른 경로로)
   if (!_statusLoaded) return null
   // lastMenu가 유효하고 활성화 상태이면 해당 메뉴로 이동
-  if (lastMenu && isMenuEnabled(lastMenu, { wsSelected: !!selectedWorkspace, isFrozen, isAssigned, isBuildPhase })) {
+  if (lastMenu && isMenuEnabled(lastMenu, { wsSelected: !!selectedWorkspace, phase, myPhase })) {
     return <Navigate to={lastMenu} replace />
   }
-  // 빌드 단계 → build-history
-  if (isBuildPhase) return <Navigate to="/build-history" replace />
-  // 할당 완료 → knowledge-work
-  if (isAssigned) return <Navigate to="/knowledge-work" replace />
-  // 프리징 완료 → assignment
-  if (isFrozen) return <Navigate to="/assignment" replace />
-  // 워크스페이스만 선택됨 → preprocess
-  return <Navigate to="/preprocess" replace />
+  // phase/myPhase 기반 기본 경로
+  if (phase === 'preprocess') return <Navigate to="/preprocess" replace />
+  if (phase === 'work' && myPhase === 'idle') return <Navigate to="/assignment" replace />
+  if (phase === 'work' && myPhase === 'working') return <Navigate to="/knowledge-work" replace />
+  if (phase === 'build') return <Navigate to="/build-history" replace />
+  if (phase === 'verify') return <Navigate to="/dict-verify" replace />
+  // 폴백 (phase === 'work' && myPhase === 'done' 등)
+  return <Navigate to="/workspace" replace />
 }
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -84,6 +92,7 @@ export default function App() {
         <Route path="pipeline" element={<Pipeline />} />
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="build-history" element={<BuildHistory />} />
+        <Route path="dict-verify" element={<DictVerify />} />
         <Route path="accounts" element={<AccountManagement />} />
         <Route path="llm-settings" element={<LLMSettings />} />
         <Route path="manual" element={<Manual />} />

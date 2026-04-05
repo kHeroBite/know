@@ -104,17 +104,33 @@ ssh -i ~/.ssh/know_rsa know@133.186.132.245
 ```
 /home/know/
 ├── apps/
-│   ├── know-ops/                     ← Python CLI 패키지
-│   │   └── base/                     ← 기본 리소스 (구 jiana_admin_server/base_1.5)
-│   │       ├── lib/
-│   │       │   ├── jiana1.5.jar      ← 형태소분석 엔진 (JDK 1.7 필수)
-│   │       │   └── dqdic-1.0.3.jar
-│   │       ├── dic/                  ← 도메인별 사전 디렉토리
-│   │       ├── pop_log/              ← 인기 검색어 로그 (TSV/CSV)
-│   │       ├── fail_log/             ← 실패 검색어 로그 (TSV/CSV)
-│   │       ├── work/                 ← 작업 출력 디렉토리
-│   │       ├── build.xml             ← ant 빌드 파일
-│   │       └── spam_kwd.pat          ← 스팸 패턴 파일
+│   ├── know-ops/                     ← 통합 운영 디렉토리
+│   │   ├── startup.sh                ← 시스템 통합 시작 (Redis + uvicorn)
+│   │   ├── shutdown.sh               ← 시스템 종료
+│   │   ├── www/                      ← FastAPI 웹 서버 (구 know-api)
+│   │   │   ├── main.py               ← FastAPI 앱 진입점 (:18000)
+│   │   │   ├── start.sh              ← uvicorn 단독 재시작
+│   │   │   ├── venv/                 ← Python 가상환경
+│   │   │   ├── api/                  ← FastAPI 라우터
+│   │   │   ├── services/             ← 비즈니스 로직
+│   │   │   ├── core/                 ← 설정/DB/보안
+│   │   │   ├── frontend/             ← React SPA
+│   │   │   │   ├── build_and_restart.sh  ← 빌드+재시작 스크립트
+│   │   │   │   ├── dist/             ← 빌드 결과
+│   │   │   │   └── src/              ← 소스코드
+│   │   │   └── know.db               ← SQLite DB
+│   │   ├── base/                     ← 기본 리소스 (구 jiana_admin_server/base_1.5)
+│   │   │   ├── lib/
+│   │   │   │   ├── jiana1.5.jar      ← 형태소분석 엔진 (JDK 1.7 필수)
+│   │   │   │   └── dqdic-1.0.3.jar
+│   │   │   ├── dic/                  ← 도메인별 사전 디렉토리
+│   │   │   ├── pop_log/              ← 인기 검색어 로그 (TSV/CSV)
+│   │   │   ├── fail_log/             ← 실패 검색어 로그 (TSV/CSV)
+│   │   │   ├── work/                 ← 작업 출력 디렉토리
+│   │   │   ├── build.xml             ← ant 빌드 파일
+│   │   │   └── spam_kwd.pat          ← 스팸 패턴 파일
+│   │   └── domain/                   ← 도메인별 사전 데이터
+│   │       └── {domain}/cnlist.ks    ← 복합어 사전
 │   ├── jiana_admin_server/           ← 기존 경로 (호환용)
 │   ├── bin/                          ← 유틸리티 쉘스크립트
 └── tomcat6/                          ← WAS (JSP 관리도구)
@@ -211,6 +227,7 @@ know pipeline input.txt --도메인 site1
   - executor.py: shell subprocess 완전 제거 → Python 모듈 직접 호출 + workspace 파라미터 지원
 - **Phase 2** ✅ 완료: FastAPI :18000 서버 + React SPA 관리 UI 구현 (JWT 인증, 도메인/사전/카테고리/통계 CRUD, systemd 유닛)
 - **Phase 3** ✅ 완료: Celery 자동화 파이프라인 구현 + 프론트엔드 통합 (Redis 미설치 → 동기 fallback 운영)
+- **Phase 4** ✅ 완료: 워크스페이스 통합 phase 시스템 도입 (preprocess→work→build→verify 4단계 enum) + 사전검증 파일기반 재작성 + user_work_phase SQLite 테이블
 
 ---
 
@@ -235,7 +252,8 @@ know-api/
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
-│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리
+│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify) + user_work_phase (idle/working/done)
+│   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증 — 파일 기반 재작성)
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
 │   ├── ai_analysis_service.py # AI 분석 서비스 (LLM + Wikipedia — LLM탭/Wikipedia탭 2종)
@@ -248,10 +266,12 @@ know-api/
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag)
+│   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
 ├── migrations/                # DB 마이그레이션 SQL
-│   └── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
+│   ├── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
+│   └── 002_user_work_phase.sql # user_work_phase 테이블 (사용자별 work 단계 상태)
 ├── pipeline/                  # Celery 태스크 모듈
 │   ├── tasks.py               # Celery 태스크 정의
 │   ├── refine.py              # 검색로그 정제 태스크
@@ -267,7 +287,8 @@ know-api/
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
     │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시)
     │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트)
-    │   └── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리)
+    │   ├── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리 + 통합 phase 전이 버튼)
+    │   └── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (LLM탭+Wikipedia탭 2탭 구조 — Google/Perplexity 제거)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
@@ -279,7 +300,8 @@ know-api/
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
     ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
-    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함)
+    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API)
+    ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
     ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
@@ -314,3 +336,14 @@ know-api/
 | /llm-settings | LLM 설정 4종 조회 (GET) |
 | /llm-settings/{provider} | LLM 설정 저장 (PUT) — openai/claude/gemini/local |
 | /stats/llm-usage | LLM 사용량 통계 조회 — provider별/기간별 집계 (GET) |
+
+### 워크스페이스 Phase 시스템 API (Phase 4 신규)
+
+| 경로 | 설명 |
+|------|------|
+| GET /api/workspaces/{domain}/phase | 현재 워크스페이스 phase 조회 (preprocess/work/build/verify) |
+| POST /api/workspaces/{domain}/phase/{target} | phase 전이 (target: work/build/verify/preprocess) |
+| GET /api/workspaces/{domain}/my-phase | 내 작업 phase 조회 (idle/working/done) |
+| POST /api/workspaces/{domain}/my-phase | 내 작업 phase 설정 |
+| POST /api/dict-verify/run | 사전검증 실행 (user.ks/cnlist.ks/synonym.UTF-8 교차검증) |
+| GET /api/dict-verify/status | 사전검증 마지막 결과 조회 |

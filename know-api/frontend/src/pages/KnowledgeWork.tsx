@@ -758,7 +758,7 @@ const 기본추천프롬프트 = `[필수] 반드시 한국어로 응답하라. 
 
 export default function KnowledgeWork() {
   const navigate = useNavigate()
-  const { selectedWorkspace, selectedDomain, selectedColor, setAssigned } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
   const user = useAuthStore(s => s.user)
 
   // 키워드 목록
@@ -1535,7 +1535,7 @@ export default function KnowledgeWork() {
     try {
       await assignmentApi.완료모드(selectedWorkspace, selectedDomain, mode)
       message.success('작업이 완료 처리되었습니다.')
-      setAssigned(false)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
       setCompleteModalOpen(false)
       navigate('/assignment')
     } catch (err: any) {
@@ -1543,7 +1543,7 @@ export default function KnowledgeWork() {
     } finally {
       setCompleteLoading(false)
     }
-  }, [selectedWorkspace, selectedDomain, setAssigned, navigate])
+  }, [selectedWorkspace, selectedDomain, navigate])
 
   // ─── Guard ──────────────────────────────────────────────────
 

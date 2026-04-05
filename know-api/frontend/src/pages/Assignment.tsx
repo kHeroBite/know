@@ -90,7 +90,7 @@ export default function Assignment() {
     try {
       const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine)
       message.success(data.message || `${fromLine}~${toLine} 할당 완료`)
-      useWorkspaceStore.getState().setAssigned(true)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
       navigate('/knowledge-work')
       통계조회()
       목록조회(1)
@@ -205,9 +205,8 @@ export default function Assignment() {
                 type="primary"
                 icon={<RocketOutlined />}
                 disabled={stats.assigned > 0}
-                onClick={() => {
-                  useWorkspaceStore.getState().setAssigned(false)
-                  useWorkspaceStore.getState().setBuildPhase(true)
+                onClick={async () => {
+                  await useWorkspaceStore.getState().advancePhase('build')
                   navigate('/build-history')
                 }}
               >

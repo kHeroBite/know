@@ -2,21 +2,24 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import 클라이언트 from '../api/client'
 import { assignmentApi } from '../api/assignment'
+import { workspaceAPI } from '../api/workspace'
+
+export type Phase = 'preprocess' | 'work' | 'build' | 'verify'
+export type MyPhase = 'idle' | 'working' | 'done'
 
 interface WorkspaceState {
   selectedWorkspace: string | null
   selectedDomain: string | null
   selectedColor: string | null
   lastMenu: string | null
-  isFrozen: boolean
-  isAssigned: boolean
-  isBuildPhase: boolean
+  phase: Phase
+  myPhase: MyPhase
   _statusLoaded: boolean
   setWorkspace: (name: string, domain: string, color: string | null) => void
   clearWorkspace: () => void
-  setFrozen: (v: boolean) => void
-  setAssigned: (v: boolean) => void
-  setBuildPhase: (v: boolean) => void
+  setPhase: (p: Phase) => void
+  setMyPhase: (p: MyPhase) => void
+  advancePhase: (to: Phase) => Promise<void>
   setLastMenu: (path: string) => void
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
@@ -30,27 +33,31 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       selectedDomain: null,
       selectedColor: null,
       lastMenu: null,
-      isFrozen: false,
-      isAssigned: false,
-      isBuildPhase: false,
+      phase: 'preprocess',
+      myPhase: 'idle',
       _statusLoaded: false,
       setWorkspace: (name, domain, color) => {
-        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, isFrozen: false, isAssigned: false, isBuildPhase: false, _statusLoaded: false })
+        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
-        // 프리징/할당 상태 복원
+        // phase/myPhase 상태 복원
         assignmentApi.작업상태(name, domain).then(res => {
-          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+          set({ phase: res.data.phase, myPhase: res.data.my_phase })
         }).catch(() => {})
       },
       clearWorkspace: () => {
-        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, isFrozen: false, isAssigned: false, isBuildPhase: false, _statusLoaded: false })
+        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버 설정도 초기화 — 재로그인 시 이전 워크스페이스 복원 방지
         클라이언트.put('/workspaces/preference', { workspace: '', domain: null, color: null }).catch(() => {})
       },
-      setFrozen: (v) => set({ isFrozen: v }),
-      setAssigned: (v) => set({ isAssigned: v }),
-      setBuildPhase: (v) => set({ isBuildPhase: v }),
+      setPhase: (p) => set({ phase: p }),
+      setMyPhase: (p) => set({ myPhase: p }),
+      advancePhase: async (to) => {
+        const { selectedWorkspace, selectedDomain } = get()
+        if (!selectedWorkspace || !selectedDomain) return
+        await workspaceAPI.advancePhase(selectedWorkspace, to)
+        await get().loadWorkspaceStatus()
+      },
       setLastMenu: (path) => {
         const prev = get().lastMenu
         if (prev === path) return
@@ -67,10 +74,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const { data } = await 클라이언트.get('/workspaces/preference')
           if (data.workspace) {
             set({ selectedWorkspace: data.workspace, selectedDomain: data.domain, selectedColor: data.color, lastMenu: data.last_menu || null })
-            // 프리징/할당 상태 복원
+            // phase/myPhase 상태 복원
             try {
               const res = await assignmentApi.작업상태(data.workspace, data.domain)
-              set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned })
+              set({ phase: res.data.phase, myPhase: res.data.my_phase })
             } catch {
               // 상태 조회 실패 시 기본값 유지
             }
@@ -98,7 +105,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
         try {
           const res = await assignmentApi.작업상태(selectedWorkspace, selectedDomain)
-          set({ isFrozen: res.data.is_frozen, isAssigned: res.data.is_assigned, isBuildPhase: res.data.stats.assigned === 0 && res.data.stats.completed > 0, _statusLoaded: true })
+          set({ phase: res.data.phase, myPhase: res.data.my_phase, _statusLoaded: true })
         } catch {
           set({ _statusLoaded: true })
         }

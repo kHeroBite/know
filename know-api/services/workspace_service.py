@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -18,6 +20,10 @@ DOMAIN_DIR = "/home/know/apps/know-ops/domain"
 STATE_FILE = "/home/know/apps/know-ops/workspace/.state.json"
 USER_PREF_FILE = "/home/know/apps/know-ops/workspace/.user_pref.json"
 DOMAIN_META_FILE = "/home/know/apps/know-ops/domain/.meta.json"
+
+# 워크스페이스 phase 순서 (preprocess → work → build → verify)
+PHASES = ["preprocess", "work", "build", "verify"]
+PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
 def _상태읽기() -> dict[str, Any]:
@@ -83,9 +89,9 @@ def 워크스페이스생성(name: str, color: str | None = None) -> dict[str, A
         os.makedirs(os.path.join(ws경로, 하위), exist_ok=True)
 
     상태 = _상태읽기()
-    상태[name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": color}
+    상태[name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": color, "phase": "preprocess"}
     _상태쓰기(상태)
-    return {"name": name, "status": "IDLE", "domain": None, "connected_by": None, "color": color}
+    return {"name": name, "status": "IDLE", "domain": None, "connected_by": None, "color": color, "phase": "preprocess"}
 
 
 def 워크스페이스삭제(name: str) -> None:
@@ -493,3 +499,122 @@ def 도메인목록() -> list[dict[str, str | None]]:
         for 항목 in sorted(Path(DOMAIN_DIR).iterdir())
         if 항목.is_dir()
     ]
+
+
+# ============================================================================
+# 워크스페이스 Phase 관리 (preprocess → work → build → verify)
+# ============================================================================
+
+def phase조회(ws_name: str) -> str:
+    """워크스페이스의 현재 phase 조회. 없으면 기본값 'preprocess'."""
+    상태 = _상태읽기()
+    ws상태 = 상태.get(ws_name, {})
+    return ws상태.get("phase", "preprocess")
+
+
+def phase전이(ws_name: str, next_phase: str) -> dict[str, Any]:
+    """워크스페이스 phase 순방향 전이. 역전이/건너뛰기는 409."""
+    if next_phase not in PHASE_ORDER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"유효하지 않은 phase: {next_phase}",
+        )
+    상태 = _상태읽기()
+    if ws_name not in 상태:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
+        )
+    현재 = 상태[ws_name].get("phase", "preprocess")
+    현재순서 = PHASE_ORDER.get(현재, 0)
+    다음순서 = PHASE_ORDER[next_phase]
+    # 순방향 1단계 전이만 허용 (역전이/건너뛰기 금지)
+    if 다음순서 != 현재순서 + 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"phase 전이 불가: {현재} → {next_phase} (순방향 1단계만 허용)",
+        )
+    상태[ws_name]["phase"] = next_phase
+    _상태쓰기(상태)
+    return {"name": ws_name, "phase": next_phase, "prev": 현재}
+
+
+def 사용자phase조회(db, ws: str, dom: str, uid: str) -> str:
+    """user_work_phase 테이블에서 사용자 phase 조회. 없으면 'idle'."""
+    from sqlalchemy import text
+    row = db.execute(
+        text("SELECT phase FROM user_work_phase WHERE workspace=:ws AND domain=:dom AND user_id=:uid"),
+        {"ws": ws, "dom": dom, "uid": uid},
+    ).fetchone()
+    phase = row[0] if row else "idle"
+    return {"workspace": ws, "domain": dom, "user_id": uid, "phase": phase}
+
+
+def 사용자phase설정(db, ws: str, dom: str, uid: str, phase: str) -> None:
+    """user_work_phase UPSERT (INSERT OR REPLACE)."""
+    from sqlalchemy import text
+    db.execute(
+        text("""
+            INSERT OR REPLACE INTO user_work_phase (workspace, domain, user_id, phase, updated_at)
+            VALUES (:ws, :dom, :uid, :phase, CURRENT_TIMESTAMP)
+        """),
+        {"ws": ws, "dom": dom, "uid": uid, "phase": phase},
+    )
+    db.commit()
+    return {"workspace": ws, "domain": dom, "user_id": uid, "phase": phase}
+
+
+def _phase자동마이그레이션(db) -> None:
+    """기존 워크스페이스 중 phase 필드가 없는 항목에 대해 keyword_assignments 카운트 기반 추론.
+
+    추론 규칙:
+      - total=0 → preprocess
+      - assigned>0 (pending/assigned 존재) → work
+      - completed>0 AND assigned=0 (모두 완료) → build
+    """
+    from sqlalchemy import text
+    상태 = _상태읽기()
+    변경 = False
+    for ws_name, ws_state in 상태.items():
+        if "phase" in ws_state:
+            continue
+        도메인 = ws_state.get("domain")
+        if not 도메인:
+            ws_state["phase"] = "preprocess"
+            변경 = True
+            continue
+        try:
+            total = db.execute(
+                text("SELECT COUNT(*) FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
+                {"ws": ws_name, "dom": 도메인},
+            ).scalar() or 0
+            assigned = db.execute(
+                text("""
+                    SELECT COUNT(*) FROM keyword_assignments
+                    WHERE workspace=:ws AND domain=:dom AND status IN ('pending','assigned')
+                """),
+                {"ws": ws_name, "dom": 도메인},
+            ).scalar() or 0
+            completed = db.execute(
+                text("""
+                    SELECT COUNT(*) FROM keyword_assignments
+                    WHERE workspace=:ws AND domain=:dom AND status='completed'
+                """),
+                {"ws": ws_name, "dom": 도메인},
+            ).scalar() or 0
+        except Exception:
+            ws_state["phase"] = "preprocess"
+            변경 = True
+            continue
+        if total == 0:
+            추론 = "preprocess"
+        elif assigned > 0:
+            추론 = "work"
+        elif completed > 0 and assigned == 0:
+            추론 = "build"
+        else:
+            추론 = "preprocess"
+        ws_state["phase"] = 추론
+        변경 = True
+    if 변경:
+        _상태쓰기(상태)

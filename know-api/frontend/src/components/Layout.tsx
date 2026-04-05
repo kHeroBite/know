@@ -5,6 +5,7 @@ import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
   TeamOutlined, EditOutlined, TagsOutlined, RocketOutlined, BulbOutlined,
   SettingOutlined, BarChartOutlined, HistoryOutlined, UserOutlined, QuestionCircleOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -18,7 +19,7 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace, selectedDomain, selectedColor, isFrozen, isAssigned, isBuildPhase } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor, phase, myPhase } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
 
   // ─── 핫키 표시 (REQ-17) ─────────────────────────────
@@ -86,13 +87,14 @@ export default function Layout() {
       icon: <BulbOutlined />,
       children: [
         { key: '/workspace', label: '워크스페이스', icon: <AppstoreOutlined /> },
-        { key: '/preprocess', label: '데이터 전처리', icon: <FilterOutlined />, disabled: !wsSelected || isFrozen },
-        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || !isFrozen || isAssigned || isBuildPhase },
-        { key: '/knowledge-work', label: '작업실', icon: <EditOutlined />, disabled: !wsSelected || !isAssigned },
-        { key: '/build-history', label: '사전 빌드', icon: <HistoryOutlined />, disabled: !wsSelected || !isFrozen || isAssigned },
-        { key: '/category', label: '카테고리 관리', icon: <TagsOutlined />, disabled: !wsSelected || !isAssigned },
-        { key: '/pipeline', label: '파이프라인', icon: <RocketOutlined />, disabled: !wsSelected || !isAssigned },
-        { key: '/knowledge', label: '지식작업', icon: <BulbOutlined />, disabled: !wsSelected || !isAssigned },
+        { key: '/preprocess', label: '데이터 전처리', icon: <FilterOutlined />, disabled: !wsSelected || phase !== 'preprocess' },
+        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'idle' },
+        { key: '/knowledge-work', label: '작업실', icon: <EditOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/build-history', label: '사전 빌드', icon: <HistoryOutlined />, disabled: !wsSelected || phase !== 'build' },
+        { key: '/dict-verify', label: '사전 검증', icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'verify' },
+        { key: '/category', label: '카테고리 관리', icon: <TagsOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/pipeline', label: '파이프라인', icon: <RocketOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/knowledge', label: '지식작업', icon: <BulbOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
       ],
     },
     {
@@ -192,7 +194,7 @@ export default function Layout() {
       </Sider>
       <AntLayout>
         <Content style={{ margin: 16, marginLeft: 216, overflowX: 'hidden' }}>
-          {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, isFrozen, isAssigned, isBuildPhase })
+          {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />
           }

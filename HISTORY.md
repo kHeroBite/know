@@ -1,5 +1,47 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-05 — 워크스페이스 통합 phase 시스템 도입 + 사전검증 파일기반 재작성 (커밋: TBD)
+
+### 수정 내용
+
+**핵심 변경**: 3개 플래그(isFrozen/isAssigned/isBuildPhase) 완전 제거 → 통합 phase enum 도입
+
+#### 아키텍처 변경
+- **workspace phase** (4단계): `preprocess` → `work` → `build` → `verify`
+- **user_work_phase** (work 단계 전용): `idle` | `working` | `done`
+- SQLite `user_work_phase` 테이블 신설 (migrations/002_user_work_phase.sql)
+
+#### 수정 파일 (총 20개)
+- `services/workspace_service.py` — phase 전이 로직 + user_work_phase CRUD
+- `api/workspace.py` — phase 전이 4개 API + my-phase 2개 API
+- `schemas/workspace.py` — 신규 스키마 파일
+- `services/dict_verify_service.py` — 사전검증 파일기반 재작성 (신규)
+- `api/dict_verify.py` — 사전검증 API (신규)
+- `migrations/002_user_work_phase.sql` — 마이그레이션 SQL (신규)
+- `main.py` — migration 주석 파싱 버그 수정 + dict_verify 라우터 등록
+- `api/assignment.py` — phase 연동 수정
+- `frontend/src/api/workspace.ts` — phase 전이 API 클라이언트
+- `frontend/src/api/dict_verify.ts` — 사전검증 API 클라이언트 (신규)
+- `frontend/src/pages/Workspace.tsx` — "검증단계로"/"다음단계로" 버튼 추가
+- `frontend/src/pages/DictVerify.tsx` — 사전검증 페이지 (신규)
+- `frontend/src/pages/Assignment.tsx`, `BuildHistory.tsx`, `KnowledgeWork.tsx`, `Phase1Pipeline.tsx`
+- `frontend/src/components/Layout.tsx` — DictVerify 메뉴 추가
+- `frontend/src/App.tsx` — DictVerify 라우트 추가
+- `frontend/src/stores/workspaceStore.ts`
+
+#### ktest 중 발견·수정된 버그 6개
+1. workspace.ts 중복 advancePhase export (TS1117)
+2. Python 3.8 호환성 `tuple[set]` PEP585 사용 (L-028 재발)
+3. 사용자phase조회/설정 반환값 누락
+4. GET /phase str 반환 → dict 래핑
+5. main.py migration SQL 주석 스킵 버그
+6. api/dict_verify.py build_history 컬럼 오류 (workspace → domain)
+
+### ktest 결과
+- must 13/13 ✅, should 4/4 ✅
+
+---
+
 ## 2026-04-03 — LLM 사용 통계 + AI분석 UI 개선 + 작업완료 모달 + 유사어LLM제외 최적화 (커밋: 47d630f)
 
 ### 수정 내용

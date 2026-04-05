@@ -9,26 +9,24 @@ from core.database import DB세션
 from api.auth import 현재사용자가져오기
 from services import assignment_service
 from services.work_history_service import 이력전체삭제
+from services.workspace_service import phase전이, phase조회, 사용자phase설정, 사용자phase조회
 
 라우터 = APIRouter()
 
 @라우터.get("/status")
 def 작업상태(workspace: str = Query(...), domain: str = Query(...),
             db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
-    """현재 워크스페이스의 프리징/할당 상태 반환."""
+    """현재 워크스페이스 phase + 사용자 myPhase + 통계 반환."""
     stats = assignment_service.통계(db, workspace, domain)
     user_id = current["user_id"]
 
-    # 프리징 여부: keyword_assignments에 데이터가 1건 이상 존재
-    is_frozen = stats["total"] > 0
+    ws_phase = phase조회(workspace)
+    my_phase = 사용자phase조회(db, workspace, domain, user_id)
 
-    # 할당 여부: 현재 사용자에게 assigned 상태인 키워드가 1건 이상
-    assigned_count = db.execute(text(
-        "SELECT COUNT(*) FROM keyword_assignments WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'"
-    ), {"ws": workspace, "dom": domain, "uid": user_id}).scalar() or 0
-    is_assigned = assigned_count > 0
+    phase_val = ws_phase.get("phase") if isinstance(ws_phase, dict) else ws_phase
+    my_phase_val = my_phase.get("phase") if isinstance(my_phase, dict) else my_phase
 
-    return {"is_frozen": is_frozen, "is_assigned": is_assigned, "stats": stats}
+    return {"phase": phase_val, "my_phase": my_phase_val, "stats": stats}
 
 @라우터.post("/freeze")
 def 프리징(workspace: str = Query(...), domain: str = Query(...),
@@ -58,7 +56,10 @@ def 통계(workspace: str = Query(...), domain: str = Query(...),
 def 할당(workspace: str = Query(...), domain: str = Query(...),
          from_line: int = Query(...), to_line: int = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
-    return assignment_service.할당받기(db, workspace, domain, from_line, to_line, current["user_id"])
+    result = assignment_service.할당받기(db, workspace, domain, from_line, to_line, current["user_id"])
+    # 사이드이펙트: 할당 성공 시 myPhase → working
+    사용자phase설정(db, workspace, domain, current["user_id"], "working")
+    return result
 
 @라우터.put("/flag")
 def flag_업데이트처리(
@@ -70,10 +71,26 @@ def flag_업데이트처리(
     """키워드 읽음/작업완료 flag 업데이트."""
     return assignment_service.flag_업데이트(db, keyword_id, flag, current["user_id"])
 
+def _완료후_사이드이펙트(db: Session, workspace: str, domain: str, user_id: str) -> None:
+    """완료 이벤트 후 myPhase=done + 100% 완료 시 phase→build 전이."""
+    사용자phase설정(db, workspace, domain, user_id, "done")
+    stats = assignment_service.통계(db, workspace, domain)
+    total = stats.get("total", 0)
+    completed = stats.get("completed", 0)
+    if total > 0 and completed >= total:
+        try:
+            phase전이(workspace, "build")
+        except Exception:
+            # 이미 build 이상이거나 전이 불가 상태면 무시
+            pass
+
+
 @라우터.post("/complete")
 def 완료(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(DB세션), current: dict = Depends(현재사용자가져오기)):
-    return assignment_service.완료처리(db, workspace, domain, current["user_id"])
+    result = assignment_service.완료처리(db, workspace, domain, current["user_id"])
+    _완료후_사이드이펙트(db, workspace, domain, current["user_id"])
+    return result
 
 
 class 완료모드요청(BaseModel):
@@ -87,6 +104,7 @@ def 완료처리_모드(body: 완료모드요청, db: Session = Depends(DB세션
                   current: dict = Depends(현재사용자가져오기)):
     """작업완료 모드별 처리: all_complete / all_incomplete / by_history."""
     result = assignment_service.작업완료모드처리(db, body.workspace, body.domain, current["user_id"], body.mode)
+    _완료후_사이드이펙트(db, body.workspace, body.domain, current["user_id"])
     mode_labels = {
         "all_complete": "전체 완료처리",
         "all_incomplete": "전체 미완료처리",

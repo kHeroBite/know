@@ -9,13 +9,23 @@ from sqlalchemy.orm import Session
 
 from api.auth import 현재사용자가져오기
 from core.database import DB세션
+from schemas.workspace import (
+    MyPhaseRequest,
+    MyPhaseResponse,
+    PhaseAdvanceRequest,
+    WorkspacePhaseResponse,
+)
 from services.workspace_service import (
+    phase전이,
+    phase조회,
     도메인목록,
     도메인연결,
     도메인삭제,
     도메인이름변경,
     도메인추가,
     도메인추가진행률,
+    사용자phase설정,
+    사용자phase조회,
     old도메인목록,
     사용자설정읽기,
     사용자설정저장,
@@ -266,6 +276,47 @@ def 워크스페이스색상변경(
 ) -> Dict[str, Any]:
     """워크스페이스 테마 색상 변경."""
     return 색상변경(name, 요청.color)
+
+
+@라우터.post("/{name}/phase/advance", response_model=WorkspacePhaseResponse)
+def 워크스페이스phase전이(
+    name: str,
+    요청: PhaseAdvanceRequest,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """워크스페이스 phase 순방향 전이."""
+    return phase전이(name, 요청.to)
+
+
+@라우터.get("/{name}/phase")
+def 워크스페이스phase조회(
+    name: str,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """현재 워크스페이스 phase 조회."""
+    return {"phase": phase조회(name)}
+
+
+@라우터.get("/{name}/my-phase", response_model=MyPhaseResponse)
+def 사용자phase조회처리(
+    name: str,
+    domain: str,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """현재 사용자의 myPhase 조회."""
+    return 사용자phase조회(db, name, domain, current.get("user_id", ""))
+
+
+@라우터.put("/{name}/my-phase", response_model=MyPhaseResponse)
+def 사용자phase설정처리(
+    name: str,
+    요청: MyPhaseRequest,
+    db: Session = Depends(DB세션),
+    current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """사용자 myPhase 변경."""
+    return 사용자phase설정(db, name, 요청.domain, current.get("user_id", ""), 요청.phase)
 
 
 @라우터.get("/{name}/progress")

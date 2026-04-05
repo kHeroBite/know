@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from core.database import DB연결확인
+from core.database import DB연결확인, 엔진, 세션팩토리
 from api.auth import 라우터 as 인증라우터
 from api.domain import 라우터 as 도메인라우터
 from api.dictionary import 라우터 as 사전라우터
@@ -22,6 +22,7 @@ from api.morpheme import 라우터 as 형태소라우터
 from api.work_history import 라우터 as 작업이력라우터
 from api.ai_analysis import 라우터 as AI분석라우터
 from api.llm_settings import 라우터 as LLM설정라우터
+from api.dict_verify import 라우터 as 사전검증라우터
 
 
 앱 = FastAPI(
@@ -59,7 +60,38 @@ from api.llm_settings import 라우터 as LLM설정라우터
 앱.include_router(작업이력라우터, prefix="/api", tags=["작업이력"])
 앱.include_router(AI분석라우터, prefix="/api", tags=["AI분석"])
 앱.include_router(LLM설정라우터, prefix="/api/llm-settings", tags=["LLM설정"])
+앱.include_router(사전검증라우터, prefix="/api", tags=["사전검증"])
 
+
+
+@앱.on_event("startup")
+def _마이그레이션_실행():
+    """서버 기동 시 신규 테이블 생성 + 기존 워크스페이스 phase 자동 추론."""
+    from sqlalchemy import text
+    마이그레이션경로 = os.path.join(os.path.dirname(__file__), "migrations", "002_user_work_phase.sql")
+    try:
+        with open(마이그레이션경로, "r", encoding="utf-8") as f:
+            sql문 = f.read()
+        with 엔진.connect() as conn:
+            for 문장 in sql문.split(";"):
+                # 주석 라인 제거 후 실제 SQL만 추출
+                sql_라인 = [l for l in 문장.splitlines() if l.strip() and not l.strip().startswith("--")]
+                정제된_sql = " ".join(sql_라인).strip()
+                if 정제된_sql:
+                    conn.execute(text(정제된_sql))
+            conn.commit()
+    except Exception as e:
+        print(f"[migration 002] 실행 실패: {e}")
+    # phase 자동 마이그레이션 (기존 워크스페이스 대상)
+    try:
+        from services.workspace_service import _phase자동마이그레이션
+        db = 세션팩토리()
+        try:
+            _phase자동마이그레이션(db)
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[phase 자동마이그레이션] 실행 실패: {e}")
 
 
 @앱.get("/api/health")

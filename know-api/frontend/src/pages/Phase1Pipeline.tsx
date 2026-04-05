@@ -152,7 +152,7 @@ export default function Phase1Pipeline() {
     try {
       const { data } = await assignmentApi.프리징(selectedWorkspace, selectedDomain)
       setFreezeStatus('completed')
-      useWorkspaceStore.getState().setFrozen(true)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
       message.success(`프리징 완료: ${data.total || 0}건`)
       navigate('/assignment')
     } catch (e: any) {

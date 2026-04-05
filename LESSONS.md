@@ -198,6 +198,41 @@ elif os.path.isdir(path):
 **재발방지**: PLAN 상태에서 팀에이전트/서브에이전트 spawn 불가 원칙 재확인. kplan 실행 중 spawn이 필요한 경우 파이프라인 상태 전환(DEV 등) 후 시도.
 **Level**: 2 (MEMORY.md 반영)
 
+### L-028: Python 3.8 서버 PEP585 타입힌트 재발 — from __future__ annotations 필수 (2026-04-05)
+
+**현상**: `services/dict_verify_service.py`에서 `tuple[set]` PEP585 내장 제네릭 사용 → Python 3.8 서버에서 TypeError 발생. ktest에서 발견·수정.
+**원인**: L-025에서 Level 1(LESSONS.md 기록)만 처리하여 kdev 스킬 규칙 강제화 없었음 → 재발.
+**재발방지**: `from __future__ import annotations` 파일 상단 필수. `list[T]`/`dict[K,V]`/`tuple[T]`/`set[T]` 모두 금지 — `from typing import List, Dict, Tuple, Set` 사용. kdev/SKILL.md에 "Python 파일 작성 규칙" 섹션 추가 완료.
+**Level**: 3 (kdev SKILL.md 규칙 강화 — L-025 재발)
+
+### L-029: FastAPI 엔드포인트 반환값 누락 + str 직접 반환 금지 (2026-04-05)
+
+**현상**: 사용자phase조회(`GET /phase`) → str 직접 반환 (dict 래핑 필요), 사용자phase설정 → return문 반환값 누락.
+**원인**: 신규 API 엔드포인트 구현 시 반환 타입 일관성 검토 없이 구현.
+**재발방지**: FastAPI 엔드포인트 구현 시 (1) 모든 return문에 반환값 필수, (2) str 반환 금지 → `{"result": value}` dict 래핑.
+**Level**: 2 (docs 기록)
+
+### L-030: TypeScript 중복 export 오류 (TS1117) — export 추가 전 기존 목록 확인 (2026-04-05)
+
+**현상**: `workspace.ts`에서 `advancePhase` 함수를 2중 export → TS1117 컴파일 오류.
+**원인**: 대규모 리팩토링 시 export 목록 중복 체크 없이 함수 추가.
+**재발방지**: TypeScript 파일에 export 추가 시 파일 내 기존 export 목록과 중복 여부 grep 확인 후 추가.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-031: SQL migration 주석 라인 스킵 버그 — 파싱 시 필터링 필수 (2026-04-05)
+
+**현상**: `main.py`의 SQL migration 파일 파싱 시 `--` 주석 라인 필터링 누락 → 빈 구문 실행 오류.
+**원인**: SQL 파일 파싱 로직에서 주석 행 필터링 코드 미포함.
+**재발방지**: SQL migration 파싱 시 `strip()` 후 `--`로 시작하는 라인 및 빈 구문 제거 로직 포함 필수.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-032: DB 컬럼명 오타 — 쿼리 작성 전 스키마 grep 사전 확인 (2026-04-05)
+
+**현상**: `api/dict_verify.py`에서 `build_history.workspace` 컬럼 참조 → 실제 컬럼명은 `domain`.
+**원인**: SQL 쿼리 작성 시 테이블 컬럼명을 스키마 파일에서 확인하지 않고 추정.
+**재발방지**: SQL 쿼리 작성 시 `grep` 또는 migration SQL에서 실제 컬럼명 먼저 확인. 추정 금지.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -218,3 +253,9 @@ elif os.path.isdir(path):
 | L-022 | 역라우팅 1회 — action_type 상수값 사전 확인 누락 | LESSONS | LESSONS.md | 2026-04-02 | ✅ |
 | L-018 | DB 테이블 부재 OperationalError 미처리 | LESSONS | LESSONS.md | 2026-04-01 | ✅ |
 | L-027 | PLAN 상태 spawn hook 차단 재발 (L-023 2차) | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-03 | ✅ |
+| L-025 | Python 3.8 PEP585 타입힌트 (1차) | LESSONS | LESSONS.md | 2026-04-02 | 🔄 재발 (L-028) |
+| L-028 | Python 3.8 PEP585 재발 (2차) | LESSONS+skill | LESSONS.md+kdev/SKILL.md | 2026-04-05 | ✅ |
+| L-029 | FastAPI 반환값 누락/str 반환 | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
+| L-030 | TS 중복 export (TS1117) | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
+| L-031 | SQL migration 주석 파싱 버그 | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
+| L-032 | DB 컬럼명 오타 (build_history.workspace) | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
