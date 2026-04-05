@@ -6,7 +6,7 @@ import {
 } from 'antd'
 import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
-  WarningOutlined, CloseCircleOutlined,
+  WarningOutlined, CloseCircleOutlined, CheckOutlined,
 } from '@ant-design/icons'
 import { 사전검증API, 파일기반검증결과, 분석결과 } from '../api/dict_verify'
 
@@ -84,12 +84,12 @@ export default function DictVerify() {
       const res = await 사전검증API.파일기반검증(selectedWorkspace, currentDomain)
       set진행률(100)
       set검증결과(res.data)
-      const { missing_user, missing_cn, missing_syn } = res.data
-      const 합계 = missing_user.length + missing_cn.length + missing_syn.length
-      if (합계 === 0) {
+      const { missing, ukall } = res.data
+      const 누락합계 = missing.length + ukall.length
+      if (누락합계 === 0) {
         message.success('검증 완료 — 누락 키워드 없음')
       } else {
-        message.info(`검증 완료 — 단일어 ${missing_user.length} · 복합어 ${missing_cn.length} · 유사어 ${missing_syn.length}`)
+        message.info(`검증 완료 — 누락 ${missing.length} · 미등록 ${ukall.length}`)
       }
     } catch (e: any) {
       message.error('사전 검증 실패: ' + (e?.response?.data?.detail || e?.message || ''))
@@ -99,72 +99,76 @@ export default function DictVerify() {
   }, [selectedWorkspace, currentDomain])
 
   // ─── 검증 결과 ───────────────────────────────
-  const missingUser목록 = (검증결과?.missing_user || []).map((kw, i) => ({ key: i, keyword: kw }))
-  const missingCn목록 = (검증결과?.missing_cn || []).map((kw, i) => ({ key: i, keyword: kw }))
-  const missingSyn목록 = (검증결과?.missing_syn || []).map((kw, i) => ({ key: i, keyword: kw }))
+  const missing목록 = (검증결과?.missing || []).map((item, i) => ({ key: i, ...item }))
+  const ukall목록 = (검증결과?.ukall || []).map((kw, i) => ({ key: i, keyword: kw }))
+  const skipped목록 = (검증결과?.skipped || []).map((kw, i) => ({ key: i, keyword: kw }))
 
-  const 단일어컬럼 = [
+  const missing컬럼 = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
-    { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
+    { title: '키워드', dataIndex: 'keyword', key: 'keyword', width: 180 },
     {
-      title: '상태', key: 'status', width: 120,
-      render: () => <Tag color="warning" icon={<WarningOutlined />}>단일어 누락</Tag>,
+      title: '분석 결과', dataIndex: 'analysis', key: 'analysis',
+      render: (v: string) => <Text style={{ fontSize: 12, fontFamily: 'monospace' }}>{v || '-'}</Text>,
     },
-  ]
-
-  const 복합어컬럼 = [
-    { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
-    { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
     {
       title: '상태', key: 'status', width: 120,
       render: () => <Tag color="error" icon={<CloseCircleOutlined />}>복합어 누락</Tag>,
     },
   ]
 
-  const 유사어컬럼 = [
+  const ukall컬럼 = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
     {
       title: '상태', key: 'status', width: 120,
-      render: () => <Tag color="processing" icon={<WarningOutlined />}>유사어 누락</Tag>,
+      render: () => <Tag color="warning" icon={<WarningOutlined />}>미등록어</Tag>,
+    },
+  ]
+
+  const skipped컬럼 = [
+    { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
+    { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
+    {
+      title: '상태', key: 'status', width: 120,
+      render: () => <Tag color="success" icon={<CheckOutlined />}>통과</Tag>,
     },
   ]
 
   const 탭항목 = [
     {
-      key: 'missing_user',
-      label: `단일어 누락 (${missingUser목록.length})`,
+      key: 'missing',
+      label: `누락 (${missing목록.length})`,
       children: (
         <Table
           rowKey="key"
-          dataSource={missingUser목록}
-          columns={단일어컬럼}
+          dataSource={missing목록}
+          columns={missing컬럼}
           size="small"
           pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
         />
       ),
     },
     {
-      key: 'missing_cn',
-      label: `복합어 누락 (${missingCn목록.length})`,
+      key: 'ukall',
+      label: `미등록 (${ukall목록.length})`,
       children: (
         <Table
           rowKey="key"
-          dataSource={missingCn목록}
-          columns={복합어컬럼}
+          dataSource={ukall목록}
+          columns={ukall컬럼}
           size="small"
           pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
         />
       ),
     },
     {
-      key: 'missing_syn',
-      label: `유사어 누락 (${missingSyn목록.length})`,
+      key: 'skipped',
+      label: `통과 (${skipped목록.length})`,
       children: (
         <Table
           rowKey="key"
-          dataSource={missingSyn목록}
-          columns={유사어컬럼}
+          dataSource={skipped목록}
+          columns={skipped컬럼}
           size="small"
           pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
         />
@@ -236,7 +240,7 @@ export default function DictVerify() {
           </Button>
         }
       >
-        <Text type="secondary">빌드된 사전 파일 기반으로 단일어·복합어·유사어 누락을 검증합니다.</Text>
+        <Text type="secondary">형태소분석(Java) 기반으로 복합어 누락·미등록어·통과 키워드를 분류합니다.</Text>
         {검증중 && (
           <div style={{ marginTop: 12 }}>
             <Progress percent={진행률} status="active" />
@@ -253,30 +257,30 @@ export default function DictVerify() {
             </Col>
             <Col span={6}>
               <Statistic
-                title="단일어 누락"
-                value={missingUser목록.length}
-                valueStyle={{ color: '#faad14' }}
-                prefix={<WarningOutlined />}
+                title="통과 (skipped)"
+                value={skipped목록.length}
+                valueStyle={{ color: '#52c41a' }}
+                prefix={<CheckOutlined />}
               />
             </Col>
             <Col span={6}>
               <Statistic
-                title="복합어 누락"
-                value={missingCn목록.length}
+                title="누락 (missing)"
+                value={missing목록.length}
                 valueStyle={{ color: '#cf1322' }}
                 prefix={<CloseCircleOutlined />}
               />
             </Col>
             <Col span={6}>
               <Statistic
-                title="유사어 누락"
-                value={missingSyn목록.length}
-                valueStyle={{ color: '#1890ff' }}
+                title="미등록 (ukall)"
+                value={ukall목록.length}
+                valueStyle={{ color: '#faad14' }}
                 prefix={<WarningOutlined />}
               />
             </Col>
           </Row>
-          <Tabs items={탭항목} defaultActiveKey="missing_user" />
+          <Tabs items={탭항목} defaultActiveKey="missing" />
         </Card>
       )}
     </Space>

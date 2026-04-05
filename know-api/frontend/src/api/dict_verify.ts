@@ -15,13 +15,12 @@ export interface 분석결과 {
 }
 
 export interface 파일기반검증결과 {
+  missing: { keyword: string; analysis: string }[]
+  ukall: string[]
+  skipped: string[]
   total: number
-  missing_user: string[]
-  missing_cn: string[]
-  missing_syn: string[]
   domain: string
   workspace: string
-  jiana_home: string
 }
 
 export const 사전검증API = {
@@ -34,8 +33,6 @@ export const 사전검증API = {
   형태소분석: (keyword: string, domain?: string) =>
     클라이언트.post<분석결과>('/dict-verify/analyze', { keyword, domain }),
 
-  파일기반검증: (workspace: string, domain: string, jiana_home?: string) =>
-    클라이언트.post<파일기반검증결과>('/dict-verify/run-file-based', {
-      workspace, domain, ...(jiana_home ? { jiana_home } : {}),
-    }),
+  파일기반검증: (workspace: string, domain: string) =>
+    클라이언트.post<파일기반검증결과>('/dict-verify/run-file-based', { workspace, domain }),
 }

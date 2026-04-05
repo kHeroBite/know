@@ -176,6 +176,17 @@ def 사전검증(keywords: list, domain: str) -> dict:
     }
 
 
+def 자동사전검증(db, workspace: str, domain: str) -> dict:
+    """DB에서 완료 키워드 자동 로딩 → 기존 사전검증 호출 (형태소분석 기반)."""
+    완료키워드 = db.execute(text(
+        "SELECT DISTINCT keyword FROM keyword_assignments "
+        "WHERE workspace=:ws AND domain=:dom AND status='completed'"
+    ), {"ws": workspace, "dom": domain}).scalars().all()
+    result = 사전검증(list(완료키워드), domain)
+    result["workspace"] = workspace
+    return result
+
+
 def _read_ks_file(path: str) -> set:
     """*.ks 파일 → set. BOM 제거 + 주석(#) 라인 필터."""
     result = set()
