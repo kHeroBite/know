@@ -1334,85 +1334,57 @@ export default function KnowledgeWork() {
   }, [selected?.id, selectedDomain, selectedWorkspace])
 
   // 현재 분析 완료 후 인접 항목 프리패치 (다른탭 + 이전/다음 키워드 각 5개 번갈아)
-  // liteLoading이 false가 된 직후 실행 → 현재 화면은 이미 표시된 상태
-  // 프리패치는 300ms 간격으로 순차 발사 — 서버 workers=4 포화 방지 + abort 즉시 취소 가능
+  // 현재 분析 완료 후 인접 항목 프리패치 — 전체 동시 발사, abort로 즉시 취소
   useEffect(() => {
     if (liteLoading || !selected?.keyword || !selectedDomain) return
 
     const currentKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
     const isFullTab = analysisTab === 'full'
-
-    // 이 프리패치 세션용 AbortController 생성
     const abort = new AbortController()
     prefetchAbortRef.current = abort
 
-    // 프리패치 큐 구성 (우선순위 순서: 다른탭 현재키워드 → next1 → prev1 → next2 → prev2 ...)
-    const queue: string[] = []
-
-    // 1) 다른 탭(현재 키워드) — 가장 높은 우선순위
-    if (!isFullTab && !fullCacheRef.current.has(currentKey)) {
-      queue.push(`__full__${currentKey}`)
-    }
-
-    // 2) 인접 키워드 (next1, prev1, next2, prev2, ...)
-    const curIdx = filteredItems.findIndex(i => i.id === selected.id)
-    if (curIdx >= 0) {
-      for (let offset = 1; offset <= 5; offset++) {
-        if (curIdx + offset < filteredItems.length) {
-          queue.push(filteredItems[curIdx + offset].keyword)
-        }
-        if (curIdx - offset >= 0) {
-          queue.push(filteredItems[curIdx - offset].keyword)
-        }
+    const prefetch = (keyword: string) => {
+      if (abort.signal.aborted) return
+      const key = `${keyword}::${selectedDomain}::${selectedWorkspace}`
+      if (isFullTab) {
+        if (fullCacheRef.current.has(key)) return
+        클라이언트.post('/morpheme/analyze-full-realtime', {
+          keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
+        }, { signal: abort.signal }).then(({ data }) => {
+          const r = data.full_analysis || null
+          if (r) fullCacheRef.current.set(key, r)
+        }).catch(() => {})
+      } else {
+        if (liteCacheRef.current.has(key)) return
+        클라이언트.post('/morpheme/analyze-realtime', {
+          keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
+        }, { signal: abort.signal }).then(({ data }) => {
+          const r = data.analysis || null
+          if (r) liteCacheRef.current.set(key, r)
+        }).catch(() => {})
       }
     }
 
-    // 300ms 간격으로 순차 발사 (abort 시 즉시 중단)
-    const timers: ReturnType<typeof setTimeout>[] = []
-    queue.forEach((item, idx) => {
-      const timer = setTimeout(() => {
-        if (abort.signal.aborted) return
-        if (item.startsWith('__full__')) {
-          const kw = item.replace('__full__', '').split('::')[0]
-          if (!fullCacheRef.current.has(currentKey)) {
-            클라이언트.post('/morpheme/analyze-full-realtime', {
-              keyword: kw, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-            }, { signal: abort.signal }).then(({ data }) => {
-              const result = data.full_analysis || null
-              if (result) fullCacheRef.current.set(currentKey, result)
-            }).catch(() => {})
-          }
-        } else {
-          const keyword = item
-          const key = `${keyword}::${selectedDomain}::${selectedWorkspace}`
-          if (isFullTab) {
-            if (!fullCacheRef.current.has(key)) {
-              클라이언트.post('/morpheme/analyze-full-realtime', {
-                keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-              }, { signal: abort.signal }).then(({ data }) => {
-                const result = data.full_analysis || null
-                if (result) fullCacheRef.current.set(key, result)
-              }).catch(() => {})
-            }
-          } else {
-            if (!liteCacheRef.current.has(key)) {
-              클라이언트.post('/morpheme/analyze-realtime', {
-                keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-              }, { signal: abort.signal }).then(({ data }) => {
-                const result = data.analysis || null
-                if (result) liteCacheRef.current.set(key, result)
-              }).catch(() => {})
-            }
-          }
-        }
-      }, idx * 300)
-      timers.push(timer)
-    })
-
-    return () => {
-      abort.abort()
-      timers.forEach(t => clearTimeout(t))
+    // 다른 탭(FULL) 현재 키워드 먼저
+    if (!isFullTab && !fullCacheRef.current.has(currentKey)) {
+      클라이언트.post('/morpheme/analyze-full-realtime', {
+        keyword: selected.keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
+      }, { signal: abort.signal }).then(({ data }) => {
+        const r = data.full_analysis || null
+        if (r) fullCacheRef.current.set(currentKey, r)
+      }).catch(() => {})
     }
+
+    // 이전10 + 다음10 동시 발사 (next1→prev1→next2→prev2 순서)
+    const curIdx = filteredItems.findIndex(i => i.id === selected.id)
+    if (curIdx >= 0) {
+      for (let offset = 1; offset <= 10; offset++) {
+        if (curIdx + offset < filteredItems.length) prefetch(filteredItems[curIdx + offset].keyword)
+        if (curIdx - offset >= 0) prefetch(filteredItems[curIdx - offset].keyword)
+      }
+    }
+
+    return () => { abort.abort() }
   }, [liteLoading, selected?.id, selectedDomain, selectedWorkspace, analysisTab])
 
 
