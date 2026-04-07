@@ -1,5 +1,21 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-07 — 분석결과 탭 LITE/FULL 개선 + 단축키 정리 + 레이아웃 통합 (커밋: d87d6ab)
+
+### 수정 내용
+
+#### 변경 파일 (총 2개)
+- `frontend/src/pages/KnowledgeWork.tsx` — 분석결과 탭명 변경(심플→LITE, 풀→FULL), LITE/FULL 행간 통일(lineHeight 2.0), 통합 레이아웃 구현
+- `frontend/src/components/workspace/HotkeySettings.tsx` — 단축키 설정 정리 (prevKeyword/nextKeyword/thesaurusLlm 제거, 고정단축키 동적화)
+
+#### 상세 변경
+- **분석결과 탭명**: 심플 → LITE, 풀 → FULL
+- **LITE/FULL 행간**: lineHeight 2.0으로 통일
+- **LITE/FULL 통합 레이아웃**: 어절=분석 생략, 유사어 줄바꿈 처리, 부분유사어 꺽쇠 제거, comp줄 표시
+- **단축키 설정 간소화**: 사용 안 하는 prevKeyword/nextKeyword/thesaurusLlm 항목 제거, 고정 단축키 동적화
+
+---
+
 ## 2026-04-05 — 워크스페이스 통합 phase 시스템 도입 + 사전검증 파일기반 재작성 (커밋: TBD)
 
 ### 수정 내용

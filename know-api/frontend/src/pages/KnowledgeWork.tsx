@@ -23,8 +23,6 @@ const PAGE_SIZE = 100
 // ─── 핫키 기본값 ────────────────────────────────────────────────
 
 const 기본핫키맵: Record<string, string> = {
-  prevKeyword: 'Alt+ArrowUp',
-  nextKeyword: 'Alt+ArrowDown',
   prevAnalysis: 'ArrowLeft',
   nextAnalysis: 'ArrowRight',
   prevLine: 'ArrowUp',
@@ -41,7 +39,6 @@ const 기본핫키맵: Record<string, string> = {
   undoHistory: 'Escape',
   aiTabAI: 'PageUp',
   aiTabWikipedia: 'PageDown',
-  thesaurusLlm: '.',
 }
 
 function encodeKeyEvent(e: KeyboardEvent): string {
@@ -151,13 +148,22 @@ function parseAnalysisText(text: string): Token[] {
       idx++
       prevLineWasSynList = true
     } else {
-      // 탭 구분 데이터 → 각 탭 세그먼트를 개별 줄로 처리
+      // 탭 구분 데이터
       const tabParts = trimmed.split('\t')
+      const isSynDetail = prevLineWasSynList  // 유사어목록 직후 줄은 유사어별 줄바꿈
+      // 일반 줄: 어절=분석결과 동일하면 어절(ti=0) 생략
+      const skipEojeol = !isSynDetail && tabParts.length > 1 && tabParts[0].trim() === tabParts[1].trim()
       tabParts.forEach((tabPart, ti) => {
         const seg = tabPart.trim()
         if (!seg) return
         // <<유사어목록>> 직후 줄의 첫 번째 탭 세그먼트는 유사어 중복 → 스킵
-        if (ti === 0 && prevLineWasSynList) return
+        if (ti === 0 && isSynDetail) return
+        // 일반 줄: 어절=분석결과 동일 → 어절 생략
+        if (ti === 0 && skipEojeol) return
+        // 유사어 상세 줄: 각 유사어별 줄바꿈 (두 번째 유사어부터)
+        if (isSynDetail && ti > 1) {
+          tokens.push({ text: '\n', index: -1, lineBreak: true })
+        }
         // <유사어> 패턴 내부 개별 워드도 분리: "워드 <SYN1 SYN2>" → ["워드", "SYN1", "SYN2"]
         const segments = seg.match(/(<[^<>]+>|[^\s<>]+)/g) || []
         segments.forEach(part => {
@@ -175,10 +181,6 @@ function parseAnalysisText(text: string): Token[] {
             })
           }
         })
-        // 탭 세그먼트 사이에 줄바꿈 삽입 (마지막 제외)
-        if (ti < tabParts.length - 1) {
-          tokens.push({ text: '\n', index: -1, lineBreak: true })
-        }
       })
       prevLineWasSynList = false
     }
@@ -218,10 +220,12 @@ function parseFullTestText(text: string): FullToken[] {
   if (!text) return []
   const tokens: FullToken[] = []
   let idx = 0
+  let prevLineWasSynList = false  // 직전 줄이 <<유사어목록>>이었는지
   const lines = text.split('\n')
   lines.forEach((line, li) => {
     const trimmed = line.trim()
     if (!trimmed) {
+      prevLineWasSynList = false
       if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
       return
     }
@@ -229,9 +233,28 @@ function parseFullTestText(text: string): FullToken[] {
     if (trimmed.startsWith('<<') && trimmed.endsWith('>>')) {
       tokens.push({ text: trimmed, index: idx })
       idx++
+      prevLineWasSynList = true
       if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
       return
     }
+    // <<유사어목록>> 직후 줄: 유사어 상세 (첫 탭 스킵, 각 탭별 줄바꿈)
+    if (prevLineWasSynList) {
+      prevLineWasSynList = false
+      const tabParts = trimmed.split('\t')
+      tabParts.forEach((tabPart, ti) => {
+        if (ti === 0) return  // 첫 탭 세그먼트 스킵 (유사어 중복 나열)
+        const seg = tabPart.trim()
+        if (!seg) return
+        if (ti > 1) {
+          tokens.push({ text: '\n', index: -1, lineBreak: true })
+        }
+        tokens.push({ text: seg, index: idx })
+        idx++
+      })
+      if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
+      return
+    }
+    prevLineWasSynList = false
     // "워드 <유사어>" 패턴 (부분 유사어) — 탭 없음
     if (!trimmed.includes('\t') && /<[^<>]+>/.test(trimmed)) {
       // "워드 <SYN1 SYN2>" → 워드와 개별 유사어로 분리
@@ -252,30 +275,34 @@ function parseFullTestText(text: string): FullToken[] {
       if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
       return
     }
-    // 형태소 분석 결과 라인 (탭 구분) — 각 형태소를 개별 줄로 표시
+    // 형태소 분석 결과 라인 (탭 구분) — 어절 + 형태소쌍을 같은 줄에 표시
     const parts = line.split('\t')
     const eojeol = parts[0]?.trim() || ''
     // 어절 표시
     tokens.push({ text: eojeol, index: idx, eojeol })
     idx++
-    // 탭 이후: "형태소 품사" 쌍들 — 각각 개별 줄
-    for (let p = 1; p < parts.length; p++) {
-      const segment = parts[p].trim()
-      if (!segment) continue
-      tokens.push({ text: '\n', index: -1, lineBreak: true })
-      const lastSpace = segment.lastIndexOf(' ')
-      if (lastSpace > 0) {
-        const morpheme = segment.substring(0, lastSpace)
-        const posTag = segment.substring(lastSpace + 1)
-        tokens.push({ text: morpheme, index: idx, eojeol })
-        idx++
-        tokens.push({ text: posTag, index: idx, isPosTag: POS_TAG_SET.has(posTag.toLowerCase()), eojeol })
-        idx++
-      } else {
-        // 단일 토큰 — 품사태그인지 확인
-        tokens.push({ text: segment, index: idx, isPosTag: POS_TAG_SET.has(segment.toLowerCase()), eojeol })
-        idx++
-      }
+    // 탭 이후: "형태소 품사" 쌍들 — 어절과 같은 줄에 표시
+    // 어절=형태소이고 1개뿐이면 어절 생략, 품사태그만 표시
+    // 그 외는 어절 옆에 형태소+품사태그 쌍 나열
+    const morphParts = parts.slice(1).map(s => s.trim()).filter(Boolean)
+    if (morphParts.length > 0) {
+      const isSingleSame = morphParts.length === 1 && morphParts[0].split(' ')[0] === eojeol
+      morphParts.forEach(segment => {
+        const lastSpace = segment.lastIndexOf(' ')
+        if (lastSpace > 0) {
+          const morpheme = segment.substring(0, lastSpace)
+          const posTag = segment.substring(lastSpace + 1)
+          if (!(isSingleSame && morpheme === eojeol)) {
+            tokens.push({ text: morpheme, index: idx, eojeol })
+            idx++
+          }
+          tokens.push({ text: posTag, index: idx, isPosTag: POS_TAG_SET.has(posTag.toLowerCase()), eojeol })
+          idx++
+        } else {
+          tokens.push({ text: segment, index: idx, isPosTag: POS_TAG_SET.has(segment.toLowerCase()), eojeol })
+          idx++
+        }
+      })
     }
     if (li < lines.length - 1) {
       tokens.push({ text: '\n', index: -1, lineBreak: true })
@@ -994,7 +1021,7 @@ export default function KnowledgeWork() {
   const [컨텍스트메뉴, set컨텍스트메뉴] = useState<{ open: boolean; x: number; y: number; word: string; tokenIdx: number; ts: number }>({ open: false, x: 0, y: 0, word: '', tokenIdx: -1, ts: 0 })
   const [selectedTokenIdx, setSelectedTokenIdx] = useState(-1)
 
-  // 분석결과 탭 (심플/풀)
+  // 분석결과 탭 (LITE/FULL)
   const [analysisTab, setAnalysisTab] = useState<'simple' | 'full'>('simple')
   const [analysisRightTab, setAnalysisRightTab] = useState<'morpheme' | 'ai'>('morpheme')
   const [fullAnalysis, setFullAnalysis] = useState<string | null>(null)
@@ -1175,10 +1202,11 @@ export default function KnowledgeWork() {
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
-  // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (심플 탭)
+  // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (LITE 탭)
   useEffect(() => {
     if (selected?.analysis) {
-      const toks = parseAnalysisText(selected.analysis).filter(t => !t.lineBreak)
+      const allTokens = parseAnalysisText(selected.analysis)
+      const toks = allTokens.filter(t => !t.lineBreak)
       if (selectLastTokenRef.current) {
         // ←방향키: 마지막 워드 선택
         let lastIdx = toks.length - 1
@@ -1186,8 +1214,7 @@ export default function KnowledgeWork() {
         setSelectedTokenIdx(lastIdx >= 0 ? lastIdx : 0)
         selectLastTokenRef.current = false
       } else if (selectLastLineFirstRef.current && analysisTab === 'simple') {
-        // ↑방향키: 마지막 줄의 첫 워드 선택 (심플 탭에서만 처리, 풀 탭은 별도 useEffect)
-        const allTokens = parseAnalysisText(selected.analysis)
+        // ↑방향키: 마지막 줄의 첫 워드 선택 (LITE 탭에서만 처리, FULL 탭은 별도 useEffect)
         const lines: number[][] = [[]]
         allTokens.forEach(t => {
           if (t.lineBreak) { lines.push([]) } else {
@@ -1203,7 +1230,7 @@ export default function KnowledgeWork() {
         }
         selectLastLineFirstRef.current = false
       } else if (!selectLastLineFirstRef.current) {
-        // 기본: 첫 줄의 첫 워드 (풀 탭에서 ref가 살아있으면 건드리지 않음)
+        // 기본: 첫 줄의 첫 워드 (FULL 탭에서 ref가 살아있으면 건드리지 않음)
         const firstWord = toks.findIndex((_, idx) => isNavigableToken(toks, idx))
         setSelectedTokenIdx(firstWord >= 0 ? firstWord : 0)
       }
@@ -1245,12 +1272,13 @@ export default function KnowledgeWork() {
   }, [selected?.id, selectedDomain, selectedWorkspace])
 
   // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
+  // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
   useEffect(() => {
     if (fullAnalysis && analysisTab === 'full') {
-      const ftoks = parseFullTestText(fullAnalysis).filter(t => !t.lineBreak)
+      const allTokens = parseFullTestText(fullAnalysis)
+      const ftoks = allTokens.filter(t => !t.lineBreak)
       if (selectLastLineFirstRef.current) {
         // ↑방향키: 마지막 줄의 첫 워드 선택
-        const allTokens = parseFullTestText(fullAnalysis)
         const lines: number[][] = [[]]
         allTokens.forEach(t => {
           if (t.lineBreak) { lines.push([]) } else {
@@ -1521,7 +1549,8 @@ export default function KnowledgeWork() {
     if (추천모달열림) {
       const key = e.key
       const isAlt = e.altKey
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', '.'].includes(key)) {
+      const aiKey = hotkeys.aiAnalysis || 'r'
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', aiKey].includes(key)) {
         e.preventDefault(); e.stopPropagation()
 
         // 다음 항목 (현재 섹션 끝이면 다음 섹션 첫 항목)
@@ -1588,7 +1617,7 @@ export default function KnowledgeWork() {
         } else if (key === 'Enter') {
           const el = document.querySelector(`[data-recommend-section="${추천포커스.section}"][data-recommend-item="${추천포커스.item}"]`) as HTMLElement
           el?.click()
-        } else if (key === '.') {
+        } else if (key === aiKey) {
           LLM분석()
         }
         return
@@ -1603,7 +1632,7 @@ export default function KnowledgeWork() {
     )
     const action = actionMap[encoded]
 
-    // Home/End → 분석결과 심플/풀 포커스 (항상 동작)
+    // Home/End → 분석결과 LITE/FULL 포커스 (항상 동작)
     if (action === 'focusAnalysisSimple') {
       e.preventDefault()
       setAnalysisTab('simple'); setIsCenterFocused(true)
@@ -1614,7 +1643,7 @@ export default function KnowledgeWork() {
       setAnalysisTab('full'); setIsCenterFocused(true)
       return
     }
-    // Tab(toggleAnalysisTab): 어디서든 분석결과 포커스 + 심플↔풀 토글
+    // Tab(toggleAnalysisTab): 어디서든 분석결과 포커스 + LITE↔FULL 토글
     if (action === 'toggleAnalysisTab') {
       e.preventDefault()
       setIsCenterFocused(true)
@@ -1695,28 +1724,6 @@ export default function KnowledgeWork() {
     if (!action) return
 
     switch (action) {
-      case 'prevKeyword': {
-        if (!filteredItems.length) break
-        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx > 0 ? curIdx - 1 : 0
-        setSelected(filteredItems[newIdx])
-        if (!filteredItems[newIdx].flag) {
-          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
-          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
-        }
-        break
-      }
-      case 'nextKeyword': {
-        if (!filteredItems.length) break
-        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
-        const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
-        setSelected(filteredItems[newIdx])
-        if (!filteredItems[newIdx].flag) {
-          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
-          setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
-        }
-        break
-      }
       case 'prevAnalysis': {
         if (!activeSelectableTokens.length) break
         let prevIdx = activeTokenIdx - 1
@@ -1809,24 +1816,6 @@ export default function KnowledgeWork() {
               message.error(detail)
             })
         }
-        break
-      }
-      case 'thesaurusLlm': {
-        if (!selectedWord || !selectedDomain) break
-        set추천키워드(selectedWord)
-        set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
-        set추천포커스({ section: 0, item: 0 })
-        set추천모달열림(true)
-        추천검색(selectedWord)
-        setActiveTab('thesaurus')
-        클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100, ...(selectedWorkspace ? { workspace: selectedWorkspace } : {}) } })
-          .then(({ data }) => {
-            const items = (data?.items || []).filter((i: any) => i.head_word === selectedWord)
-            set등록키워드셋(items)
-            if (items.length === 0) set추천포커스({ section: 1, item: 0 })
-          }).catch(() => {})
-        // AI분석 자동 실행
-        setTimeout(() => LLM분석(), 100)
         break
       }
       case 'analyzeKeyword': {
@@ -2034,8 +2023,8 @@ export default function KnowledgeWork() {
                 <span style={{ marginRight: 12, fontSize: 13, fontWeight: 600 }}>분석결과</span>
                 <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #f0f0f0' }}>
                   {([
-                    { key: 'simple' as const, label: '심플', hotkey: hotkeys.focusAnalysisSimple || 'Home' },
-                    { key: 'full' as const, label: '풀', hotkey: hotkeys.focusAnalysisFull || 'End' },
+                    { key: 'simple' as const, label: 'LITE', hotkey: hotkeys.focusAnalysisSimple || 'Home' },
+                    { key: 'full' as const, label: 'FULL', hotkey: hotkeys.focusAnalysisFull || 'End' },
                   ]).map(tab => {
                     const active = analysisTab === tab.key
                     return (
@@ -2082,9 +2071,9 @@ export default function KnowledgeWork() {
               backgroundColor: isCenterFocused ? '#FFFDE7' : undefined,
             }}>
             {analysisTab === 'simple' ? (
-              /* ── 심플 탭 (기존) ── */
+              /* ── LITE 탭 (기존) ── */
               selected ? (
-                <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+                <div style={{ fontSize: 13, lineHeight: 2.0 }}>
                   {tokens.map((token, i) => {
                     if (token.lineBreak) return <br key={`br-${i}`} />
                     const selIdx = selectableTokens.findIndex(t => t === token)
@@ -2129,10 +2118,10 @@ export default function KnowledgeWork() {
                 </div>
               )
             ) : (
-              /* ── 풀 탭 (FullTest) ── */
+              /* ── FULL 탭 (FullTest) ── */
               fullAnalysisLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Spin size="small" tip="풀 분석 중..." />
+                  <Spin size="small" tip="FULL 분석 중..." />
                 </div>
               ) : fullAnalysis ? (
                 <div style={{ fontSize: 13, lineHeight: 2.0 }}>
@@ -2181,7 +2170,7 @@ export default function KnowledgeWork() {
                 </div>
               ) : selected ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Text type="secondary">풀 분석 결과 없음</Text>
+                  <Text type="secondary">FULL 분석 결과 없음</Text>
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -2441,7 +2430,7 @@ export default function KnowledgeWork() {
               <span style={{ width: 3, height: 12, background: '#FF9800', borderRadius: 2 }} />
               AI추천 키워드 <span style={{ fontSize: 10, color: '#999' }}>({llm모델별결과.reduce((s: number, m: any) => s + (m.items || []).filter((i: any) => i.head_word !== 추천키워드).length, 0)})</span>
             </span>
-            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.thesaurusLlm || '.')}</KbdKey></Button>
+            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.aiAnalysis || 'r')}</KbdKey></Button>
           </div>
           <div>
         <Spin spinning={llm로딩}>

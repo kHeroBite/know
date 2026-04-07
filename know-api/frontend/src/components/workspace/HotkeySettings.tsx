@@ -23,27 +23,33 @@ const 기본핫키: HotkeyConfig[] = [
   { id: 'nextAnalysis', label: '→ 다음 워드', key: 'ArrowRight' },
   { id: 'prevLine', label: '↑ 윗줄 이동', key: 'ArrowUp' },
   { id: 'nextLine', label: '↓ 아랫줄 이동', key: 'ArrowDown' },
-  { id: 'focusAnalysisSimple', label: '분석결과>심플', key: 'Home' },
-  { id: 'focusAnalysisFull', label: '분석결과>풀', key: 'End' },
-  { id: 'toggleAnalysisTab', label: '심플↔풀 전환', key: 'Tab' },
+  { id: 'focusAnalysisSimple', label: '분석결과>LITE', key: 'Home' },
+  { id: 'focusAnalysisFull', label: '분석결과>FULL', key: 'End' },
+  { id: 'toggleAnalysisTab', label: 'LITE↔FULL 전환', key: 'Tab' },
   { id: 'undoHistory', label: '작업취소', key: 'Escape' },
-  { id: 'prevKeyword', label: '이전 키워드', key: 'Alt+ArrowUp' },
-  { id: 'nextKeyword', label: '다음 키워드', key: 'Alt+ArrowDown' },
   { id: 'aiTabAI', label: 'AI분석>AI', key: 'PageUp' },
   { id: 'aiTabWikipedia', label: 'AI분석>Wikipedia', key: 'PageDown' },
-  { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '.' },
 ]
 
-// 고정 단축키 설명서
-const 고정단축키설명 = [
-  { category: '탐색', items: [
-    { label: 'Alt+↑ / Alt+↓', desc: '이전/다음 키워드 이동' },
-    { label: 'Alt+← / Alt+→', desc: '현재 줄의 첫/끝 워드로 이동' },
-  ]},
-  { category: '사전탭', items: [
-    { label: 'Alt+{등록키}', desc: '해당 사전탭 열기 (등록키 변경 시 자동 반영)' },
-  ]},
-]
+// 고정 단축키 설명서 (hotkeys 기반 동적 생성)
+function get고정단축키설명(hotkeys: HotkeyConfig[]) {
+  const getKey = (id: string) => {
+    const h = hotkeys.find(h => h.id === id)
+    return h ? displayKey(h.key) : '?'
+  }
+  return [
+    { category: '탐색', items: [
+      { label: 'Alt+↑ / Alt+↓', desc: '이전/다음 키워드 이동' },
+      { label: `Alt+${getKey('prevAnalysis')} / Alt+${getKey('nextAnalysis')}`, desc: '현재 줄의 첫/끝 워드로 이동' },
+    ]},
+    { category: '사전탭', items: [
+      { label: 'Alt+{등록키}', desc: '해당 사전탭 열기 (등록키 변경 시 자동 반영)' },
+    ]},
+    { category: '유사어추천', items: [
+      { label: `${getKey('aiAnalysis')}`, desc: '유사어추천 모달에서 AI분석 실행' },
+    ]},
+  ]
+}
 
 const keyDisplayMap: Record<string, string> = {
   ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
@@ -188,8 +194,8 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
         </div>
         {helpOpen && (
           <div style={{ padding: '8px 12px', background: '#fafafa', borderRadius: '0 0 6px 6px', borderTop: 0, border: '1px solid #f0f0f0', borderTopColor: 'transparent' }}>
-            {고정단축키설명.map((group, gi) => (
-              <div key={gi} style={{ marginBottom: gi < 고정단축키설명.length - 1 ? 8 : 0 }}>
+            {get고정단축키설명(hotkeys).map((group, gi, arr) => (
+              <div key={gi} style={{ marginBottom: gi < arr.length - 1 ? 8 : 0 }}>
                 <Text style={{ fontSize: 10, color: '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{group.category}</Text>
                 {group.items.map((item, ii) => (
                   <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: 11 }}>
