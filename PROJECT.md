@@ -231,10 +231,10 @@ know pipeline input.txt --도메인 site1
 
 ---
 
-## know-api 디렉토리 구조 (Phase 2 신규)
+## www 디렉토리 구조 (Phase 2 신규, 구 know-api)
 
 ```
-know-api/
+www/
 ├── main.py                    # FastAPI 앱 진입점 (:18000)
 ├── requirements.txt           # 의존성 (fastapi, uvicorn, PyJWT, bcrypt 등)
 ├── know_api.service           # systemd 유닛 파일

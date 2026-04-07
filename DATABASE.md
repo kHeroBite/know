@@ -1,6 +1,6 @@
 # DATABASE.md — know 프로젝트 DB 스키마 및 쿼리 기록
 
-> MariaDB 5.5 (know_mng) + SQLite (know-api/know.db)
+> MariaDB 5.5 (know_mng) + SQLite (www/know.db)
 
 ---
 
@@ -73,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_wh_ws ON work_history(workspace, domain, user_id)
 
 ## MariaDB 스키마 (know_mng)
 
-> 기존 JSP 관리도구가 사용하는 DB. know-api에서 read-only 참조.
+> 기존 JSP 관리도구가 사용하는 DB. www(FastAPI)에서 read-only 참조.
 
 ### 주요 사전 테이블 패턴
 
