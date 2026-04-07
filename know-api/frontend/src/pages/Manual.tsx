@@ -1,3 +1,4 @@
+import PageHeader from '../components/PageHeader'
 import { Typography, Collapse, Image, Table, Alert, Divider, Tag, Space } from 'antd'
 import {
   BookOutlined,
@@ -26,7 +27,7 @@ const imgStyle: React.CSSProperties = {
 export default function Manual() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Title level={3}><BookOutlined /> 사용 매뉴얼</Title>
+      <PageHeader title="매뉴얼" />
       <Paragraph type="secondary">
         지식작업소 v2.0 사용 가이드 — 각 섹션을 클릭하여 상세 내용을 확인하세요.
       </Paragraph>

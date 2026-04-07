@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import PageHeader from '../components/PageHeader'
 import { Card, Input, Button, Select, Switch, message, Spin, Typography, Space, Tag, Row, Col } from 'antd'
 import { CheckCircleOutlined, CloseCircleOutlined, ApiOutlined, ReloadOutlined } from '@ant-design/icons'
 import { llmAPI, type LLM설정 } from '../api/llm'
@@ -278,8 +279,8 @@ export default function LLMSettings() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      <PageHeader title="LLM 설정" />
       <div style={{ marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>LLM 설정</Title>
         <Text type="secondary">AI 분석에 사용할 LLM 프로바이더를 설정합니다. 여러 개 동시 활성화 시 모든 결과를 비교할 수 있습니다.</Text>
         {활성수 > 0 && (
           <div style={{ marginTop: 8 }}>

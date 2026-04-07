@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import PageHeader from '../components/PageHeader'
 import { Table, Button, Modal, Form, Input, Select, Popconfirm, Tag, message, Space, Typography } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, KeyOutlined } from '@ant-design/icons'
 import { accountApi, Account } from '../api/account'
@@ -117,7 +118,7 @@ export default function AccountManagement() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>계정 관리</Typography.Title>
+        <PageHeader title="계정 관리" />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => 모달열기()}>계정 추가</Button>
       </div>
       <Table dataSource={accounts} columns={columns} rowKey="user_id" loading={loading} pagination={false} />

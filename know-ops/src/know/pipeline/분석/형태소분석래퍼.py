@@ -58,18 +58,25 @@ class 형태소분석래퍼:
         if 출력파일 is None:
             출력파일 = 입력파일.parent / f"{입력파일.stem}_analyzed{입력파일.suffix}"
 
+        # jiana LiteTest는 EUC-KR 기반 → 입력을 EUC-KR로 변환
+        euckr_입력 = 입력파일.parent / f"{입력파일.stem}_euckr{입력파일.suffix}"
+        euckr_출력 = 입력파일.parent / f"{입력파일.stem}_euckr_out{입력파일.suffix}"
+        원본텍스트 = 입력파일.read_text(encoding="utf-8", errors="replace")
+        euckr_입력.write_text(원본텍스트, encoding="euc-kr", errors="replace")
+
         # java 명령 구성
         # cotton_test.sh: java -cp ... test.LiteTest $JIANA_HOME use $1 $2
         # $JIANA_HOME = base_경로/, use = 고정, $1 = 입력파일, $2 = 출력파일(절대경로)
         명령 = [
             str(self.설정값.java_실행파일),
+            "-Dfile.encoding=EUC-KR",
             *self.설정값.분석_java옵션,
             "-cp", self.설정값.classpath,
             self.설정값.분석_메인클래스,
             str(self.설정값.base_경로) + "/",  # JIANA_HOME
             "use",
-            str(입력파일.resolve()),
-            str(출력파일.resolve()),
+            str(euckr_입력.resolve()),
+            str(euckr_출력.resolve()),
         ]
 
         # subprocess 실행 (출력은 stdout이 아닌 출력파일에 직접 기록됨)
@@ -85,8 +92,16 @@ class 형태소분석래퍼:
                 f"stderr: {결과.stderr[:500]}"
             )
 
-        if not 출력파일.exists():
-            raise RuntimeError(f"분석 결과 파일 생성 실패: {출력파일}")
+        if not euckr_출력.exists():
+            raise RuntimeError(f"분석 결과 파일 생성 실패: {euckr_출력}")
+
+        # EUC-KR 출력을 UTF-8로 변환하여 최종 출력 파일에 저장
+        euckr_결과 = euckr_출력.read_text(encoding="euc-kr", errors="replace")
+        출력파일.write_text(euckr_결과, encoding="utf-8")
+
+        # 임시 EUC-KR 파일 정리
+        euckr_입력.unlink(missing_ok=True)
+        euckr_출력.unlink(missing_ok=True)
 
         return 출력파일
 

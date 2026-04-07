@@ -14,16 +14,66 @@ from fastapi import HTTPException, status
 
 # 비동기 복사 진행률 추적: {ws_name: {"percent": 0~100, "status": "copying"|"done"|"error", "message": ""}}
 COPY_PROGRESS: dict[str, dict[str, Any]] = {}
+# 복사 취소 플래그: {ws_name: threading.Event()}
+COPY_CANCEL: dict[str, threading.Event] = {}
 
 WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
 DOMAIN_DIR = "/home/know/apps/know-ops/domain"
+JIANA_BASE_DIR = "/home/know/apps/know-ops/jiana"
 STATE_FILE = "/home/know/apps/know-ops/workspace/.state.json"
 USER_PREF_FILE = "/home/know/apps/know-ops/workspace/.user_pref.json"
 DOMAIN_META_FILE = "/home/know/apps/know-ops/domain/.meta.json"
+# 도메인별 마지막 사용 jiana 버전 기억 파일
+DOMAIN_JIANA_PREF_FILE = "/home/know/apps/know-ops/domain/.jiana_pref.json"
 
 # 워크스페이스 phase 순서 (preprocess → work → build → verify)
 PHASES = ["preprocess", "work", "build", "verify"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
+
+
+def jiana버전목록() -> list[str]:
+    """JIANA_BASE_DIR 하위 버전 폴더 목록 반환."""
+    import glob
+    if not os.path.isdir(JIANA_BASE_DIR):
+        return []
+    return sorted([
+        os.path.basename(d.rstrip("/"))
+        for d in glob.glob(f"{JIANA_BASE_DIR}/*/")
+        if os.path.isdir(d)
+    ])
+
+
+def jiana홈경로(workspace: str) -> str:
+    """워크스페이스의 jiana 홈 경로 반환."""
+    return os.path.join(WORKSPACE_DIR, workspace, "jiana")
+
+
+def _도메인jiana설정읽기() -> dict[str, str]:
+    """도메인별 마지막 jiana 버전 기억 파일 읽기."""
+    try:
+        with open(DOMAIN_JIANA_PREF_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _도메인jiana설정쓰기(data: dict[str, str]) -> None:
+    """도메인별 마지막 jiana 버전 기억 파일 저장."""
+    os.makedirs(os.path.dirname(DOMAIN_JIANA_PREF_FILE), exist_ok=True)
+    with open(DOMAIN_JIANA_PREF_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def 도메인jiana버전조회(domain: str) -> str | None:
+    """도메인의 마지막 사용 jiana 버전 반환. 없으면 None."""
+    return _도메인jiana설정읽기().get(domain)
+
+
+def _도메인jiana버전저장(domain: str, version: str) -> None:
+    """도메인의 마지막 사용 jiana 버전 저장."""
+    data = _도메인jiana설정읽기()
+    data[domain] = version
+    _도메인jiana설정쓰기(data)
 
 
 def _상태읽기() -> dict[str, Any]:
@@ -111,12 +161,49 @@ def 워크스페이스삭제(name: str) -> None:
         _상태쓰기(상태)
 
 
-def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str) -> None:
-    """백그라운드 스레드에서 파일 순회 복사 + 진행률 업데이트."""
+def _폴더파일수(경로: str) -> int:
+    """폴더 내 전체 파일 수 카운트."""
+    return sum(len(files) for _, _, files in os.walk(경로))
+
+
+def _폴더복사(원본경로: str, 대상경로: str, ws_name: str, 복사완료: int, 전체파일수: int) -> int:
+    """폴더를 순회 복사하며 진행률 업데이트. 복사완료 카운트 반환. 취소 시 -1 반환."""
+    cancel_event = COPY_CANCEL.get(ws_name)
+    for dirpath, dirnames, filenames in os.walk(원본경로):
+        if cancel_event and cancel_event.is_set():
+            return -1
+        상대경로 = os.path.relpath(dirpath, 원본경로)
+        대상디렉토리 = os.path.join(대상경로, 상대경로) if 상대경로 != "." else 대상경로
+        os.makedirs(대상디렉토리, exist_ok=True)
+        for dirname in dirnames:
+            원본_항목 = os.path.join(dirpath, dirname)
+            if os.path.islink(원본_항목):
+                링크_대상 = os.readlink(원본_항목)
+                대상_링크 = os.path.join(대상디렉토리, dirname)
+                if not os.path.lexists(대상_링크):
+                    os.symlink(링크_대상, 대상_링크)
+        for 파일명 in filenames:
+            if cancel_event and cancel_event.is_set():
+                return -1
+            원본 = os.path.join(dirpath, 파일명)
+            대상 = os.path.join(대상디렉토리, 파일명)
+            shutil.copy2(원본, 대상)
+            복사완료 += 1
+            if 전체파일수 > 0:
+                COPY_PROGRESS[ws_name]["percent"] = int(복사완료 / 전체파일수 * 100)
+    return 복사완료
+
+
+def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str, jiana원본경로: str | None = None) -> None:
+    """백그라운드 스레드에서 도메인+jiana 파일 순회 복사 + 진행률 업데이트."""
     import time
     시작시간 = time.time()
     try:
-        전체파일수 = sum(len(files) for _, _, files in os.walk(도메인경로))
+        # 전체 파일 수 계산 (도메인 + jiana)
+        도메인파일수 = _폴더파일수(도메인경로)
+        jiana파일수 = _폴더파일수(jiana원본경로) if jiana원본경로 else 0
+        전체파일수 = 도메인파일수 + jiana파일수
+
         if 전체파일수 == 0:
             경과 = round(time.time() - 시작시간, 1)
             COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 0}
@@ -126,31 +213,51 @@ def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str
                 _상태쓰기(상태)
             return
 
-        복사완료 = 0
-        for dirpath, dirnames, filenames in os.walk(도메인경로):
-            상대경로 = os.path.relpath(dirpath, 도메인경로)
-            대상디렉토리 = os.path.join(ws경로, 상대경로) if 상대경로 != "." else ws경로
-            os.makedirs(대상디렉토리, exist_ok=True)
-            for dirname in dirnames:
-                원본_항목 = os.path.join(dirpath, dirname)
-                if os.path.islink(원본_항목):
-                    링크_대상 = os.readlink(원본_항목)
-                    대상_링크 = os.path.join(대상디렉토리, dirname)
-                    if not os.path.lexists(대상_링크):
-                        os.symlink(링크_대상, 대상_링크)
-            for 파일명 in filenames:
-                원본 = os.path.join(dirpath, 파일명)
-                대상 = os.path.join(대상디렉토리, 파일명)
-                shutil.copy2(원본, 대상)
-                복사완료 += 1
-                COPY_PROGRESS[ws_name]["percent"] = int(복사완료 / 전체파일수 * 100)
+        COPY_PROGRESS[ws_name]["message"] = "도메인 파일 복사 중..."
+        복사완료 = _폴더복사(도메인경로, ws경로, ws_name, 0, 전체파일수)
 
+        # 취소 체크
+        if 복사완료 == -1:
+            raise InterruptedError("사용자 취소")
+
+        # jiana 폴더 복사
+        if jiana원본경로:
+            COPY_PROGRESS[ws_name]["message"] = "jiana 복사 중..."
+            jiana대상 = os.path.join(ws경로, "jiana")
+            os.makedirs(jiana대상, exist_ok=True)
+            복사완료 = _폴더복사(jiana원본경로, jiana대상, ws_name, 복사완료, 전체파일수)
+            if 복사완료 == -1:
+                raise InterruptedError("사용자 취소")
+
+        # 사전 DB 복사 (도메인 → 워크스페이스)
+        COPY_PROGRESS[ws_name]["message"] = "사전 DB 복사 중..."
+        COPY_PROGRESS[ws_name]["percent"] = 95
+        try:
+            from models.dictionary import ws_사전테이블생성, ws_사전데이터복사
+            from core.database import 엔진
+            ws_사전테이블생성(ws_name, domain, 엔진)
+            db_rows = ws_사전데이터복사(ws_name, domain, 엔진)
+            COPY_PROGRESS[ws_name]["message"] = f"사전 DB 복사 완료 ({db_rows}건)"
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("사전 DB 복사 실패 (무시): %s", e)
 
         경과 = round(time.time() - 시작시간, 1)
         COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 전체파일수}
         상태 = _상태읽기()
         if ws_name in 상태:
             상태[ws_name]["status"] = "USED"
+            _상태쓰기(상태)
+    except InterruptedError:
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": 0, "status": "cancelled", "message": "사용자 취소", "elapsed": 경과}
+        # 복사된 파일 정리 + 기본 구조 재생성
+        _워크스페이스정리(ws경로)
+        상태 = _상태읽기()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "IDLE"
+            상태[ws_name]["domain"] = None
+            상태[ws_name]["connected_by"] = None
             _상태쓰기(상태)
     except Exception as e:
         경과 = round(time.time() - 시작시간, 1)
@@ -159,10 +266,12 @@ def _복사작업(ws_name: str, domain: str, 도메인경로: str, ws경로: str
         if ws_name in 상태:
             상태[ws_name]["status"] = "FAILED"
             _상태쓰기(상태)
+    finally:
+        COPY_CANCEL.pop(ws_name, None)
 
 
-def 도메인연결(ws_name: str, domain: str, connected_by: str | None = None) -> dict[str, Any]:
-    """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사 → 성공:USED / 실패:FAILED."""
+def 도메인연결(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None) -> dict[str, Any]:
+    """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana) → 성공:USED / 실패:FAILED."""
     상태 = _상태읽기()
     ws상태 = 상태.get(ws_name, {"status": "IDLE", "domain": None})
     if ws상태.get("status") in ("USED", "CONNECTING"):
@@ -189,17 +298,63 @@ def 도메인연결(ws_name: str, domain: str, connected_by: str | None = None) 
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
         )
+    # jiana 버전 검증
+    jiana원본경로 = None
+    if jiana_version:
+        jiana원본경로 = os.path.join(JIANA_BASE_DIR, jiana_version)
+        if not os.path.isdir(jiana원본경로):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"jiana 버전 경로 없음: {jiana원본경로}",
+            )
+        # 도메인별 jiana 버전 기억
+        _도메인jiana버전저장(domain, jiana_version)
+
     기존색상 = ws상태.get("color")
-    # 즉시 CONNECTING 상태로 기록
-    상태[ws_name] = {"status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상}
+    # 즉시 CONNECTING 상태로 기록 (jiana_version 포함)
+    상태[ws_name] = {
+        "status": "CONNECTING", "domain": domain, "connected_by": connected_by,
+        "color": 기존색상, "jiana_version": jiana_version,
+    }
     _상태쓰기(상태)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
+    COPY_CANCEL[ws_name] = threading.Event()
     threading.Thread(
         target=_복사작업,
-        args=(ws_name, domain, 도메인경로, ws경로),
+        args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
         daemon=True,
     ).start()
-    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상}
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version}
+
+
+def _워크스페이스정리(ws경로: str) -> None:
+    """워크스페이스 디렉토리 정리 후 기본 구조 재생성."""
+    if os.path.isdir(ws경로):
+        for 항목 in os.listdir(ws경로):
+            항목경로 = os.path.join(ws경로, 항목)
+            if os.path.islink(항목경로):
+                os.unlink(항목경로)
+            elif os.path.isdir(항목경로):
+                shutil.rmtree(항목경로)
+            else:
+                os.remove(항목경로)
+        for 하위 in ["build/fail_log", "build/pop_log", "work"]:
+            os.makedirs(os.path.join(ws경로, 하위), exist_ok=True)
+
+
+def 연결취소(ws_name: str) -> dict[str, Any]:
+    """CONNECTING 상태 워크스페이스의 복사 작업 취소."""
+    상태 = _상태읽기()
+    ws상태 = 상태.get(ws_name, {})
+    if ws상태.get("status") != "CONNECTING":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"연결 중인 상태가 아닙니다: {ws_name} (현재: {ws상태.get('status')})",
+        )
+    cancel_event = COPY_CANCEL.get(ws_name)
+    if cancel_event:
+        cancel_event.set()
+    return {"name": ws_name, "status": "cancelling", "message": "연결 취소 요청됨"}
 
 
 def 진행률조회(ws_name: str) -> dict[str, Any] | None:
@@ -537,6 +692,32 @@ def phase전이(ws_name: str, next_phase: str) -> dict[str, Any]:
     상태[ws_name]["phase"] = next_phase
     _상태쓰기(상태)
     return {"name": ws_name, "phase": next_phase, "prev": 현재}
+
+
+def phase역전이(ws_name: str, prev_phase: str) -> dict[str, Any]:
+    """워크스페이스 phase 역방향 1단계 전이."""
+    if prev_phase not in PHASE_ORDER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"유효하지 않은 phase: {prev_phase}",
+        )
+    상태 = _상태읽기()
+    if ws_name not in 상태:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
+        )
+    현재 = 상태[ws_name].get("phase", "preprocess")
+    현재순서 = PHASE_ORDER.get(현재, 0)
+    이전순서 = PHASE_ORDER[prev_phase]
+    if 이전순서 != 현재순서 - 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"phase 역전이 불가: {현재} → {prev_phase} (역방향 1단계만 허용)",
+        )
+    상태[ws_name]["phase"] = prev_phase
+    _상태쓰기(상태)
+    return {"name": ws_name, "phase": prev_phase, "prev": 현재}
 
 
 def 사용자phase조회(db, ws: str, dom: str, uid: str) -> str:

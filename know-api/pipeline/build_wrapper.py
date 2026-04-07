@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-JIANA_HOME = "/home/know/jiana1.5.12"
+DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
 
 
 # 전역 빌드 Lock: 동시 빌드 방지 (threading.Lock — Celery worker sync 환경)
@@ -101,7 +101,7 @@ def run_build(
     Raises:
         BuildError: 빌드 실패 또는 타임아웃
     """
-    build_home = jiana_home or JIANA_HOME
+    build_home = jiana_home or DEFAULT_JIANA_HOME
     if not os.path.exists(os.path.join(build_home, "build.xml")):
         raise BuildError(f"build.xml 경로 없음: {build_home}/build.xml")
 
@@ -161,7 +161,7 @@ def run_build(
 
 def _run_antdic(domain: str, pipeline_id: Optional[int],
                 timeout: int, build_history_id: Optional[int] = None,
-                build_home: str = JIANA_HOME) -> Dict[str, Any]:
+                build_home: str = DEFAULT_JIANA_HOME) -> Dict[str, Any]:
     """antdic 4단계를 Python으로 직접 구현
 
     antdic.sh가 수행하던 작업을 Python으로 대체:
@@ -273,13 +273,13 @@ def _ftp_download_from_ftpinfo(ftpinfo_path: str) -> str:
     """ftpinfo.txt 파싱 → ftplib으로 파일 다운로드, 로그 문자열 반환
 
     ftpinfo.txt의 open/user/lcd/cd/get/mget/bye 명령을 해석하여
-    ftplib.FTP로 실행한다. 첫 번째 lcd 경로는 JIANA_HOME으로 매핑.
+    ftplib.FTP로 실행한다. 첫 번째 lcd 경로는 DEFAULT_JIANA_HOME으로 매핑.
     """
     host = None
     user = None
     password = None
-    base_local = None   # 첫 lcd 절대경로 (JIANA_HOME 매핑 기준점)
-    current_local = JIANA_HOME
+    base_local = None   # 첫 lcd 절대경로 (DEFAULT_JIANA_HOME 매핑 기준점)
+    current_local = DEFAULT_JIANA_HOME
     current_remote = "/"
     first_lcd = True
     actions = []  # (kind, remote_dir, local_dir, filename_or_pattern)
@@ -300,15 +300,15 @@ def _ftp_download_from_ftpinfo(ftpinfo_path: str) -> str:
             elif cmd == "lcd":
                 path = parts[1]
                 if first_lcd:
-                    # 첫 lcd 절대경로 → JIANA_HOME 기준점으로 설정
+                    # 첫 lcd 절대경로 → DEFAULT_JIANA_HOME 기준점으로 설정
                     base_local = path
-                    current_local = JIANA_HOME
+                    current_local = DEFAULT_JIANA_HOME
                     first_lcd = False
                 elif path.startswith("/") and base_local:
-                    # 절대경로: base_local 기준 상대경로를 JIANA_HOME에 적용
+                    # 절대경로: base_local 기준 상대경로를 DEFAULT_JIANA_HOME에 적용
                     rel = os.path.relpath(path, base_local)
                     current_local = os.path.normpath(
-                        os.path.join(JIANA_HOME, rel))
+                        os.path.join(DEFAULT_JIANA_HOME, rel))
                 else:
                     # 상대경로
                     current_local = os.path.normpath(

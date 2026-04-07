@@ -20,6 +20,7 @@ interface WorkspaceState {
   setPhase: (p: Phase) => void
   setMyPhase: (p: MyPhase) => void
   advancePhase: (to: Phase) => Promise<void>
+  revertPhase: (to: Phase) => Promise<void>
   setLastMenu: (path: string) => void
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
@@ -56,6 +57,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const { selectedWorkspace, selectedDomain } = get()
         if (!selectedWorkspace || !selectedDomain) return
         await workspaceAPI.advancePhase(selectedWorkspace, to)
+        await get().loadWorkspaceStatus()
+      },
+      revertPhase: async (to) => {
+        const { selectedWorkspace, selectedDomain } = get()
+        if (!selectedWorkspace || !selectedDomain) return
+        await workspaceAPI.revertPhase(selectedWorkspace, to)
         await get().loadWorkspaceStatus()
       },
       setLastMenu: (path) => {

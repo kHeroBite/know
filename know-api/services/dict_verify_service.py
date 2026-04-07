@@ -23,20 +23,19 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-JIANA_HOME = "/home/know/jiana1.5.12"
+DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
 JAVA_HOME = "/home/know/jdk1.7.0_80"
-LIB_PATH = f"{JIANA_HOME}/lib"
-CLASSPATH = f"{LIB_PATH}/jiana1.5.jar:{LIB_PATH}/dqdic-1.0.3.jar"
 DOMAIN_BASE = "/home/know/apps/know-ops/domain"
 MORPHEME_TIMEOUT = 120  # 배치 처리용 충분한 시간
 
 
-def cnlist_로딩(domain: str) -> set:
+def cnlist_로딩(domain: str, jiana_home: str | None = None) -> set:
     """jiana 빌드 산출물 cnlist.ks 로딩 → set 반환.
 
     domain 파라미터는 시그니처 유지용 (호환성). 실제로는 공통 cnlist 사용.
     """
-    cnlist_path = "/home/know/apps/know-ops/jiana/1.5.12/txt_resrc/cndic/cnlist.ks"
+    jh = jiana_home or DEFAULT_JIANA_HOME
+    cnlist_path = os.path.join(jh, "txt_resrc", "cndic", "cnlist.ks")
     result = set()
     try:
         with open(cnlist_path, "r", encoding="utf-8") as f:
@@ -49,10 +48,14 @@ def cnlist_로딩(domain: str) -> set:
     return result
 
 
-def 배치_형태소분석(keywords: list) -> list:
+def 배치_형태소분석(keywords: list, jiana_home: str | None = None) -> list:
     """키워드 목록을 일괄 jiana 형태소분석. 반환: 원본 결과 라인 리스트."""
     if not keywords:
         return []
+
+    jh = jiana_home or DEFAULT_JIANA_HOME
+    lib_path = f"{jh}/lib"
+    classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
 
     with tempfile.TemporaryDirectory(prefix="dictverify_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"
@@ -70,9 +73,9 @@ def 배치_형태소분석(keywords: list) -> list:
                 [
                     f"{JAVA_HOME}/bin/java",
                     "-Dfile.encoding=EUC-KR",
-                    "-classpath", CLASSPATH,
+                    "-classpath", classpath,
                     "test.LiteTest",
-                    f"{JIANA_HOME}/",
+                    f"{jh}/",
                     "use",
                     str(input_file),
                     str(output_file),
@@ -81,7 +84,7 @@ def 배치_형태소분석(keywords: list) -> list:
                 text=False,
                 timeout=MORPHEME_TIMEOUT,
                 env=env,
-                cwd=JIANA_HOME,
+                cwd=jh,
             )
 
             if proc.returncode != 0:
@@ -102,12 +105,13 @@ def 배치_형태소분석(keywords: list) -> list:
             return []
 
 
-def 사전검증(keywords: list, domain: str) -> dict:
+def 사전검증(keywords: list, domain: str, jiana_home: str | None = None) -> dict:
     """키워드 목록에 대해 사전 누락 검증 실행.
 
     Args:
         keywords: 검증할 키워드 목록
         domain: 도메인명 (cnlist.ks 경로 결정용)
+        jiana_home: jiana 홈 경로 (None이면 기본값 사용)
 
     Returns:
         {
@@ -122,11 +126,11 @@ def 사전검증(keywords: list, domain: str) -> dict:
         return {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": domain}
 
     # 1. cnlist 로딩
-    cnlist = cnlist_로딩(domain)
+    cnlist = cnlist_로딩(domain, jiana_home=jiana_home)
     logger.info("cnlist 로딩: %d건 (도메인: %s)", len(cnlist), domain)
 
     # 2. 배치 형태소분석
-    분석결과 = 배치_형태소분석(keywords)
+    분석결과 = 배치_형태소분석(keywords, jiana_home=jiana_home)
 
     # 3. 원본 라인 + 후속 토큰 그룹핑 파서
     # 실제 jiana 출력: 원본 키워드 라인 → 후속 "단어 코드" 토큰 라인들 → 다음 원본 반복
@@ -199,13 +203,13 @@ def 사전검증(keywords: list, domain: str) -> dict:
     }
 
 
-def 자동사전검증(db, workspace: str, domain: str) -> dict:
+def 자동사전검증(db, workspace: str, domain: str, jiana_home: str | None = None) -> dict:
     """DB에서 완료 키워드 자동 로딩 → 기존 사전검증 호출 (형태소분석 기반)."""
     완료키워드 = db.execute(text(
         "SELECT DISTINCT keyword FROM keyword_assignments "
         "WHERE workspace=:ws AND domain=:dom AND status='completed'"
     ), {"ws": workspace, "dom": domain}).scalars().all()
-    result = 사전검증(list(완료키워드), domain)
+    result = 사전검증(list(완료키워드), domain, jiana_home=jiana_home)
     result["workspace"] = workspace
     return result
 

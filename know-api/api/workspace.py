@@ -17,6 +17,7 @@ from schemas.workspace import (
 )
 from services.workspace_service import (
     phase전이,
+    phase역전이,
     phase조회,
     도메인목록,
     도메인연결,
@@ -24,6 +25,9 @@ from services.workspace_service import (
     도메인이름변경,
     도메인추가,
     도메인추가진행률,
+    도메인jiana버전조회,
+    jiana버전목록,
+    연결취소,
     사용자phase설정,
     사용자phase조회,
     old도메인목록,
@@ -50,6 +54,7 @@ class 워크스페이스생성요청(BaseModel):
 
 class 도메인연결요청(BaseModel):
     domain: str
+    jiana_version: Optional[str] = None
 
 
 class 색상변경요청(BaseModel):
@@ -131,6 +136,24 @@ def 도메인목록조회(
 ) -> List[Dict[str, Any]]:
     """도메인 목록 조회."""
     return 도메인목록()
+
+
+@라우터.get("/jiana-versions")
+def jiana버전목록조회(
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """서버에 설치된 jiana 버전 목록 조회."""
+    return {"versions": jiana버전목록()}
+
+
+@라우터.get("/jiana-pref/{domain}")
+def 도메인jiana설정조회(
+    domain: str,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """도메인의 마지막 사용 jiana 버전 조회."""
+    version = 도메인jiana버전조회(domain)
+    return {"domain": domain, "jiana_version": version}
 
 
 @도메인관리라우터.get("/old-sources")
@@ -243,7 +266,19 @@ def 도메인연결처리(
     current: dict = Depends(현재사용자가져오기),
 ) -> Dict[str, Any]:
     """도메인 연결."""
-    return 도메인연결(name, 요청.domain, current.get("name"))
+    이름 = current.get("name", "")
+    아이디 = current.get("user_id", "")
+    connected_by = f"{이름}({아이디})" if 이름 else 아이디
+    return 도메인연결(name, 요청.domain, connected_by, jiana_version=요청.jiana_version)
+
+
+@라우터.post("/{name}/cancel-connect")
+def 도메인연결취소(
+    name: str,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """연결 중인 복사 작업 취소."""
+    return 연결취소(name)
 
 
 @라우터.post("/{name}/release")
@@ -257,14 +292,31 @@ def 워크스페이스해제처리(
     상태 = _상태읽기()
     도메인 = 상태.get(name, {}).get("domain")
     if 도메인:
+        # 프리징 데이터
         db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
                    {"ws": name, "dom": 도메인})
-        # 전처리 실행 로그 정리
-        db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom)"),
+        # 전처리 실행 로그 (domain 매칭 + 빈 domain 레코드도 정리)
+        db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL)"),
                    {"dom": 도메인})
-        db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"),
+        db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL"),
+                   {"dom": 도메인})
+        # 작업이력
+        db.execute(text("DELETE FROM work_history WHERE workspace=:ws AND domain=:dom"),
+                   {"ws": name, "dom": 도메인})
+        # 개인 phase
+        db.execute(text("DELETE FROM user_work_phase WHERE workspace=:ws AND domain=:dom"),
+                   {"ws": name, "dom": 도메인})
+        # 빌드 이력
+        db.execute(text("DELETE FROM build_history WHERE domain=:dom"),
                    {"dom": 도메인})
         db.commit()
+        # 워크스페이스 사전 테이블 DROP
+        try:
+            from models.dictionary import ws_사전테이블삭제
+            from core.database import 엔진
+            ws_사전테이블삭제(name, 도메인, 엔진)
+        except Exception:
+            pass  # 테이블 미존재 시 무시
     return 워크스페이스해제(name)
 
 
@@ -286,6 +338,16 @@ def 워크스페이스phase전이(
 ) -> Dict[str, Any]:
     """워크스페이스 phase 순방향 전이."""
     return phase전이(name, 요청.to)
+
+
+@라우터.post("/{name}/phase/revert", response_model=WorkspacePhaseResponse)
+def 워크스페이스phase역전이(
+    name: str,
+    요청: PhaseAdvanceRequest,
+    _current: dict = Depends(현재사용자가져오기),
+) -> Dict[str, Any]:
+    """워크스페이스 phase 역방향 전이."""
+    return phase역전이(name, 요청.to)
 
 
 @라우터.get("/{name}/phase")

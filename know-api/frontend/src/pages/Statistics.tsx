@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import PageHeader from '../components/PageHeader'
 import { Card, Statistic, Row, Col, Typography, Spin, message, Checkbox, Radio, DatePicker, Space } from 'antd'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import dayjs from 'dayjs'
@@ -79,7 +80,7 @@ export default function Statistics() {
 
   return (
     <div>
-      <Typography.Title level={4} style={{ marginBottom: 24 }}>도메인별 사전 현황</Typography.Title>
+      <PageHeader title="통계" />
 
       {로딩 ? (
         <div style={{ textAlign: 'center', padding: '80px 0' }}>

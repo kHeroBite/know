@@ -65,20 +65,14 @@ export default function Layout() {
   }, [selectedWorkspace, selectedDomain])
 
   useEffect(() => {
-    const color = selectedColor || '#1a1a2e'
+    const defaultColor = '#4a4a4a'  // 미선택 시 다크그레이
+    const color = selectedWorkspace ? (selectedColor || '#1a1a2e') : defaultColor
     document.documentElement.style.setProperty('--theme-color', color)
-    if (selectedColor) {
-      document.documentElement.style.setProperty('--primary', selectedColor)
-      document.documentElement.style.setProperty('--primary-hover', selectedColor)
-      document.documentElement.style.setProperty('--sider-bg-start', selectedColor)
-      document.documentElement.style.setProperty('--sider-bg-end', selectedColor)
-    } else {
-      document.documentElement.style.removeProperty('--primary')
-      document.documentElement.style.removeProperty('--primary-hover')
-      document.documentElement.style.removeProperty('--sider-bg-start')
-      document.documentElement.style.removeProperty('--sider-bg-end')
-    }
-  }, [selectedColor])
+    document.documentElement.style.setProperty('--primary', color)
+    document.documentElement.style.setProperty('--primary-hover', color)
+    document.documentElement.style.setProperty('--sider-bg-start', color)
+    document.documentElement.style.setProperty('--sider-bg-end', color)
+  }, [selectedColor, selectedWorkspace])
 
   const menuItems = [
     {
@@ -155,7 +149,7 @@ export default function Layout() {
           <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, letterSpacing: '1px' }}>
             {selectedWorkspace
               ? selectedDomain
-                ? `${selectedWorkspace}-${selectedDomain}`
+                ? `${selectedWorkspace} : ${selectedDomain}`
                 : selectedWorkspace
               : '미선택'}
           </div>
@@ -193,7 +187,7 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        <Content style={{ margin: 16, marginLeft: 216, overflowX: 'hidden' }}>
+        <Content style={{ margin: 0, marginLeft: 200, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh' }}>
           {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />

@@ -5,6 +5,7 @@ export interface KeywordItem {
   line_num: number
   keyword: string
   analysis: string
+  full_analysis?: string
   status: 'pending' | 'assigned' | 'completed'
   assigned_to: string | null
   assigned_at: string | null

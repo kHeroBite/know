@@ -104,6 +104,14 @@ def 테이블생성():
         except Exception:
             pass  # 이미 존재하면 무시
 
+        # 마이그레이션: full_analysis 컬럼 추가 (없으면 추가)
+        try:
+            conn.execute(text("ALTER TABLE keyword_assignments ADD COLUMN full_analysis TEXT DEFAULT ''"))
+            conn.commit()
+            print("  [OK] keyword_assignments.full_analysis 컬럼 추가")
+        except Exception:
+            pass  # 이미 존재하면 무시
+
         # 5. llm_settings (LLM 설정)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS llm_settings (

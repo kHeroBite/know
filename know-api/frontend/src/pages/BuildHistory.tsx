@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
-  Card, Button, Table, Tag, Typography, Space, Select,
+  Card, Button, Table, Tag, Typography, Space, Modal,
   message, Statistic, Row, Col, Divider
 } from 'antd'
 import { BuildOutlined, ReloadOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons'
@@ -10,6 +10,7 @@ import { 빌드API } from '../api/pipeline'
 import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 
@@ -72,28 +73,10 @@ export default function BuildHistory() {
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
 
-  // jiana 버전
-  const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
-  const [선택jiana, set선택jiana] = useState<string>('')
-
   // 전체 이력
   const [전체이력, set전체이력] = useState<빌드이력항목[]>([])
   const [도메인통계목록, set도메인통계목록] = useState<도메인통계[]>([])
   const [이력로딩, set이력로딩] = useState(false)
-
-  // jiana 버전 목록 로드 + 도메인별 저장된 버전 복원
-  useEffect(() => {
-    빌드API.jiana버전목록().then((res: any) => {
-      const versions = res.data?.versions || []
-      setJiana버전목록(versions)
-      const saved = localStorage.getItem(`jiana_version_${currentDomain}`)
-      if (saved && versions.includes(saved)) {
-        set선택jiana(saved)
-      } else if (versions.length > 0) {
-        set선택jiana(versions[versions.length - 1])
-      }
-    }).catch(() => {})
-  }, [currentDomain])
 
   // 현재 도메인 이력 조회 + 최근 빌드 상태 복원
   const 현재이력조회 = useCallback(async () => {
@@ -213,11 +196,10 @@ export default function BuildHistory() {
     // WebSocket 먼저 연결 후 빌드 시작 (빠른 빌드 로그 누락 방지)
     빌드웹소켓연결(currentDomain)
     try {
-      const startRes = await 빌드API.빌드시작(currentDomain, 선택jiana || undefined)
-      if (선택jiana) localStorage.setItem(`jiana_version_${currentDomain}`, 선택jiana)
+      const startRes = await 빌드API.빌드시작(currentDomain, selectedWorkspace || undefined)
       set최근빌드ID(startRes.data?.build_history_id || null)
       set최근빌드상태('running')
-      message.success(`${currentDomain} 빌드 시작`)
+      message.success(`워크스페이스 ${selectedWorkspace} 빌드 시작`)
     } catch (err: any) {
       message.error(err.response?.data?.detail || '빌드 시작 실패')
       set빌드중(false)
@@ -308,19 +290,49 @@ export default function BuildHistory() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <PageHeader
+        title="사전 빌드"
+        showPrev
+        prevLabel="이전단계로 (데이터할당)"
+        onPrev={() => {
+          Modal.confirm({
+            title: '이전단계로 돌아가시겠습니까?',
+            content: '빌드된 내용과 로그가 모두 삭제됩니다.',
+            okText: '확인',
+            cancelText: '취소',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+              try {
+                // 빌드 이력 삭제
+                await 클라이언트.delete(`/build/${currentDomain}/history`, { params: { workspace: selectedWorkspace } })
+              } catch { /* 무시 */ }
+              try {
+                await useWorkspaceStore.getState().revertPhase('work')
+                navigate('/assignment')
+              } catch (err: any) {
+                message.error(err.response?.data?.detail || 'phase 전이 실패')
+              }
+            },
+          })
+        }}
+        showNext={최근빌드상태 === 'completed' && !빌드중}
+        nextLabel="다음단계로 (사전검증)"
+        onNext={async () => {
+          if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
+          try {
+            await workspaceAPI.advancePhase(selectedWorkspace, 'verify')
+            await useWorkspaceStore.getState().loadWorkspaceStatus()
+            message.success('검증 단계로 전환되었습니다')
+            navigate('/dict-verify')
+          } catch (e: any) {
+            message.error('phase 전환 실패: ' + (e?.response?.data?.detail || e.message))
+          }
+        }}
+      />
       {/* ═══ 상단: 사전 빌드 ═══ */}
       <Card
-        title={<Title level={4} style={{ margin: 0 }}>워크스페이스:{selectedWorkspace}({currentDomain}) 사전 빌드</Title>}
         extra={
           <Space>
-            <Select
-              value={선택jiana}
-              onChange={set선택jiana}
-              style={{ width: 140 }}
-              size="small"
-              options={jiana버전목록.map(v => ({ label: `jiana ${v}`, value: v }))}
-              placeholder="jiana 버전"
-            />
             {빌드중 ? (
               <Button danger icon={<StopOutlined />} onClick={빌드중지}>
                 빌드 중지
@@ -352,17 +364,7 @@ export default function BuildHistory() {
           <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
             <Button icon={<ReloadOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'synonym.UTF-8')}>synonym.UTF-8 다운로드</Button>
             <Button icon={<BuildOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'data.tar')}>data.tar 다운로드</Button>
-            <Button type="primary" icon={<CheckCircleOutlined />} onClick={async () => {
-              if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
-              try {
-                await workspaceAPI.advancePhase(selectedWorkspace, 'verify')
-                await useWorkspaceStore.getState().loadWorkspaceStatus()
-                message.success('검증 단계로 전환되었습니다')
-                navigate('/dict-verify')
-              } catch (e: any) {
-                message.error('phase 전환 실패: ' + (e?.response?.data?.detail || e.message))
-              }
-            }}>검증단계로</Button>
+            {/* 다음단계 버튼은 PageHeader 상단으로 이동 */}
           </div>
         )}
       </Card>

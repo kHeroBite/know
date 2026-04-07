@@ -32,8 +32,16 @@ from services.dictionary_service import (
 )
 from pydantic import BaseModel
 from services.thesaurus_recommend import 유사어추천후보검색, LLM재순위
+from models.dictionary import ws_사전사이트명
 
 라우터 = APIRouter(prefix="/api/dictionaries", tags=["사전"])
+
+
+def _resolve_site(domain: str, workspace: str | None = None) -> str:
+    """workspace가 있으면 WS_ 사이트명, 없으면 도메인 그대로 반환."""
+    if workspace:
+        return ws_사전사이트명(workspace, domain)
+    return domain
 
 
 # ─── 파일 임포트 (비동기 + 진행률) ───────────────────────────────
@@ -83,11 +91,13 @@ def 유의어목록(
     page: int = 1,
     size: int = 50,
     search: Optional[str] = None,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 목록 조회."""
-    결과 = 유의어목록조회(db, domain, page=page, size=size, search=search)
+    site = _resolve_site(domain, workspace)
+    결과 = 유의어목록조회(db, site, page=page, size=size, search=search)
     return 페이지응답[유의어항목응답](
         items=[유의어항목응답(**item) for item in 결과["items"]],
         total=결과["total"],
@@ -100,11 +110,13 @@ def 유의어목록(
 def 유의어등록(
     domain: str,
     요청: 유의어항목생성,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 추가."""
-    결과 = 유의어추가(db, domain, 요청.head_word, 요청.tail_word, 요청.memo, user_id=current.get("user_id"))
+    site = _resolve_site(domain, workspace)
+    결과 = 유의어추가(db, site, 요청.head_word, 요청.tail_word, 요청.memo, user_id=current.get("user_id"))
     return 유의어항목응답(**결과)
 
 
@@ -113,11 +125,13 @@ def 유의어변경(
     domain: str,
     head_word: str,
     요청: 유의어항목수정,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 수정."""
-    결과 = 유의어수정(db, domain, head_word, 요청.tail_word, 요청.memo)
+    site = _resolve_site(domain, workspace)
+    결과 = 유의어수정(db, site, head_word, 요청.tail_word, 요청.memo)
     return 유의어항목응답(**결과)
 
 
@@ -125,13 +139,15 @@ def 유의어변경(
 def 유의어제거(
     domain: str,
     head_word: str,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 삭제."""
     if current.get("auth") not in ("W", "A"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
-    유의어삭제(db, domain, head_word)
+    site = _resolve_site(domain, workspace)
+    유의어삭제(db, site, head_word)
     return 성공응답(message=f"유의어 삭제 완료: {head_word}")
 
 
@@ -139,11 +155,13 @@ def 유의어제거(
 def 유의어일괄등록(
     domain: str,
     items: List[유의어일괄항목],
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """유의어 일괄 등록."""
-    결과 = 유의어일괄추가(db, domain, [i.model_dump() for i in items], user_id=current.get("user_id"))
+    site = _resolve_site(domain, workspace)
+    결과 = 유의어일괄추가(db, site, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")
 
 
@@ -162,11 +180,13 @@ def 유사어추천(
     domain: str,
     keyword: str = Query(...),
     limit: int = Query(50),
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """키워드 기반 유사어 세트 추천 (텍스트 매칭 Phase 1)."""
-    결과 = 유사어추천후보검색(db, domain, keyword, limit)
+    site = _resolve_site(domain, workspace)
+    결과 = 유사어추천후보검색(db, site, keyword, limit)
     return {"items": 결과, "total": len(결과), "keyword": keyword}
 
 
@@ -191,11 +211,13 @@ def 사전목록(
     page: int = 1,
     size: int = 50,
     search: Optional[str] = Query(default=None),
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 목록 조회 (udic/cndic)."""
-    결과 = 사전목록조회(db, domain, type, page=page, size=size, search=search)
+    site = _resolve_site(domain, workspace)
+    결과 = 사전목록조회(db, site, type, page=page, size=size, search=search)
     return 페이지응답[사전항목응답](
         items=[사전항목응답(**item) for item in 결과["items"]],
         total=결과["total"],
@@ -209,11 +231,13 @@ def 사전항목등록(
     domain: str,
     type: str,
     요청: 사전항목생성,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 추가 (udic/cndic)."""
-    결과 = 사전항목추가(db, domain, type, 요청.word, 요청.memo, user_id=current.get("user_id"))
+    site = _resolve_site(domain, workspace)
+    결과 = 사전항목추가(db, site, type, 요청.word, 요청.memo, user_id=current.get("user_id"))
     return 사전항목응답(**결과)
 
 
@@ -223,11 +247,13 @@ def 사전항목변경(
     type: str,
     word: str,
     요청: 사전항목수정,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     _current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 수정 (udic/cndic)."""
-    결과 = 서비스사전항목수정(db, domain, type, word, 요청.memo)
+    site = _resolve_site(domain, workspace)
+    결과 = 서비스사전항목수정(db, site, type, word, 요청.memo)
     return 사전항목응답(**결과)
 
 
@@ -236,13 +262,15 @@ def 사전항목제거(
     domain: str,
     type: str,
     word: str,
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 삭제 (udic/cndic)."""
     if current.get("auth") not in ("W", "A"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
-    사전항목삭제(db, domain, type, word)
+    site = _resolve_site(domain, workspace)
+    사전항목삭제(db, site, type, word)
     return 성공응답(message=f"삭제 완료: {word}")
 
 
@@ -251,9 +279,11 @@ def 사전일괄등록(
     domain: str,
     type: str,
     items: List[일괄항목],
+    workspace: Optional[str] = Query(default=None),
     db: Session = Depends(DB세션),
     current: dict = Depends(현재사용자가져오기),
 ):
     """사전 항목 일괄 등록 (udic/cndic)."""
-    결과 = 일괄항목추가(db, domain, type, [i.model_dump() for i in items], user_id=current.get("user_id"))
+    site = _resolve_site(domain, workspace)
+    결과 = 일괄항목추가(db, site, type, [i.model_dump() for i in items], user_id=current.get("user_id"))
     return 성공응답(message=f"일괄 등록 완료: 성공 {결과['inserted']}건, 건너뜀 {결과['skipped']}건")

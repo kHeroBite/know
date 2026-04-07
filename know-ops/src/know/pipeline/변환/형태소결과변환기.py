@@ -35,7 +35,11 @@ class 형태소결과변환기:
 
         출력파일 = Path(str(입력파일) + ".5")
 
-        텍스트 = 입력파일.read_text(encoding="utf-8")
+        # jiana LiteTest는 EUC-KR로 출력 → 먼저 EUC-KR 시도, 실패 시 UTF-8
+        try:
+            텍스트 = 입력파일.read_text(encoding="euc-kr")
+        except (UnicodeDecodeError, ValueError):
+            텍스트 = 입력파일.read_text(encoding="utf-8")
 
         # Step 1: 빈 줄 → @@, 각 줄 끝에 탭 추가
         # sed -e 's/^$/@@/' -e 's/^\(.*\)$/\1\t/'

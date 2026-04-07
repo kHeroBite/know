@@ -21,18 +21,22 @@ from services.build_service import build_service
 def 빌드시작(
     domain: str,
     background_tasks: BackgroundTasks,
-    jiana_version: str = Query(default=""),
+    workspace: str = Query(default=""),
     current_user: dict = Depends(현재사용자가져오기),
     db: Session = Depends(DB세션),
 ):
-    """사전 빌드 시작 (백그라운드 실행)"""
+    """사전 빌드 시작 (백그라운드 실행). 워크스페이스의 jiana 폴더 자동 사용."""
+    from fastapi import HTTPException
+    from services.workspace_service import jiana홈경로
+    from services.build_service import ws_사전_파일export
     triggered_by = current_user.get("id") or current_user.get("user_id")
     jiana_home = None
-    if jiana_version:
-        jiana_home = f"/home/know/apps/know-ops/jiana/{jiana_version}"
+    if workspace:
+        jiana_home = jiana홈경로(workspace)
         if not os.path.isdir(jiana_home):
-            from fastapi import HTTPException
-            raise HTTPException(400, detail=f"jiana 버전 경로 없음: {jiana_home}")
+            raise HTTPException(400, detail=f"워크스페이스 jiana 경로 없음: {jiana_home}")
+        # 빌드 전 WS_ 사전 DB → txt_resrc 파일 export
+        ws_사전_파일export(db, workspace, domain, jiana_home)
     return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home)
 
 
@@ -58,7 +62,7 @@ def 빌드파일다운로드(
     if bh.output_path:
         jiana_dir = os.path.dirname(bh.output_path)
     else:
-        jiana_dir = "/home/know/jiana1.5.12"
+        jiana_dir = "/home/know/jiana1.5.12"  # fallback: output_path 없는 레거시 빌드
     allowed = {"data.tar", "synonym.UTF-8"}
     if filename not in allowed:
         raise HTTPException(400, detail=f"허용되지 않는 파일: {filename}")
@@ -69,14 +73,12 @@ def 빌드파일다운로드(
 
 
 @라우터.get("/jiana-versions")
-def jiana버전목록(
+def jiana버전목록_레거시(
     current_user: dict = Depends(현재사용자가져오기),
 ):
-    """jiana 폴더 목록 조회"""
-    import glob
-    base = "/home/know/apps/know-ops/jiana"
-    dirs = sorted([os.path.basename(d.rstrip("/")) for d in glob.glob(f"{base}/*/") if os.path.isdir(d)])
-    return {"versions": dirs, "base": base}
+    """jiana 폴더 목록 조회 (레거시 — /workspaces/jiana-versions 사용 권장)"""
+    from services.workspace_service import jiana버전목록 as _jiana목록
+    return {"versions": _jiana목록()}
 
 
 @라우터.post("/{domain}/cancel")
@@ -90,6 +92,19 @@ def 빌드취소(
     if cancelled:
         return {"success": True, "message": "빌드가 중지되었습니다."}
     return {"success": False, "message": "진행 중인 빌드가 없습니다."}
+
+
+@라우터.delete("/{domain}/history")
+def 빌드이력삭제(
+    domain: str,
+    current_user: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(DB세션),
+):
+    """도메인 빌드 이력 전체 삭제"""
+    from sqlalchemy import text
+    result = db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
+    db.commit()
+    return {"deleted": result.rowcount, "domain": domain}
 
 
 @라우터.get("/{domain}/status")

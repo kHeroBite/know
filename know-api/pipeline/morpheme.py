@@ -16,8 +16,8 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# 실제 서버 경로 (서버 확인 결과: /home/know/jiana1.5.12/cotton_test.sh)
-COTTON_TEST_SH = "/home/know/jiana1.5.12/cotton_test.sh"
+# 기본 서버 경로 (워크스페이스 jiana가 없을 때 ��용)
+DEFAULT_COTTON_TEST_SH = "/home/know/jiana1.5.12/cotton_test.sh"
 MORPHEME_OUTPUT_DIR = "/home/know/apps/know-api/uploads/morpheme"
 
 # 형태소분석 타임아웃: 30분
@@ -35,7 +35,7 @@ class MorphemeError(Exception):
 async def run_morpheme(
     input_file: str,
     pipeline_id: int,
-    script_path: str = COTTON_TEST_SH,
+    script_path: str = DEFAULT_COTTON_TEST_SH,
     timeout: int = MORPHEME_TIMEOUT,
 ) -> Dict[str, Any]:
     """cotton_test.sh를 asyncio subprocess로 실행

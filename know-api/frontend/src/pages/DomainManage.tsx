@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import PageHeader from '../components/PageHeader'
 import {
   Typography, Button, Input, Select, Space, Popconfirm, message,
   Card, Row, Col, Progress, Modal, Form, Table, Radio,
@@ -293,7 +294,7 @@ export default function DomainManage() {
 
   return (
     <div>
-      <Title level={4} style={{ margin: '0 0 16px 0' }}><FolderOutlined /> 도메인 관리</Title>
+      <PageHeader title="도메인 관리" />
 
       {/* ─── 도메인 목록 ─── */}
       <Card

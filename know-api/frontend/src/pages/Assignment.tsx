@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message } from 'antd'
-import { UserAddOutlined, RocketOutlined } from '@ant-design/icons'
+import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message, Modal } from 'antd'
+import { UserAddOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { assignmentApi, KeywordItem, AssignmentStats } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { workspaceAPI } from '../api/workspace'
+import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 const PAGE_SIZE = 20
@@ -155,6 +157,46 @@ export default function Assignment() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <PageHeader
+        title="데이터 할당"
+        showPrev
+        prevLabel="이전단계로 (전처리)"
+        onPrev={() => {
+          Modal.confirm({
+            title: '이전단계로 돌아가시겠습니까?',
+            content: '프리징된 할당 데이터가 모두 삭제됩니다. 데이터 전처리 단계로 돌아갑니다.',
+            okText: '확인',
+            cancelText: '취소',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+              try {
+                await useWorkspaceStore.getState().revertPhase('preprocess')
+                navigate('/preprocess')
+              } catch (err: any) {
+                message.error(err.response?.data?.detail || 'phase 전이 실패')
+              }
+            },
+          })
+        }}
+        showNext={stats.assigned === 0 && stats.total > 0}
+        nextLabel="다음단계로 (사전빌드)"
+        onNext={() => {
+          Modal.confirm({
+            title: '사전 빌드 단계로 진행하시겠습니까?',
+            content: `완료: ${stats.completed.toLocaleString()}건 / 전체: ${stats.total.toLocaleString()}건`,
+            okText: '확인',
+            cancelText: '취소',
+            onOk: async () => {
+              try {
+                await useWorkspaceStore.getState().advancePhase('build')
+                navigate('/build-history')
+              } catch (err: any) {
+                message.error(err.response?.data?.detail || 'phase 전이 실패')
+              }
+            },
+          })
+        }}
+      />
       {/* 상단: 통계 바 */}
       <Card size="small">
         <Row gutter={16} align="middle">
@@ -201,17 +243,6 @@ export default function Assignment() {
                 allowClear
               />
               <Button type="primary" icon={<UserAddOutlined />} onClick={할당실행} disabled={filter !== 'pending'}>할당받기</Button>
-              <Button
-                type="primary"
-                icon={<RocketOutlined />}
-                disabled={stats.assigned > 0}
-                onClick={async () => {
-                  await useWorkspaceStore.getState().advancePhase('build')
-                  navigate('/build-history')
-                }}
-              >
-                {stats.assigned > 0 ? `다음단계로 (할당 ${stats.assigned}건 남음)` : '다음단계로'}
-              </Button>
             </Space>
           </Col>
         </Row>

@@ -24,15 +24,18 @@ export interface 파일기반검증결과 {
 }
 
 export const 사전검증API = {
-  검증실행: (keywords: string[], domain: string) =>
-    클라이언트.post<검증결과>('/dict-verify/run', { keywords, domain }),
+  검증실행: (keywords: string[], domain: string, workspace?: string) =>
+    클라이언트.post<검증결과>('/dict-verify/run', { keywords, domain, workspace }),
 
   결과조회: (domain: string) =>
     클라이언트.get<검증결과>(`/dict-verify/result/${domain}`),
 
-  형태소분석: (keyword: string, domain?: string) =>
-    클라이언트.post<분석결과>('/dict-verify/analyze', { keyword, domain }),
+  형태소분석: (keyword: string, domain?: string, workspace?: string) =>
+    클라이언트.post<분석결과>('/dict-verify/analyze', { keyword, domain, workspace }),
 
   파일기반검증: (workspace: string, domain: string) =>
     클라이언트.post<파일기반검증결과>('/dict-verify/run-file-based', { workspace, domain }),
+
+  분리검증: (workspace: string, domain: string) =>
+    클라이언트.post<{ completed: 검증결과, pending: 검증결과 }>('/dict-verify/run-split', { workspace, domain }),
 }

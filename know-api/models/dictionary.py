@@ -84,3 +84,45 @@ def 도메인테이블삭제(site: str, engine) -> None:
     for dic_type in ("udic", "cndic", "thesaurus", "category"):
         사전테이블가져오기(site, dic_type, meta)
     meta.drop_all(engine)
+
+
+# ── 워크스페이스 사전 테이블 ──
+
+def ws_사전사이트명(workspace: str, domain: str) -> str:
+    """워크스페이스 사전 테이블용 사이트명 생성. 예: WS_A_EPOST"""
+    return f"WS_{workspace}_{domain}".upper()
+
+
+def ws_사전테이블생성(workspace: str, domain: str, engine) -> None:
+    """워크스페이스 사전 테이블 4개 CREATE TABLE."""
+    site = ws_사전사이트명(workspace, domain)
+    도메인테이블생성(site, engine)
+
+
+def ws_사전테이블삭제(workspace: str, domain: str, engine) -> None:
+    """워크스페이스 사전 테이블 4개 DROP TABLE."""
+    site = ws_사전사이트명(workspace, domain)
+    도메인테이블삭제(site, engine)
+
+
+def ws_사전데이터복사(workspace: str, domain: str, engine) -> int:
+    """도메인 사전 4개 테이블 데이터를 워크스페이스 사전으로 복사. 총 복사 건수 반환."""
+    from sqlalchemy import text
+    src_site = domain.upper()
+    dst_site = ws_사전사이트명(workspace, domain)
+    사이트명검증(src_site)
+    사이트명검증(dst_site)
+    suffixes = ["_UDIC", "_CNDIC", "_THESAURUS", "_CATEGORY"]
+    total = 0
+    with engine.connect() as conn:
+        for suffix in suffixes:
+            src_table = f"{src_site}{suffix}"
+            dst_table = f"{dst_site}{suffix}"
+            # 테이블 존재 확인 후 복사
+            try:
+                result = conn.execute(text(f"INSERT INTO {dst_table} SELECT * FROM {src_table}"))
+                total += result.rowcount
+            except Exception:
+                pass  # 원본 테이블이 비어있거나 없으면 무시
+        conn.commit()
+    return total

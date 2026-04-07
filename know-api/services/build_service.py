@@ -14,8 +14,53 @@ from models.pipeline import BuildHistory
 logger = logging.getLogger(__name__)
 
 # 사전 파일 경로 상수
-JIANA_HOME = "/home/know/jiana1.5.12"
+DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
 DICT_BACKUP_DIR = "/home/know/dict_backup"
+
+
+def ws_사전_파일export(db, workspace: str, domain: str, jiana_home: str) -> dict:
+    """WS_ 사전 DB의 UDIC/CNDIC 데이터를 jiana txt_resrc 파일로 export.
+
+    udic → txt_resrc/udic/user.ks
+    cndic → txt_resrc/cndic/cnlist.ks
+    """
+    from models.dictionary import ws_사전사이트명
+    from sqlalchemy import text
+
+    site = ws_사전사이트명(workspace, domain)
+    결과 = {}
+
+    # UDIC → user.ks
+    udic_path = os.path.join(jiana_home, "txt_resrc", "udic", "user.ks")
+    os.makedirs(os.path.dirname(udic_path), exist_ok=True)
+    try:
+        rows = db.execute(text(f"SELECT _WORD FROM {site}_UDIC ORDER BY _WORD")).scalars().all()
+        with open(udic_path, "w", encoding="utf-8-sig") as f:  # BOM 포함
+            for word in rows:
+                if word and word.strip():
+                    f.write(word.strip() + "\n")
+        결과["udic"] = len(rows)
+        logger.info("사전 export: %s_UDIC → %s (%d건)", site, udic_path, len(rows))
+    except Exception as e:
+        logger.warning("UDIC export 실패: %s", e)
+        결과["udic_error"] = str(e)
+
+    # CNDIC → cnlist.ks
+    cndic_path = os.path.join(jiana_home, "txt_resrc", "cndic", "cnlist.ks")
+    os.makedirs(os.path.dirname(cndic_path), exist_ok=True)
+    try:
+        rows = db.execute(text(f"SELECT _WORD FROM {site}_CNDIC ORDER BY _WORD")).scalars().all()
+        with open(cndic_path, "w", encoding="utf-8") as f:
+            for word in rows:
+                if word and word.strip():
+                    f.write(word.strip() + "\n")
+        결과["cndic"] = len(rows)
+        logger.info("사전 export: %s_CNDIC → %s (%d건)", site, cndic_path, len(rows))
+    except Exception as e:
+        logger.warning("CNDIC export 실패: %s", e)
+        결과["cndic_error"] = str(e)
+
+    return 결과
 
 
 class BuildService:
@@ -168,7 +213,7 @@ class BuildService:
     def 사전동기화(self, db: Session, domain: str) -> dict:
         """사전 파일 동기화 (rsync 또는 cp fallback)"""
         src = os.path.join(DICT_BACKUP_DIR, domain)
-        dst = os.path.join(JIANA_HOME, "dic")
+        dst = os.path.join(DEFAULT_JIANA_HOME, "dic")
 
         if not os.path.isdir(src):
             raise HTTPException(
@@ -214,7 +259,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     def 사전초기화(self, db: Session, domain: str) -> dict:
         """사전 파일 초기화 (dic/ 디렉토리 비우기)"""
-        dic_dir = os.path.join(JIANA_HOME, "dic")
+        dic_dir = os.path.join(DEFAULT_JIANA_HOME, "dic")
 
         if not os.path.isdir(dic_dir):
             raise HTTPException(
@@ -286,6 +331,20 @@ async def _run_build_background(build_history_id: int, domain: str, jiana_home: 
             build_history_id,
             exc,
         )
+        # DB에 실패 상태 기록 (running → failed)
+        try:
+            from core.database import 세션팩토리
+            from datetime import datetime
+            db = 세션팩토리()
+            bh = db.query(BuildHistory).filter_by(id=build_history_id).first()
+            if bh and bh.status == "running":
+                bh.status = "failed"
+                bh.completed_at = datetime.now()
+                bh.log_text = (bh.log_text or "") + f"\n[ERROR] {exc}"
+                db.commit()
+            db.close()
+        except Exception:
+            pass
 
 
 # 싱글턴

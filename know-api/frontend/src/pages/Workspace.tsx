@@ -26,13 +26,15 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   BgColorsOutlined,
-
+  StopOutlined,
   ReloadOutlined,
 } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { workspaceAPI } from '../api/workspace'
 import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 
@@ -52,7 +54,8 @@ interface 워크스페이스항목 {
 
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
-  const { selectedWorkspace, setWorkspace, clearWorkspace } = useWorkspaceStore()
+  const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
+  const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
   const [로딩, set로딩] = useState(false)
@@ -61,6 +64,8 @@ export default function Workspace() {
   const [생성로딩, set생성로딩] = useState(false)
   const [연결팝업WS, set연결팝업WS] = useState<string | null>(null)
   const [선택도메인, set선택도메인] = useState<string | null>(null)
+  const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
+  const [선택jiana, set선택jiana] = useState<string>('')
   const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [연결해제중, set연결해제중] = useState(false)
@@ -75,13 +80,17 @@ export default function Workspace() {
   const 목록조회 = async () => {
     set로딩(true)
     try {
-      const [wsRes, dmRes] = await Promise.all([
+      const [wsRes, dmRes, jianaRes] = await Promise.all([
         workspaceAPI.워크스페이스목록(),
         workspaceAPI.도메인목록(),
+        workspaceAPI.jiana버전목록(),
       ])
       const wsList: 워크스페이스항목[] = wsRes.data
       set목록(wsList)
       set도메인목록(dmRes.data)
+      const versions = jianaRes.data?.versions || []
+      setJiana버전목록(versions)
+      if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
       // CONNECTING 상태 워크스페이스 자동 폴링
       wsList.forEach(ws => {
         if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
@@ -118,6 +127,12 @@ export default function Workspace() {
       delete next[wsName]
       return next
     })
+    // 초기화 모드 플래그 정리
+    set에러메시지(prev => {
+      const next = { ...prev }
+      delete next[wsName + '_mode']
+      return next
+    })
     await 목록조회()
   }
 
@@ -131,15 +146,18 @@ export default function Workspace() {
           const elapsed = res.data?.elapsed
           const fileCount = res.data?.file_count
           const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
-          message.success(`연결 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
+          const isReinit = 에러메시지[wsName + '_mode'] === 'reinit'
+          message.success(`${isReinit ? '초기화' : '연결'} 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
           await 폴링종료(wsName)
           return
         }
-        if (st === 'idle' || st === 'error') {
+        if (st === 'idle' || st === 'error' || st === 'cancelled') {
           if (st === 'error') {
             const errMsg = res.data?.message || '알 수 없는 오류'
             set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
             message.error(`연결 실패: ${errMsg}`)
+          } else if (st === 'cancelled') {
+            message.info(`"${wsName}" 연결이 취소되었습니다`)
           }
           await 폴링종료(wsName)
           return
@@ -189,14 +207,19 @@ export default function Workspace() {
       message.warning('도메인을 선택하세요')
       return
     }
+    if (!선택jiana) {
+      message.warning('jiana 버전을 선택하세요')
+      return
+    }
     const wsName = 연결팝업WS
+    const jianaVer = 선택jiana
     try {
       // 즉시 UI에 진행률 0% 표시 (서버 응답 전)
       set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
       set연결팝업WS(null)
       set선택도메인(null)
-      await workspaceAPI.도메인연결(wsName, 선택도메인)
-      message.success(`"${wsName}" 도메인 연결 시작`)
+      await workspaceAPI.도메인연결(wsName, 선택도메인, jianaVer)
+      message.success(`"${wsName}" 도메인 연결 시작 (jiana ${jianaVer})`)
       폴링시작(wsName)
       await 목록조회()
     } catch (err: any) {
@@ -238,13 +261,37 @@ export default function Workspace() {
     message.success('워크스페이스 선택 해제')
   }
 
-  const 초기화핸들러 = async (wsName: string, domain: string) => {
+  const 초기화핸들러 = async (wsName: string) => {
+    // 현재 연결 정보 저장
+    const ws = 목록.find(w => w.name === wsName)
+    const domain = ws?.domain
+    if (!domain) { message.error('연결된 도메인이 없습니다'); return }
+    // state.json에서 jiana_version 가져오기
+    let jianaVer: string | undefined
     try {
-      await assignmentApi.초기화(wsName, domain)
-      message.success('초기화 완료')
-      await useWorkspaceStore.getState().loadWorkspaceStatus()
+      const res = await workspaceAPI.도메인jiana설정(domain)
+      jianaVer = res.data?.jiana_version || undefined
+    } catch { /* 없으면 무시 */ }
+
+    try {
+      // 1단계: 연결해제 (DB 정리 + 파일 정리)
+      if (selectedWorkspace === wsName) clearWorkspace()
+      await workspaceAPI.워크스페이스해제(wsName)
+      // 2단계: 같은 도메인으로 재연결
+      set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
+      set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
+      await workspaceAPI.도메인연결(wsName, domain, jianaVer)
+      message.success(`"${wsName}" 초기화 중...`)
+      폴링시작(wsName)
+      await 목록조회()
     } catch (err: any) {
+      set복사진행중(prev => {
+        const next = { ...prev }
+        delete next[wsName]
+        return next
+      })
       message.error(err.response?.data?.detail || '초기화 실패')
+      await 목록조회()
     }
   }
 
@@ -321,7 +368,19 @@ export default function Workspace() {
         }
       `}</style>
 
-      <Title level={3}>워크스페이스</Title>
+      <PageHeader
+        title="워크스페이스"
+        showNext={!!selectedWorkspace}
+        nextLabel="다음단계로"
+        nextPath={
+          phase === 'preprocess' ? '/preprocess'
+          : phase === 'work' && myPhase === 'idle' ? '/assignment'
+          : phase === 'work' ? '/knowledge-work'
+          : phase === 'build' ? '/build-history'
+          : phase === 'verify' ? '/dict-verify'
+          : '/preprocess'
+        }
+      />
 
       {isSuper && (
         <Card style={{ marginBottom: 16, animation: 'wsCardFadeIn 0.3s ease' }}>
@@ -375,13 +434,29 @@ export default function Workspace() {
                 <Card style={getCardStyle(ws)} styles={{ body: { padding: 16 } }}>
                   {/* 복사 진행률 오버레이 */}
                   {isInProgress && (
-                    <div style={{ marginBottom: 10 }}>
+                    <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Progress
                         percent={progressPercent ?? 0}
                         size="small"
                         status="active"
                         format={p => `${p}%`}
+                        style={{ flex: 1 }}
                       />
+                      <Button
+                        size="small"
+                        danger
+                        icon={<StopOutlined />}
+                        onClick={async () => {
+                          try {
+                            await workspaceAPI.연결취소(ws.name)
+                            message.info(`"${ws.name}" 연결 취소 요청됨`)
+                          } catch (err: any) {
+                            message.error(err.response?.data?.detail || '취소 실패')
+                          }
+                        }}
+                      >
+                        중지
+                      </Button>
                     </div>
                   )}
 
@@ -411,7 +486,7 @@ export default function Workspace() {
                       </Text>
                     </div>
                     {ws.status === 'CONNECTING' ? (
-                      <Badge status="warning" text={<Text style={{ color: '#faad14', fontSize: 12 }}>연결중</Text>} />
+                      <Badge status="warning" text={<Text style={{ color: '#faad14', fontSize: 12 }}>{에러메시지[ws.name + '_mode'] === 'reinit' ? '초기화중' : '연결중'}</Text>} />
                     ) : ws.status === 'FAILED' ? (
                       <Badge status="error" text={<Text style={{ color: '#ff4d4f', fontSize: 12 }}>연결실패</Text>} />
                     ) : isSelected ? (
@@ -447,7 +522,7 @@ export default function Workspace() {
                         </Text>
                       )}
                     </div>
-                    {ws.connected_by && (
+                    {ws.connected_by && ws.status !== 'CONNECTING' && (
                       <Text type="secondary" style={{ fontSize: 11, flexShrink: 0, marginLeft: 8, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
                         연결: {ws.connected_by}
                       </Text>
@@ -461,117 +536,124 @@ export default function Workspace() {
                     </div>
                   )}
 
-                  {/* 버튼 영역 */}
-                  <Space size={6} wrap>
-                    {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
-                      <>
-                        <Button
-                          type="primary"
-                          size="small"
-                          icon={<LinkOutlined />}
-                          disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING')}
-                          onClick={() => {
-                            set연결팝업WS(ws.name)
-                            set선택도메인(null)
-                          }}
-                        >
-                          연결
-                        </Button>
-                        <ColorPicker
-                          value={ws.color || '#1a1a2e'}
-                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
-                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
-                          size="small"
-                        >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '1px solid #fff' } : {}) }}>
-                            색상
-                          </Button>
-                        </ColorPicker>
-                        {isSuper && (
-                          <Popconfirm
-                            title={`"${ws.name}" 워크스페이스를 삭제하시겠습니까?`}
-                            onConfirm={() => 삭제핸들러(ws.name)}
-                            okText="삭제"
-                            cancelText="취소"
-                          >
-                            <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
-                              삭제
-                            </Button>
-                          </Popconfirm>
-                        )}
-                      </>
-                    )}
-
-                    {ws.status === 'USED' && (
-                      <>
-                        {isSelected ? (
+                  {/* 버튼 영역 — 좌: 기능버튼, 우: 색상 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Space size={6} wrap>
+                      {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
+                        <>
                           <Button
+                            type="primary"
                             size="small"
-                            icon={<CloseCircleOutlined />}
-                            onClick={선택해제핸들러}
+                            icon={<LinkOutlined />}
+                            disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING')}
+                            onClick={() => {
+                              set연결팝업WS(ws.name)
+                              set선택도메인(null)
+                            }}
                           >
-                            선택해제
+                            연결
                           </Button>
-                        ) : (
-                          <>
-                            <Button
-                              type="primary"
-                              size="small"
-                              icon={<CheckCircleOutlined />}
-                              disabled={!currentUser}
-                              onClick={() => {
-                                if (ws.domain) {
-                                  setWorkspace(ws.name, ws.domain, ws.color)
-                                  message.success(`워크스페이스 "${ws.name}" 선택됨`)
-                                }
-                              }}
-                            >
-                              선택
-                            </Button>
+                          {isSuper && (
                             <Popconfirm
-                              title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
-                              onConfirm={() => 해제핸들러(ws.name)}
-                              okText="연결해제"
-                              okButtonProps={{ danger: true }}
+                              title={`"${ws.name}" 워크스페이스를 삭제하시겠습니까?`}
+                              onConfirm={() => 삭제핸들러(ws.name)}
+                              okText="삭제"
                               cancelText="취소"
                             >
-                              <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
-                                연결해제
+                              <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                                삭제
                               </Button>
                             </Popconfirm>
-                          </>
-                        )}
-                        <ColorPicker
-                          value={ws.color || '#1a1a2e'}
-                          onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
-                          presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
-                          size="small"
-                        >
-                          <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '1px solid #fff' } : {}) }}>
-                            색상
-                          </Button>
-                        </ColorPicker>
-                        {ws.domain && (
-                          <Popconfirm
-                            title="프리징 상태를 해제하고 작업 데이터를 삭제합니다. 계속하시겠습니까?"
-                            onConfirm={() => 초기화핸들러(ws.name, ws.domain!)}
-                            okText="초기화"
-                            cancelText="취소"
-                            okButtonProps={{ danger: true }}
-                          >
-                            <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }}>
-                              초기화
+                          )}
+                        </>
+                      )}
+                      {ws.status === 'USED' && (
+                        <>
+                          {isSelected ? (
+                            <Button
+                              size="small"
+                              icon={<CloseCircleOutlined />}
+                              onClick={선택해제핸들러}
+                            >
+                              선택해제
                             </Button>
-                          </Popconfirm>
-                        )}
-                        {isSuper && (
-                          <Button size="small" danger icon={<DeleteOutlined />} disabled>
-                            삭제
-                          </Button>
-                        )}
-                      </>
+                          ) : (
+                            <>
+                              <Button
+                                type="primary"
+                                size="small"
+                                icon={<CheckCircleOutlined />}
+                                disabled={!currentUser}
+                                onClick={async () => {
+                                  if (ws.domain) {
+                                    setWorkspace(ws.name, ws.domain, ws.color)
+                                    message.success(`워크스페이스 "${ws.name}" 선택됨`)
+                                    try {
+                                      const res = await assignmentApi.작업상태(ws.name, ws.domain)
+                                      const p = res.data.phase || 'preprocess'
+                                      const mp = res.data.my_phase || 'idle'
+                                      if (p === 'preprocess') navigate('/preprocess')
+                                      else if (p === 'work' && mp === 'working') navigate('/knowledge-work')
+                                      else if (p === 'work') navigate('/assignment')
+                                      else if (p === 'build') navigate('/build-history')
+                                      else if (p === 'verify') navigate('/dict-verify')
+                                      else navigate('/preprocess')
+                                    } catch {
+                                      navigate('/preprocess')
+                                    }
+                                  }
+                                }}
+                              >
+                                선택
+                              </Button>
+                              <Popconfirm
+                                title={`"${ws.name}" 연결을 해제하시겠습니까? 프리징/할당 등 모든 작업 데이터가 삭제됩니다.`}
+                                onConfirm={() => 해제핸들러(ws.name)}
+                                okText="연결해제"
+                                okButtonProps={{ danger: true }}
+                                cancelText="취소"
+                              >
+                                <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                                  연결해제
+                                </Button>
+                              </Popconfirm>
+                            </>
+                          )}
+                          {ws.domain && (
+                            <Popconfirm
+                              title="프리징 상태를 해제하고 작업 데이터를 삭제합니다. 계속하시겠습니까?"
+                              onConfirm={() => 초기화핸들러(ws.name)}
+                              okText="초기화"
+                              cancelText="취소"
+                              okButtonProps={{ danger: true }}
+                            >
+                              <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                                초기화
+                              </Button>
+                            </Popconfirm>
+                          )}
+                          {isSuper && (
+                            <Button size="small" danger icon={<DeleteOutlined />} disabled>
+                              삭제
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </Space>
+                    {/* 색상 버튼 — 우측 끝 */}
+                    {(ws.status !== 'CONNECTING') && (
+                      <ColorPicker
+                        value={ws.color || '#1a1a2e'}
+                        onChangeComplete={(color) => 색상변경핸들러(ws.name, color.toHexString())}
+                        presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                        size="small"
+                      >
+                        <Button size="small" icon={<BgColorsOutlined />} style={{ backgroundColor: ws.color || '#1a1a2e', color: '#fff', border: `1px solid ${ws.color || '#1a1a2e'}`, ...(isSelected ? { outline: '1px solid #fff' } : {}) }}>
+                          색상
+                        </Button>
+                      </ColorPicker>
                     )}
-                  </Space>
+                  </div>
                 </Card>
               </Col>
             )
@@ -598,7 +680,7 @@ export default function Workspace() {
         }}
         okText="연결"
         cancelText="취소"
-        okButtonProps={{ disabled: !선택도메인 }}
+        okButtonProps={{ disabled: !선택도메인 || !선택jiana }}
       >
         <Select
           style={{ width: '100%', marginTop: 8 }}
@@ -612,8 +694,26 @@ export default function Workspace() {
               disabled: !!연결됨WS,
             }
           })}
-          onChange={v => set선택도메인(v)}
+          onChange={v => {
+            set선택도메인(v)
+            // 도메인 선택 시 마지막 사용 jiana 버전 자동 복원
+            if (v) {
+              workspaceAPI.도메인jiana설정(v).then(res => {
+                const saved = res.data?.jiana_version
+                if (saved && jiana버전목록.includes(saved)) {
+                  set선택jiana(saved)
+                }
+              }).catch(() => {})
+            }
+          }}
           value={선택도메인}
+        />
+        <Select
+          style={{ width: '100%', marginTop: 12 }}
+          placeholder="jiana 버전 선택"
+          options={jiana버전목록.map(v => ({ label: `jiana ${v}`, value: v }))}
+          onChange={v => set선택jiana(v)}
+          value={선택jiana}
         />
       </Modal>
 

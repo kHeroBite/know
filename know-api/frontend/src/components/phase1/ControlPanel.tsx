@@ -277,20 +277,7 @@ export default function ControlPanel({
                   </div>
                 </div>
               )}
-              {step.num === 5 && onFreeze && (
-                <div style={{ marginTop: 12, textAlign: 'center' }}>
-                  <Button
-                    type="primary"
-                    size="large"
-                    disabled={freezeDisabled}
-                    loading={freezeLoading}
-                    onClick={onFreeze}
-                    style={{ minWidth: 200, height: 48, fontSize: 16 }}
-                  >
-                    다음단계로
-                  </Button>
-                </div>
-              )}
+              {/* 다음단계로 버튼은 PageHeader 우측 상단으로 이동됨 */}
             </div>
           )
         })}

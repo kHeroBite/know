@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Input, Tabs, Progress,
@@ -8,11 +9,13 @@ import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
   WarningOutlined, CloseCircleOutlined, CheckOutlined,
 } from '@ant-design/icons'
-import { 사전검증API, 파일기반검증결과, 분석결과 } from '../api/dict_verify'
+import { 사전검증API, 검증결과, 분석결과 } from '../api/dict_verify'
+import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 
 export default function DictVerify() {
+  const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const currentDomain = selectedDomain || ''
 
@@ -26,7 +29,7 @@ export default function DictVerify() {
     if (!kw) { message.warning('키워드를 입력하세요'); return }
     set분석중(true)
     try {
-      const res = await 사전검증API.형태소분석(kw, currentDomain || undefined)
+      const res = await 사전검증API.형태소분석(kw, currentDomain || undefined, selectedWorkspace || undefined)
       set분석결과목록(prev => [res.data, ...prev])
     } catch {
       message.error('형태소분석 실패')
@@ -44,7 +47,7 @@ export default function DictVerify() {
     try {
       const results: 분석결과[] = []
       for (const keyword of keywords) {
-        const res = await 사전검증API.형태소분석(keyword, currentDomain || undefined)
+        const res = await 사전검증API.형태소분석(keyword, currentDomain || undefined, selectedWorkspace || undefined)
         results.push(res.data)
       }
       set분석결과목록(prev => [...results, ...prev])
@@ -69,8 +72,9 @@ export default function DictVerify() {
     },
   ]
 
-  // ─── 사전 검증 실행 (파일 기반) ──────────────────────────
-  const [검증결과, set검증결과] = useState<파일기반검증결과 | null>(null)
+  // ─── 사전 검증 실행 (분리형: 완료/미완료) ──────────────────────────
+  const [완료검증, set완료검증] = useState<검증결과 | null>(null)
+  const [미완료검증, set미완료검증] = useState<검증결과 | null>(null)
   const [검증중, set검증중] = useState(false)
   const [진행률, set진행률] = useState(0)
 
@@ -81,16 +85,15 @@ export default function DictVerify() {
     set진행률(10)
     try {
       set진행률(30)
-      const res = await 사전검증API.파일기반검증(selectedWorkspace, currentDomain)
+      const res = await 사전검증API.분리검증(selectedWorkspace, currentDomain)
       set진행률(100)
-      set검증결과(res.data)
-      const { missing, ukall } = res.data
-      const 누락합계 = missing.length + ukall.length
-      if (누락합계 === 0) {
-        message.success('검증 완료 — 누락 키워드 없음')
-      } else {
-        message.info(`검증 완료 — 누락 ${missing.length} · 미등록 ${ukall.length}`)
-      }
+      set완료검증(res.data.completed)
+      set미완료검증(res.data.pending)
+      const cm = res.data.completed.missing.length
+      const cu = res.data.completed.ukall.length
+      const pm = res.data.pending.missing.length
+      const pu = res.data.pending.ukall.length
+      message.info(`검증 완료 — 작업분: 누락${cm}·미등록${cu} / 미작업분: 누락${pm}·미등록${pu}`)
     } catch (e: any) {
       message.error('사전 검증 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     } finally {
@@ -98,11 +101,7 @@ export default function DictVerify() {
     }
   }, [selectedWorkspace, currentDomain])
 
-  // ─── 검증 결과 ───────────────────────────────
-  const missing목록 = (검증결과?.missing || []).map((item, i) => ({ key: i, ...item }))
-  const ukall목록 = (검증결과?.ukall || []).map((kw, i) => ({ key: i, keyword: kw }))
-  const skipped목록 = (검증결과?.skipped || []).map((kw, i) => ({ key: i, keyword: kw }))
-
+  // ─── 검증 결과 렌더 헬퍼 ───────────────────────────────
   const missing컬럼 = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword', width: 180 },
@@ -111,76 +110,58 @@ export default function DictVerify() {
       render: (v: string) => <Text style={{ fontSize: 12, fontFamily: 'monospace' }}>{v || '-'}</Text>,
     },
     {
-      title: '상태', key: 'status', width: 120,
-      render: () => <Tag color="error" icon={<CloseCircleOutlined />}>복합어 누락</Tag>,
+      title: '상태', key: 'status', width: 100,
+      render: () => <Tag color="error" icon={<CloseCircleOutlined />}>누락</Tag>,
     },
   ]
-
   const ukall컬럼 = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
-    {
-      title: '상태', key: 'status', width: 120,
-      render: () => <Tag color="warning" icon={<WarningOutlined />}>미등록어</Tag>,
-    },
+    { title: '상태', key: 'status', width: 100, render: () => <Tag color="warning" icon={<WarningOutlined />}>미등록</Tag> },
   ]
-
   const skipped컬럼 = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
-    {
-      title: '상태', key: 'status', width: 120,
-      render: () => <Tag color="success" icon={<CheckOutlined />}>통과</Tag>,
-    },
+    { title: '상태', key: 'status', width: 100, render: () => <Tag color="success" icon={<CheckOutlined />}>통과</Tag> },
   ]
 
-  const 탭항목 = [
-    {
-      key: 'missing',
-      label: `누락 (${missing목록.length})`,
-      children: (
-        <Table
-          rowKey="key"
-          dataSource={missing목록}
-          columns={missing컬럼}
-          size="small"
-          pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
-        />
-      ),
-    },
-    {
-      key: 'ukall',
-      label: `미등록 (${ukall목록.length})`,
-      children: (
-        <Table
-          rowKey="key"
-          dataSource={ukall목록}
-          columns={ukall컬럼}
-          size="small"
-          pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
-        />
-      ),
-    },
-    {
-      key: 'skipped',
-      label: `통과 (${skipped목록.length})`,
-      children: (
-        <Table
-          rowKey="key"
-          dataSource={skipped목록}
-          columns={skipped컬럼}
-          size="small"
-          pagination={{ pageSize: 20, showTotal: t => `총 ${t}건` }}
-        />
-      ),
-    },
-  ]
+  const 결과패널 = (제목: string, 결과: 검증결과 | null) => {
+    if (!결과) return null
+    const missing = (결과.missing || []).map((item: any, i: number) => ({ key: i, ...(typeof item === 'string' ? { keyword: item } : item) }))
+    const ukall = (결과.ukall || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
+    const skipped = (결과.skipped || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
+    return (
+      <Card size="small" title={제목} style={{ flex: 1 }}>
+        <Row gutter={8} style={{ marginBottom: 12 }}>
+          <Col span={6}><Statistic title="전체" value={결과.total} /></Col>
+          <Col span={6}><Statistic title="통과" value={skipped.length} valueStyle={{ color: '#52c41a' }} prefix={<CheckOutlined />} /></Col>
+          <Col span={6}><Statistic title="누락" value={missing.length} valueStyle={{ color: '#cf1322' }} prefix={<CloseCircleOutlined />} /></Col>
+          <Col span={6}><Statistic title="미등록" value={ukall.length} valueStyle={{ color: '#faad14' }} prefix={<WarningOutlined />} /></Col>
+        </Row>
+        <Tabs defaultActiveKey="missing" items={[
+          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missing컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukall컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skipped컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+        ]} />
+      </Card>
+    )
+  }
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Title level={4} style={{ margin: 0 }}>
-        사전 검증 — {selectedWorkspace}({currentDomain})
-      </Title>
+      <PageHeader
+        title="사전 검증"
+        showPrev
+        prevLabel="이전단계로 (사전빌드)"
+        onPrev={async () => {
+          try {
+            await useWorkspaceStore.getState().revertPhase('build')
+            navigate('/build-history')
+          } catch (err: any) {
+            message.error(err.response?.data?.detail || 'phase 전이 실패')
+          }
+        }}
+      />
 
       {/* ═══ 형태소분석 테스트 ═══ */}
       <Card
@@ -248,40 +229,12 @@ export default function DictVerify() {
         )}
       </Card>
 
-      {/* ═══ 검증 결과 ═══ */}
-      {검증결과 && (
-        <Card size="small" title="검증 결과">
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={6}>
-              <Statistic title="전체 키워드" value={검증결과.total} />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="통과 (skipped)"
-                value={skipped목록.length}
-                valueStyle={{ color: '#52c41a' }}
-                prefix={<CheckOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="누락 (missing)"
-                value={missing목록.length}
-                valueStyle={{ color: '#cf1322' }}
-                prefix={<CloseCircleOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="미등록 (ukall)"
-                value={ukall목록.length}
-                valueStyle={{ color: '#faad14' }}
-                prefix={<WarningOutlined />}
-              />
-            </Col>
-          </Row>
-          <Tabs items={탭항목} defaultActiveKey="missing" />
-        </Card>
+      {/* ═══ 검증 결과 (좌: 작업완료분 / 우: 미작업분) ═══ */}
+      {(완료검증 || 미완료검증) && (
+        <Row gutter={16}>
+          <Col span={12}>{결과패널('작업 완료 키워드', 완료검증)}</Col>
+          <Col span={12}>{결과패널('미작업 키워드', 미완료검증)}</Col>
+        </Row>
       )}
     </Space>
   )

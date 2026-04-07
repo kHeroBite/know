@@ -10,8 +10,11 @@ export const workspaceAPI = {
   워크스페이스삭제: (name: string) =>
     클라이언트.delete(`/workspaces/${name}`),
 
-  도메인연결: (wsName: string, domain: string) =>
-    클라이언트.post(`/workspaces/${wsName}/connect`, { domain }),
+  도메인연결: (wsName: string, domain: string, jianaVersion?: string) =>
+    클라이언트.post(`/workspaces/${wsName}/connect`, { domain, jiana_version: jianaVersion }),
+
+  연결취소: (wsName: string) =>
+    클라이언트.post(`/workspaces/${wsName}/cancel-connect`),
 
   워크스페이스해제: (wsName: string) =>
     클라이언트.post(`/workspaces/${wsName}/release`),
@@ -21,6 +24,12 @@ export const workspaceAPI = {
 
   진행률조회: (name: string) =>
     클라이언트.get(`/workspaces/${name}/progress`),
+
+  jiana버전목록: () =>
+    클라이언트.get<{ versions: string[] }>('/workspaces/jiana-versions'),
+
+  도메인jiana설정: (domain: string) =>
+    클라이언트.get<{ domain: string, jiana_version: string | null }>(`/workspaces/jiana-pref/${domain}`),
 
   색상변경: (name: string, color: string) =>
     클라이언트.put(`/workspaces/${name}/color`, { color }),
@@ -85,6 +94,9 @@ export const workspaceAPI = {
   // Phase 전이
   advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify') =>
     클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/advance`, { to }),
+
+  revertPhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify') =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/revert`, { to }),
 
   getPhase: (workspace: string) =>
     클라이언트.get(`/workspaces/${encodeURIComponent(workspace)}/phase`),

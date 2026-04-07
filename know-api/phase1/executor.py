@@ -35,14 +35,17 @@ def _ensure_know_ops_path() -> None:
 
 
 def _make_설정(workspace_dir: str):
-    """workspace 경로 기반 know-ops 설정 생성"""
+    """workspace 경로 기반 know-ops 설정 생성. jiana는 workspace/jiana/ 하위 사용."""
     _ensure_know_ops_path()
     from know.core.config import 설정
     base = Path(workspace_dir)
+    jiana_dir = base / "jiana"
+    # jiana 폴더가 있으면 그곳을, 없으면 workspace 루트를 base_경로로 사용
+    effective_base = jiana_dir if jiana_dir.is_dir() else base
     return 설정(
-        base_경로=base,
-        jiana_jar경로=base / "lib" / "jiana1.5.jar",
-        dqdic_jar경로=base / "lib" / "dqdic-1.0.3.jar",
+        base_경로=effective_base,
+        jiana_jar경로=effective_base / "lib" / "jiana1.5.jar",
+        dqdic_jar경로=effective_base / "lib" / "dqdic-1.0.3.jar",
         스팸패턴경로=base / "spam_kwd.pat",
         상품코드패턴경로=base / "prodcode_pat.cmd",
     )
@@ -237,10 +240,37 @@ def _sync_convert(file_path: str, workspace_dir: str = "") -> str:
     return f"{최종출력} ({cnt}건, 형태소:{형태소} 복합어:{복합어})"
 
 
+def _db_thesaurus를파일로내보내기(workspace: str, domain: str, 출력파일: Path) -> int:
+    """DB thesaurus 테이블을 synonym_full_v2.txt(CSV) 형식으로 내보내기."""
+    from core.database import 세션팩토리
+    from sqlalchemy import text
+    from models.dictionary import ws_사전사이트명
+    db = 세션팩토리()
+    try:
+        site = ws_사전사이트명(workspace, domain)
+        rows = db.execute(text(f"SELECT _HEAD_WORD, _TAIL_WORD FROM {site}_THESAURUS")).fetchall()
+        cnt = 0
+        with open(출력파일, "w", encoding="utf-8") as f:
+            for head, tail in rows:
+                if not head:
+                    continue
+                tails = [t.strip() for t in (tail or "").split(",") if t.strip()]
+                if tails:
+                    f.write(f"{head.strip()},{','.join(tails)}\n")
+                    cnt += 1
+        return cnt
+    except Exception as e:
+        logger.warning(f"DB thesaurus 내보내기 실패: {e}")
+        return 0
+    finally:
+        db.close()
+
+
 def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
     """유사어체크: work/transform.txt → work/synonym.txt"""
     from phase1.synonym_checker import 유사어체크
     ws = Path(workspace_dir)
+    ws_name = ws.name
     work_dir = ws / "build" / "work"
     os.makedirs(work_dir, exist_ok=True)
     입력 = work_dir / "transform.txt"
@@ -258,6 +288,13 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
         if p.exists():
             syn_path = p
             break
+    # 파일 사전이 없으면 DB thesaurus에서 자동 내보내기
+    if syn_path == Path("/dev/null"):
+        db_syn_path = ws / "synonym_full_v2.txt"
+        cnt = _db_thesaurus를파일로내보내기(ws_name, domain, db_syn_path)
+        if cnt > 0:
+            syn_path = db_syn_path
+            logger.info(f"DB thesaurus → {db_syn_path} 내보내기 완료: {cnt}건")
     설정값 = _make_설정(workspace_dir)
     result = 유사어체크(입력, syn_path, 출력, 설정값=설정값)
     import re
