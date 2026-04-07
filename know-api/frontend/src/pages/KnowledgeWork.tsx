@@ -1028,6 +1028,15 @@ export default function KnowledgeWork() {
   const [fullAnalysisLoading, setFullAnalysisLoading] = useState(false)
   const [fullTokenIdx, setFullTokenIdx] = useState(-1)
 
+  // 실시간 분석 상태
+  const [liteAnalysis, setLiteAnalysis] = useState<string | null>(null)
+  const [liteLoading, setLiteLoading] = useState(false)
+  const [fullAnalysisRT, setFullAnalysisRT] = useState<string | null>(null)
+  const [fullLoading, setFullLoading] = useState(false)
+
+  // 사전 빌드 상태
+  const [buildLoading, setBuildLoading] = useState(false)
+
   // 핫키
   const [hotkeys, setHotkeys] = useState<Record<string, string>>(기본핫키맵)
   const [hotkeyModalOpen, setHotkeyModalOpen] = useState(false)
@@ -1204,8 +1213,9 @@ export default function KnowledgeWork() {
 
   // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (LITE 탭)
   useEffect(() => {
-    if (selected?.analysis) {
-      const allTokens = parseAnalysisText(selected.analysis)
+    const analysisText = liteAnalysis ?? selected?.analysis
+    if (analysisText) {
+      const allTokens = parseAnalysisText(analysisText)
       const toks = allTokens.filter(t => !t.lineBreak)
       if (selectLastTokenRef.current) {
         // ←방향키: 마지막 워드 선택
@@ -1237,39 +1247,64 @@ export default function KnowledgeWork() {
     } else {
       setSelectedTokenIdx(-1)
     }
-  }, [selected, analysisTab])
+  }, [selected, analysisTab, liteAnalysis])
 
-  // 키워드 선택 시 FullTest 결과를 DB에서 로드 (전처리 완료된 데이터)
+  // 키워드 선택 시 LITE 실시간 분석 자동 호출
   useEffect(() => {
     if (!selected) {
+      setLiteAnalysis(null)
+      setLiteLoading(false)
+      setFullAnalysisRT(null)
+      setFullLoading(false)
       setFullAnalysis(null)
       setFullTokenIdx(-1)
       return
     }
-    // DB에 전처리된 full_analysis가 있으면 사용, 없으면 API 호출
-    if (selected.full_analysis) {
-      setFullAnalysis(selected.full_analysis)
-      setFullAnalysisLoading(false)
-    } else if (selected.keyword && selectedDomain) {
-      setFullAnalysisLoading(true)
-      setFullAnalysis(null)
-      setFullTokenIdx(-1)
-      클라이언트.post('/morpheme/analyze-full', {
+    // 이전 FULL 결과 초기화 (키워드 바뀌면 재호출 필요)
+    setFullAnalysisRT(null)
+    setFullLoading(false)
+    setFullAnalysis(null)
+    setFullTokenIdx(-1)
+
+    if (selected.keyword && selectedDomain) {
+      setLiteLoading(true)
+      setLiteAnalysis(null)
+      클라이언트.post('/morpheme/analyze-realtime', {
         keyword: selected.keyword,
         domain: selectedDomain,
         workspace: selectedWorkspace || undefined,
       }).then(({ data }) => {
-        setFullAnalysis(data.result || null)
+        setLiteAnalysis(data.analysis || null)
       }).catch(() => {
-        setFullAnalysis(null)
+        setLiteAnalysis(null)
       }).finally(() => {
-        setFullAnalysisLoading(false)
+        setLiteLoading(false)
       })
     } else {
-      setFullAnalysis(null)
-      setFullTokenIdx(-1)
+      setLiteAnalysis(null)
     }
   }, [selected?.id, selectedDomain, selectedWorkspace])
+
+  // FULL 탭 전환 시 FULL 실시간 분석 lazy 호출
+  useEffect(() => {
+    if (analysisTab !== 'full' || !selected?.keyword || !selectedDomain) return
+    if (fullAnalysisRT !== null || fullLoading) return  // 이미 결과 있거나 로딩 중이면 재호출 안함
+    setFullLoading(true)
+    클라이언트.post('/morpheme/analyze-full-realtime', {
+      keyword: selected.keyword,
+      domain: selectedDomain,
+      workspace: selectedWorkspace || undefined,
+    }).then(({ data }) => {
+      setFullAnalysisRT(data.full_analysis || null)
+      setFullAnalysis(data.full_analysis || null)
+    }).catch(() => {
+      setFullAnalysisRT(null)
+      setFullAnalysis(null)
+    }).finally(() => {
+      setFullLoading(false)
+      setFullAnalysisLoading(false)
+    })
+  }, [analysisTab, selected?.id, selectedDomain, selectedWorkspace])
 
   // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
   // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
@@ -1317,7 +1352,7 @@ export default function KnowledgeWork() {
 
   // ─── 토큰 ───────────────────────────────────────────────────
 
-  const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
+  const tokens = liteAnalysis ? parseAnalysisText(liteAnalysis) : (selected?.analysis ? parseAnalysisText(selected.analysis) : [])
   const selectableTokens = tokens.filter(t => !t.lineBreak)
 
   // FullTest 토큰
@@ -1413,6 +1448,53 @@ export default function KnowledgeWork() {
     })
     return lines.filter(line => line.length > 0)
   }, [tokens, selectableTokens, fullTokens, fullSelectableTokens, analysisTab])
+
+  // ─── 사전 빌드 ──────────────────────────────────────────────
+
+  const 사전빌드실행 = useCallback(async () => {
+    if (!selectedDomain || buildLoading) return
+    setBuildLoading(true)
+    try {
+      const wsParam = selectedWorkspace ? `?workspace=${selectedWorkspace}` : ''
+      await 클라이언트.post(`/api/build/${selectedDomain}${wsParam}`)
+      // 빌드 상태 폴링 (최대 60초)
+      let done = false
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000))
+        try {
+          const { data } = await 클라이언트.get(`/api/build/${selectedDomain}/status`)
+          const status = data?.status
+          if (status === 'completed' || status === 'success') { done = true; break }
+          if (status === 'failed') { message.error('빌드 실패'); return }
+        } catch { break }
+      }
+      if (done) {
+        message.success('사전 빌드 완료')
+        // 현재 선택된 키워드 분석결과 갱신
+        if (selected?.keyword && selectedDomain) {
+          setLiteAnalysis(null)
+          setLiteLoading(true)
+          클라이언트.post('/morpheme/analyze-realtime', {
+            keyword: selected.keyword,
+            domain: selectedDomain,
+            workspace: selectedWorkspace || undefined,
+          }).then(({ data }) => setLiteAnalysis(data.analysis || null))
+            .catch(() => setLiteAnalysis(null))
+            .finally(() => setLiteLoading(false))
+          if (analysisTab === 'full') {
+            setFullAnalysisRT(null)
+            setFullAnalysis(null)
+          }
+        }
+      } else {
+        message.warning('빌드가 진행 중입니다. 잠시 후 확인하세요.')
+      }
+    } catch {
+      message.error('빌드 요청 실패')
+    } finally {
+      setBuildLoading(false)
+    }
+  }, [selectedDomain, selectedWorkspace, buildLoading, selected, analysisTab])
 
   // ─── 추천 검색 ───────────────────────────────────────────────
 
@@ -1938,6 +2020,13 @@ export default function KnowledgeWork() {
         <span style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>작업실</span>
         <Space>
           <Button
+            loading={buildLoading}
+            disabled={!selectedDomain || buildLoading}
+            onClick={(e) => { e.stopPropagation(); 사전빌드실행() }}
+          >
+            {buildLoading ? '빌드 중...' : '사전 빌드'}
+          </Button>
+          <Button
             icon={<SettingOutlined />}
             onClick={(e) => { e.stopPropagation(); setHotkeyModalOpen(true) }}
           >
@@ -2071,8 +2160,12 @@ export default function KnowledgeWork() {
               backgroundColor: isCenterFocused ? '#FFFDE7' : undefined,
             }}>
             {analysisTab === 'simple' ? (
-              /* ── LITE 탭 (기존) ── */
-              selected ? (
+              /* ── LITE 탭 ── */
+              liteLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <Spin size="small" tip="분석중..." />
+                </div>
+              ) : selected ? (
                 <div style={{ fontSize: 13, lineHeight: 2.0 }}>
                   {tokens.map((token, i) => {
                     if (token.lineBreak) return <br key={`br-${i}`} />
@@ -2119,7 +2212,7 @@ export default function KnowledgeWork() {
               )
             ) : (
               /* ── FULL 탭 (FullTest) ── */
-              fullAnalysisLoading ? (
+              fullLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <Spin size="small" tip="FULL 분석 중..." />
                 </div>

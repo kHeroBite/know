@@ -233,6 +233,27 @@ elif os.path.isdir(path):
 **재발방지**: SQL 쿼리 작성 시 `grep` 또는 migration SQL에서 실제 컬럼명 먼저 확인. 추정 금지.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-033: PHASE1_STEPS 단계 번호 불연속 — 제거 시 주석 필수 (2026-04-07)
+
+**현상**: Step 3,4,5를 작업실 실시간 API로 이전 후 PHASE1_STEPS 번호가 0→1→2→6으로 불연속해짐.
+**원인**: 단계 제거 시 번호 재정렬 또는 이유 주석 없이 단순 삭제.
+**재발방지**: PHASE1_STEPS에서 단계 제거/이전 시 "# 3~5: 작업실 실시간 API로 이전 (executor.py → morpheme_service.py)" 형식의 주석 또는 번호 재정렬 필수.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-034: 경로 상수 다중 파일 중복 선언 — constants.py 단일 출처 원칙 (2026-04-07)
+
+**현상**: KNOW_OPS_SRC, WORKSPACE_BASE 같은 경로 상수가 executor.py, morpheme_service.py, synonym_checker.py 3개 파일에 각각 중복 선언.
+**원인**: 빠른 구현을 위해 기존 파일의 상수를 복사해서 사용.
+**재발방지**: 프로젝트 공통 경로 상수는 `core/config.py` 또는 `constants.py`에 단일 출처로 관리. 새 파일에서 경로 상수 필요 시 import 사용, 재선언 금지.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-035: phase1 모듈이 pipeline 모듈에 역방향 import — 레이어 의존성 위반 (2026-04-07)
+
+**현상**: executor.py(phase1)에 정의된 _db_thesaurus를파일로내보내기()를 build_wrapper.py(pipeline)에서 import하는 역방향 의존 구조.
+**원인**: 빌드 전 thesaurus export 기능을 기존 executor.py에 추가하면서 pipeline 모듈이 phase1에 의존하게 됨.
+**재발방지**: DB 내보내기 같은 공통 유틸은 services 계층 또는 별도 utils 모듈로 분리. pipeline → phase1 역방향 import 금지.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -259,3 +280,6 @@ elif os.path.isdir(path):
 | L-030 | TS 중복 export (TS1117) | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
 | L-031 | SQL migration 주석 파싱 버그 | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
 | L-032 | DB 컬럼명 오타 (build_history.workspace) | LESSONS | LESSONS.md | 2026-04-05 | ✅ |
+| L-033 | PHASE1_STEPS 단계 번호 불연속 | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
+| L-034 | 경로 상수 다중 파일 중복 선언 | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
+| L-035 | phase1→pipeline 역방향 import | LESSONS | LESSONS.md | 2026-04-07 | ✅ |

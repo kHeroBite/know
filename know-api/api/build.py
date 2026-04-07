@@ -37,7 +37,7 @@ def 빌드시작(
             raise HTTPException(400, detail=f"워크스페이스 jiana 경로 없음: {jiana_home}")
         # 빌드 전 WS_ 사전 DB → txt_resrc 파일 export
         ws_사전_파일export(db, workspace, domain, jiana_home)
-    return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home)
+    return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home, workspace=workspace or None)
 
 
 @라우터.get("/{build_id}/download/{filename}")

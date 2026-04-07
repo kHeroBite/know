@@ -1,5 +1,34 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-07 — 작업실 실시간 분석 구조 변경 — 전처리 단축 + 실시간 API + 사전빌드 (커밋: TBD)
+
+### 수정 내용
+
+**핵심 변경**: 데이터전처리 단계 단축(키워드추출+정제→프리징) + 작업실 실시간 분석 API 신설 + 사전빌드 버튼 구조 변경
+
+#### 수정 파일 (총 9개)
+- `know-api/phase1/executor.py` — PHASE1_STEPS 축소 (Step 3,4,5 제거 — 작업실 실시간 API로 이전)
+- `know-api/services/assignment_service.py` — 프리징 단순화 (analysis 빈값으로 저장)
+- `know-api/services/morpheme_service.py` — 실시간_분석(), 실시간_풀분석() 신규 추가
+- `know-api/phase1/synonym_checker.py` — 단일_유사어체크() 함수 추출
+- `know-api/api/morpheme.py` — /analyze-realtime, /analyze-full-realtime 엔드포인트 추가
+- `know-api/frontend/src/pages/KnowledgeWork.tsx` — 실시간 API 전환 + 사전빌드 버튼(dqdic+thesaurus)
+- `know-api/services/build_service.py` — thesaurus export 통합
+- `know-api/pipeline/build_wrapper.py` — thesaurus export 빌드 전 실행
+- `know-api/api/build.py` — workspace 파라미터 전달
+
+#### 아키텍처 변경
+- **전처리 파이프라인 단축**: 키워드추출(Step 3) + 결과변환(Step 4) + 유사어체크(Step 5) 제거 → 프리징 즉시 완료
+- **실시간 분석 API**: `/analyze-realtime` (LITE) + `/analyze-full-realtime` (FULL) 신설
+- **사전빌드 버튼**: dqdic + thesaurus 동시 빌드 지원, thesaurus export가 빌드 전 자동 실행
+
+#### 교훈
+- L-033: PHASE1_STEPS 단계 번호 불연속 → 이전 이유 주석 필수
+- L-034: 경로 상수 다중 파일 중복 → constants.py 단일 출처 원칙
+- L-035: phase1→pipeline 역방향 import → 레이어 의존성 준수
+
+---
+
 ## 2026-04-07 — 분석결과 탭 LITE/FULL 개선 + 단축키 정리 + 레이아웃 통합 (커밋: d87d6ab)
 
 ### 수정 내용

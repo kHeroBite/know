@@ -74,11 +74,13 @@ class BuildService:
         domain: str,
         triggered_by: Optional[int] = None,
         jiana_home: Optional[str] = None,
+        workspace: Optional[str] = None,
     ) -> dict:
         """사전 빌드 시작 (백그라운드 태스크)
 
         이미 빌드 중이면 409 반환.
         build_history 레코드 생성 후 background task로 실행.
+        workspace가 있으면 ant dic 전 thesaurus export 수행.
         """
         실행중 = (
             db.query(BuildHistory)
@@ -102,9 +104,9 @@ class BuildService:
         db.commit()
         db.refresh(bh)
 
-        background_tasks.add_task(_run_build_background, bh.id, domain, jiana_home)
+        background_tasks.add_task(_run_build_background, bh.id, domain, jiana_home, workspace)
 
-        logger.info("빌드 시작 등록: domain=%s, build_history_id=%s", domain, bh.id)
+        logger.info("빌드 시작 등록: domain=%s, build_history_id=%s, workspace=%s", domain, bh.id, workspace)
         return {
             "build_history_id": bh.id,
             "domain": domain,
@@ -317,13 +319,13 @@ def _bh_to_dict(bh: BuildHistory) -> dict:
     }
 
 
-async def _run_build_background(build_history_id: int, domain: str, jiana_home: str = None):
+async def _run_build_background(build_history_id: int, domain: str, jiana_home: str = None, workspace: str = None):
     """BackgroundTask로 실행되는 빌드 래퍼 (스레드 풀에서 실행)"""
     import asyncio
     try:
         from pipeline.build_wrapper import run_build
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: run_build(domain=domain, build_history_id=build_history_id, jiana_home=jiana_home))
+        await loop.run_in_executor(None, lambda: run_build(domain=domain, build_history_id=build_history_id, jiana_home=jiana_home, workspace=workspace))
     except Exception as exc:
         logger.error(
             "백그라운드 빌드 실패: domain=%s, build_history_id=%s, err=%s",

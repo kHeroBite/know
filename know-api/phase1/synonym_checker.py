@@ -153,6 +153,140 @@ def _형태소분석_일괄(설정값, 유사어목록: list, work_dir: Path) ->
                 pass
 
 
+def 단일_유사어체크(keyword: str, 분석결과: str, 유사어사전경로: Path, 설정값=None) -> str:
+    """단일 키워드의 형태소분석 결과에 유사어를 찾아 표시.
+
+    Args:
+        keyword: 원본 키워드
+        분석결과: 형태소분석+결과변환 후 텍스트 (transform.txt 1블록 형식)
+        유사어사전경로: synonym_full_v2.txt 경로
+        설정값: know-ops 설정 객체 (유사어 형태소분석용)
+
+    Returns:
+        유사어 마킹된 분석결과 텍스트 (synonym.txt 1블록과 동일 포맷)
+    """
+    import tempfile
+
+    사전 = _유사어사전로드(유사어사전경로)
+
+    # 1패스: 분석결과에서 유사어 집합 수집 (<<...>> 용)
+    유사어_집합: set = set()
+    if 설정값 is not None:
+        for raw_line in 분석결과.splitlines():
+            s = raw_line.strip()
+            if not s or "\t" not in s or s.startswith("comp :"):
+                continue
+            headkwd = s.split("\t")[0].strip()
+            if headkwd in 사전:
+                for syn in 사전[headkwd].split(","):
+                    syn = syn.strip()
+                    if syn:
+                        유사어_집합.add(syn)
+
+    # jiana 형태소분석 일괄 실행
+    형태소분석결과: dict = {}
+    if 설정값 is not None and 유사어_집합:
+        try:
+            with tempfile.TemporaryDirectory(prefix="syn_single_") as tmpdir:
+                형태소분석결과 = _형태소분석_일괄(설정값, sorted(유사어_집합), Path(tmpdir))
+        except Exception as e:
+            logger.warning(f"단일 유사어 형태소분석 실패, 스킵: {e}")
+
+    # 2패스: 마킹 처리 (파일 대신 텍스트 입출력)
+    syncnt = 0
+    subpartcnt = 0
+    compsyncnt = 0
+    출력줄들 = []
+    linecnt = 0
+
+    for raw_line in 분석결과.splitlines():
+        s = raw_line.rstrip()
+        if not s.strip():
+            continue
+
+        s = s.strip()
+        printinfo = ""
+        chkfull = 0
+
+        if "\t" not in s:
+            printinfo = s + "\t"
+            linecnt = 1
+
+            if "comp : " in s:
+                divS = s.split(" ")
+                k = 2
+                while k < len(divS):
+                    headkwd = divS[k]
+                    k += 6
+                    if headkwd in 사전:
+                        compsyncnt += 1
+                        printinfo += "\t<" + 사전[headkwd] + ">\t"
+
+            printinfo += "\n"
+
+        else:
+            divS = s.split("\t")
+            headkwd = divS[0].strip()
+            kwdsyncnt = len(divS)
+
+            jianares = ""
+            subTail2 = ""
+
+            if "comp : " in headkwd:
+                printinfo = s + "\t"
+                linecnt = 1
+
+                for i in range(kwdsyncnt):
+                    parts = divS[i].split(" ")
+                    if len(parts) >= 3:
+                        sub = parts[2]
+                        if sub in 사전:
+                            compsyncnt += 1
+                            printinfo += "\t<" + 사전[sub] + ">\t"
+                printinfo += "\n"
+
+            else:
+                for i in range(1, kwdsyncnt):
+                    parts = divS[i].split(" ")
+                    subTail = parts[0] if parts else ""
+
+                    if subTail == headkwd:
+                        chkfull = 1
+
+                    if chkfull == 0:
+                        if subTail in 사전:
+                            subpartcnt += 1
+                            jianares += "\t" + divS[i]
+                            subTail2 += subTail + " <" + 사전[subTail] + ">\n"
+                        else:
+                            jianares += "\t" + divS[i]
+                    else:
+                        jianares += "\t" + divS[i]
+
+                if not subTail2:
+                    printinfo = headkwd + jianares + "\n"
+                else:
+                    printinfo = headkwd + jianares + "\n" + subTail2
+
+                if headkwd in 사전:
+                    syncnt += 1
+                    printinfo += "<<" + 사전[headkwd] + ">>\n"
+                    for syn in 사전[headkwd].split(","):
+                        syn = syn.strip()
+                        if syn and syn in 형태소분석결과:
+                            for morph_line in 형태소분석결과[syn]:
+                                printinfo += morph_line + "\n"
+
+        if linecnt == 1:
+            출력줄들.append(printinfo)
+            linecnt = 0
+        else:
+            출력줄들.append("\n" + printinfo)
+
+    logger.info(f"단일 유사어체크 완료: 전체유사어={syncnt}, 부분유사어={subpartcnt}, 복합어유사어={compsyncnt}")
+    return "".join(출력줄들)
+
+
 def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파일: Path, 설정값=None) -> Path:
     """형태소 분석 결과에서 유사어를 찾아 표시.
 

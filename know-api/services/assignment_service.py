@@ -186,60 +186,30 @@ def _full_analysis_컬럼확인(db: Session) -> bool:
 
 
 def 프리징(db: Session, workspace: str, domain: str) -> dict:
-    """synonym.txt → keyword_assignments INSERT (기존 데이터 DELETE 후)."""
-    blocks = synonym_파싱(workspace)
-    if not blocks:
+    """refine.txt → keyword_assignments INSERT (기존 데이터 DELETE 후)."""
+    refine_path = os.path.join(WORKSPACE_BASE, workspace, "build", "work", "refine.txt")
+    if not os.path.isfile(refine_path):
+        raise HTTPException(400, detail=f"refine.txt 없음: {refine_path}")
+
+    with open(refine_path, encoding="utf-8", errors="replace") as f:
+        keywords = [line.strip() for line in f if line.strip()]
+
+    if not keywords:
         raise HTTPException(400, detail="키워드가 없습니다")
-
-    # full_analysis 컬럼 확인
-    has_full = _full_analysis_컬럼확인(db)
-
-    # FullTest 배치 전처리 (실패해도 프리징은 계속)
-    풀분석결과: dict[str, str] = {}
-    if has_full:
-        try:
-            # 원본 키워드 + 유사어 키워드를 모두 수집하여 배치 분석
-            all_keywords = set()
-            for b in blocks:
-                all_keywords.add(b["keyword"])
-                syn_info = b.get("synonym_info", {})
-                # 전체 유사어 키워드들
-                for syn in syn_info.get("full_synonyms", "").split():
-                    if syn.strip():
-                        all_keywords.add(syn.strip())
-                # 부분 유사어 키워드들
-                for ps in syn_info.get("part_synonyms", []):
-                    for syn in ps.get("synonyms", "").split():
-                        if syn.strip():
-                            all_keywords.add(syn.strip())
-            풀분석결과 = _배치_풀분석(sorted(all_keywords), workspace)
-            logger.info(f"FullTest 배치 완료: {len(풀분석결과)}/{len(all_keywords)}건 (원본 {len(blocks)} + 유사어)")
-        except Exception as e:
-            logger.warning(f"FullTest 배치 스킵: {e}")
 
     # 기존 데이터 삭제
     db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
                {"ws": workspace, "dom": domain})
 
-    # INSERT
-    if has_full:
-        for i, block in enumerate(blocks, 1):
-            full_result = _풀분석_유사어병합(block, 풀분석결과)
-            db.execute(text("""
-                INSERT INTO keyword_assignments (workspace, domain, line_num, keyword, analysis, full_analysis, status)
-                VALUES (:ws, :dom, :num, :kw, :anal, :full_anal, 'pending')
-            """), {"ws": workspace, "dom": domain, "num": i, "kw": block["keyword"],
-                   "anal": block["analysis"], "full_anal": full_result})
-    else:
-        for i, block in enumerate(blocks, 1):
-            db.execute(text("""
-                INSERT INTO keyword_assignments (workspace, domain, line_num, keyword, analysis, status)
-                VALUES (:ws, :dom, :num, :kw, :anal, 'pending')
-            """), {"ws": workspace, "dom": domain, "num": i, "kw": block["keyword"],
-                   "anal": block["analysis"]})
+    # INSERT (analysis='', full_analysis='')
+    for i, kw in enumerate(keywords, 1):
+        db.execute(text("""
+            INSERT INTO keyword_assignments (workspace, domain, line_num, keyword, analysis, full_analysis, status)
+            VALUES (:ws, :dom, :num, :kw, '', '', 'pending')
+        """), {"ws": workspace, "dom": domain, "num": i, "kw": kw})
 
     db.commit()
-    return {"total": len(blocks), "workspace": workspace, "domain": domain}
+    return {"total": len(keywords), "workspace": workspace, "domain": domain}
 
 
 def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pending",
