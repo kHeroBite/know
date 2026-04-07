@@ -1034,6 +1034,13 @@ export default function KnowledgeWork() {
   const [fullAnalysisRT, setFullAnalysisRT] = useState<string | null>(null)
   const [fullLoading, setFullLoading] = useState(false)
 
+  // 분석결과 캐시 (키워드 → 분석결과)
+  const liteCacheRef = useRef<Map<string, string>>(new Map())
+  const fullCacheRef = useRef<Map<string, string>>(new Map())
+  // race condition 방지: 현재 활성 요청의 selected.id 추적 (구버전 응답이면 캐시만 저장, setState 스킵)
+  const liteRequestIdRef = useRef<string | number | null>(null)
+  const fullRequestIdRef = useRef<string | number | null>(null)
+
   // 사전 빌드 상태
   const [buildLoading, setBuildLoading] = useState(false)
 
@@ -1211,9 +1218,19 @@ export default function KnowledgeWork() {
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
+  // ─── 분석결과 effective (캐시 포함) ─────────────────────────
+  const liteAnalysisEffective = useMemo(() => {
+    if (liteAnalysis) return liteAnalysis
+    if (selected?.keyword && selectedDomain) {
+      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      return liteCacheRef.current.get(cacheKey) || null
+    }
+    return null
+  }, [liteAnalysis, selected?.keyword, selectedDomain, selectedWorkspace])
+
   // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (LITE 탭)
   useEffect(() => {
-    const analysisText = liteAnalysis ?? selected?.analysis
+    const analysisText = liteAnalysisEffective ?? selected?.analysis
     if (analysisText) {
       const allTokens = parseAnalysisText(analysisText)
       const toks = allTokens.filter(t => !t.lineBreak)
@@ -1247,9 +1264,9 @@ export default function KnowledgeWork() {
     } else {
       setSelectedTokenIdx(-1)
     }
-  }, [selected, analysisTab, liteAnalysis])
+  }, [selected, analysisTab, liteAnalysisEffective])
 
-  // 키워드 선택 시 LITE 실시간 분석 자동 호출
+  // 키워드 선택 시 LITE 실시간 분석 자동 호출 (캐시 우선)
   useEffect(() => {
     if (!selected) {
       setLiteAnalysis(null)
@@ -1261,48 +1278,148 @@ export default function KnowledgeWork() {
       return
     }
     // 이전 FULL 결과 초기화 (키워드 바뀌면 재호출 필요)
-    setFullAnalysisRT(null)
+    const fullCacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const cachedFull = fullCacheRef.current.get(fullCacheKey)
+    if (cachedFull) {
+      setFullAnalysisRT(cachedFull)
+      setFullAnalysis(cachedFull)
+    } else {
+      setFullAnalysisRT(null)
+      setFullAnalysis(null)
+    }
     setFullLoading(false)
-    setFullAnalysis(null)
     setFullTokenIdx(-1)
 
     if (selected.keyword && selectedDomain) {
+      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      const cached = liteCacheRef.current.get(cacheKey)
+      if (cached) {
+        setLiteAnalysis(cached)
+        setLiteLoading(false)
+        return
+      }
       setLiteLoading(true)
       setLiteAnalysis(null)
+      liteRequestIdRef.current = selected.id  // 현재 요청 ID 등록
+      const requestedId = selected.id
       클라이언트.post('/morpheme/analyze-realtime', {
         keyword: selected.keyword,
         domain: selectedDomain,
         workspace: selectedWorkspace || undefined,
       }).then(({ data }) => {
-        setLiteAnalysis(data.analysis || null)
+        const result = data.analysis || null
+        // 항상 캐시에 저장 (프리패치 효과 보존)
+        if (result) liteCacheRef.current.set(cacheKey, result)
+        // 현재 선택된 키워드와 일치할 때만 화면 업데이트
+        if (liteRequestIdRef.current === requestedId) {
+          setLiteAnalysis(result)
+          setLiteLoading(false)
+        }
       }).catch(() => {
-        setLiteAnalysis(null)
-      }).finally(() => {
-        setLiteLoading(false)
+        if (liteRequestIdRef.current === requestedId) {
+          setLiteAnalysis(null)
+          setLiteLoading(false)
+        }
       })
     } else {
       setLiteAnalysis(null)
     }
   }, [selected?.id, selectedDomain, selectedWorkspace])
 
-  // FULL 탭 전환 시 FULL 실시간 분석 lazy 호출
+  // LITE 분析 완료 후 인접 항목 프리패치 (다른탭 + 이전/다음 키워드 각 5개 번갈아)
+  useEffect(() => {
+    if (liteLoading || !selected?.keyword || !selectedDomain) return
+
+    const currentKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const isFullTab = analysisTab === 'full'
+
+    // 캐시 미등록 키워드만 API 호출하는 헬퍼
+    const prefetchKeyword = (keyword: string) => {
+      const key = `${keyword}::${selectedDomain}::${selectedWorkspace}`
+      if (isFullTab) {
+        if (!fullCacheRef.current.has(key)) {
+          클라이언트.post('/morpheme/analyze-full-realtime', {
+            keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
+          }).then(({ data }) => {
+            const result = data.full_analysis || null
+            if (result) fullCacheRef.current.set(key, result)
+          }).catch(() => {})
+        }
+      } else {
+        if (!liteCacheRef.current.has(key)) {
+          클라이언트.post('/morpheme/analyze-realtime', {
+            keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
+          }).then(({ data }) => {
+            const result = data.analysis || null
+            if (result) liteCacheRef.current.set(key, result)
+          }).catch(() => {})
+        }
+      }
+    }
+
+    // 1) 다른 탭(FULL) 프리패치 — 현재 탭이 lite이면 full을 미리 로드
+    if (!isFullTab && !fullCacheRef.current.has(currentKey)) {
+      클라이언트.post('/morpheme/analyze-full-realtime', {
+        keyword: selected.keyword,
+        domain: selectedDomain,
+        workspace: selectedWorkspace || undefined,
+      }).then(({ data }) => {
+        const result = data.full_analysis || null
+        if (result) fullCacheRef.current.set(currentKey, result)
+      }).catch(() => {})
+    }
+
+    // 2) 다음/이전 키워드 각 5개 번갈아 프리패치 (next1, prev1, next2, prev2, ...)
+    const curIdx = filteredItems.findIndex(i => i.id === selected.id)
+    if (curIdx < 0) return
+    for (let offset = 1; offset <= 5; offset++) {
+      if (curIdx + offset < filteredItems.length) {
+        prefetchKeyword(filteredItems[curIdx + offset].keyword)
+      }
+      if (curIdx - offset >= 0) {
+        prefetchKeyword(filteredItems[curIdx - offset].keyword)
+      }
+    }
+  }, [liteLoading, selected?.id, selectedDomain, selectedWorkspace, analysisTab])
+
+
+  // FULL 탭 전환 시 FULL 실시간 분석 lazy 호출 (캐시 우선)
   useEffect(() => {
     if (analysisTab !== 'full' || !selected?.keyword || !selectedDomain) return
     if (fullAnalysisRT !== null || fullLoading) return  // 이미 결과 있거나 로딩 중이면 재호출 안함
+    const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const cached = fullCacheRef.current.get(cacheKey)
+    if (cached) {
+      setFullAnalysisRT(cached)
+      setFullAnalysis(cached)
+      setFullLoading(false)
+      return
+    }
     setFullLoading(true)
+    fullRequestIdRef.current = selected.id  // 현재 요청 ID 등록
+    const requestedId = selected.id
     클라이언트.post('/morpheme/analyze-full-realtime', {
       keyword: selected.keyword,
       domain: selectedDomain,
       workspace: selectedWorkspace || undefined,
     }).then(({ data }) => {
-      setFullAnalysisRT(data.full_analysis || null)
-      setFullAnalysis(data.full_analysis || null)
+      const result = data.full_analysis || null
+      // 항상 캐시에 저장 (프리패치 효과 보존)
+      if (result) fullCacheRef.current.set(cacheKey, result)
+      // 현재 선택된 키워드와 일치할 때만 화면 업데이트
+      if (fullRequestIdRef.current === requestedId) {
+        setFullAnalysisRT(result)
+        setFullAnalysis(result)
+        setFullLoading(false)
+        setFullAnalysisLoading(false)
+      }
     }).catch(() => {
-      setFullAnalysisRT(null)
-      setFullAnalysis(null)
-    }).finally(() => {
-      setFullLoading(false)
-      setFullAnalysisLoading(false)
+      if (fullRequestIdRef.current === requestedId) {
+        setFullAnalysisRT(null)
+        setFullAnalysis(null)
+        setFullLoading(false)
+        setFullAnalysisLoading(false)
+      }
     })
   }, [analysisTab, selected?.id, selectedDomain, selectedWorkspace])
 
@@ -1352,11 +1469,19 @@ export default function KnowledgeWork() {
 
   // ─── 토큰 ───────────────────────────────────────────────────
 
-  const tokens = liteAnalysis ? parseAnalysisText(liteAnalysis) : (selected?.analysis ? parseAnalysisText(selected.analysis) : [])
+  const tokens = liteAnalysisEffective ? parseAnalysisText(liteAnalysisEffective) : (selected?.analysis ? parseAnalysisText(selected.analysis) : [])
   const selectableTokens = tokens.filter(t => !t.lineBreak)
 
   // FullTest 토큰
-  const fullTokens = fullAnalysis ? parseFullTestText(fullAnalysis) : []
+  const fullAnalysisEffective = useMemo(() => {
+    if (fullAnalysis) return fullAnalysis
+    if (selected?.keyword && selectedDomain) {
+      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      return fullCacheRef.current.get(cacheKey) || null
+    }
+    return null
+  }, [fullAnalysis, selected?.keyword, selectedDomain, selectedWorkspace])
+  const fullTokens = fullAnalysisEffective ? parseFullTestText(fullAnalysisEffective) : []
   const fullSelectableTokens = fullTokens.filter(t => !t.lineBreak)
 
   // 현재 탭에 따라 활성 토큰 결정
@@ -1403,6 +1528,15 @@ export default function KnowledgeWork() {
             h.focusAnalysisSimple = h.focusAnalysis
             delete h.focusAnalysis
           }
+          // 구버전 prevKeyword/nextKeyword → prevLine/nextLine 마이그레이션
+          if (h.prevKeyword && !h.prevLine) {
+            h.prevLine = h.prevKeyword
+          }
+          delete h.prevKeyword
+          if (h.nextKeyword && !h.nextLine) {
+            h.nextLine = h.nextKeyword
+          }
+          delete h.nextKeyword
           setHotkeys(prev => ({ ...prev, ...h }))
         }
       })
@@ -1470,6 +1604,9 @@ export default function KnowledgeWork() {
       }
       if (done) {
         message.success('사전 빌드 완료')
+        // 캐시 전체 초기화 (사전이 바뀌었으므로)
+        liteCacheRef.current.clear()
+        fullCacheRef.current.clear()
         // 현재 선택된 키워드 분석결과 갱신
         if (selected?.keyword && selectedDomain) {
           setLiteAnalysis(null)
@@ -1753,13 +1890,33 @@ export default function KnowledgeWork() {
       e.preventDefault(); setActiveTab('morpheme'); setMorphFocusTrigger(prev => prev + 1); return
     }
 
-    // 나머지 핫키는 포커스 모드에서만
-    if (!isCenterFocused) return
-    e.preventDefault()
+    // 방향키(prevLine/nextLine/prevAnalysis/nextAnalysis)는 키워드 선택 상태면 항상 동작 (포커스 모드 자동 진입)
+    if ((action === 'prevLine' || action === 'nextLine' || action === 'prevAnalysis' || action === 'nextAnalysis') && selected) {
+      // 분析결과 로딩 중에는 방향키 모두 차단
+      if (liteLoading || fullLoading) { e.preventDefault(); return }
+      if (!isCenterFocused) setIsCenterFocused(true)
+      e.preventDefault()
+    } else {
+      // 나머지 핫키는 포커스 모드에서만
+      if (!isCenterFocused) return
+      e.preventDefault()
+    }
 
     // 줄바꿈 이동: prevLine/nextLine (설정 가능)
     if (action === 'prevLine') {
-      if (!activeSelectableTokens.length) return
+      if (!activeSelectableTokens.length) {
+        // 토큰 없어도 이전 키워드로 이동
+        if (!filteredItems.length) return
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+        if (curIdx > 0) {
+          setSelected(filteredItems[curIdx - 1])
+          if (!filteredItems[curIdx - 1].flag) {
+            assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R').catch(() => {})
+            setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
+          }
+        }
+        return
+      }
       const curLine = lineTokens.findIndex(line => line.includes(activeTokenIdx))
       if (curLine <= 0) {
         // 첫 줄 → 이전 키워드 (마지막 줄의 첫 워드 선택)
@@ -1782,7 +1939,19 @@ export default function KnowledgeWork() {
       return
     }
     if (action === 'nextLine') {
-      if (!activeSelectableTokens.length) return
+      if (!activeSelectableTokens.length) {
+        // 토큰 없어도 다음 키워드로 이동
+        if (!filteredItems.length) return
+        const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
+        if (curIdx < filteredItems.length - 1) {
+          setSelected(filteredItems[curIdx + 1])
+          if (!filteredItems[curIdx + 1].flag) {
+            assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R').catch(() => {})
+            setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
+          }
+        }
+        return
+      }
       const curLine = lineTokens.findIndex(line => line.includes(activeTokenIdx))
       if (curLine < 0 || curLine >= lineTokens.length - 1) {
         // 마지막 줄 → 다음 키워드
@@ -1934,7 +2103,7 @@ export default function KnowledgeWork() {
         break
       }
     }
-  }, [hotkeys, derivedHotkeys, isCenterFocused, items, filteredItems, selected, selectableTokens, selectedTokenIdx, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries, lineTokens, analysisTab, activeTokenIdx, activeSelectableTokens, setActiveTokenIdx, isActiveNavigable, fullTokenIdx, 컨텍스트메뉴.open])
+  }, [hotkeys, derivedHotkeys, isCenterFocused, liteLoading, fullLoading, items, filteredItems, selected, selectableTokens, selectedTokenIdx, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries, lineTokens, analysisTab, activeTokenIdx, activeSelectableTokens, setActiveTokenIdx, isActiveNavigable, fullTokenIdx, 컨텍스트메뉴.open])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

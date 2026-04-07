@@ -131,7 +131,7 @@ export default function Phase1Pipeline() {
       setRunStartStep(params.start_step)
       setRunId(data.run_id)
       // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
-      if (params.start_step === 1 && params.end_step === 5) {
+      if (params.start_step === 1 && params.end_step === 2) {
         setFileTabs({})
         setActiveViewTab(null)
         setFileStatus({})
@@ -200,7 +200,7 @@ export default function Phase1Pipeline() {
     }
 
     // 실행 중이 아닐 때만 fileStatus로 검증
-    const fileToStep: Record<string, number> = { keywords: 1, refine: 2, analyzed: 3, transform: 4, synonym: 5 }
+    const fileToStep: Record<string, number> = { keywords: 1, refine: 2 }
     const result = { ...ws.stepStatuses }
     if (Object.keys(fileStatus).length > 0) {
       for (const [file, stepNum] of Object.entries(fileToStep)) {
@@ -222,7 +222,7 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <PageHeader
         title="데이터 전처리"
-        showNext={유효단계상태[5] === 'completed' && !실행중}
+        showNext={유효단계상태[2] === 'completed' && !실행중}
         nextLabel="다음단계로 (데이터할당)"
         nextLoading={freezeStatus === 'running'}
         onNext={프리징핸들러}
@@ -249,8 +249,8 @@ export default function Phase1Pipeline() {
                   중지
                 </Button>
               ) : (
-                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 5 })}>
-                  전체 실행 (1→5)
+                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 2 })}>
+                  전체 실행 (1→2)
                 </Button>
               )}
             </div>
@@ -281,7 +281,7 @@ export default function Phase1Pipeline() {
                 onCombineModeChange={setCombineMode}
                 onSortByChange={setSortBy}
                 onFreeze={프리징핸들러}
-                freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
+                freezeDisabled={실행중 || 유효단계상태[2] !== 'completed' || freezeStatus === 'running'}
                 freezeLoading={freezeStatus === 'running'}
               />
             </div>

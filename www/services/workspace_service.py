@@ -445,21 +445,22 @@ def 사용자설정저장(user_id: str, workspace: str, domain: str | None, colo
 
 
 _기본핫키 = {
-    "prevKeyword": "ArrowUp",
-    "nextKeyword": "ArrowDown",
     "prevAnalysis": "ArrowLeft",
     "nextAnalysis": "ArrowRight",
-    "registerUdic": "1",
-    "registerCndic": "2",
-    "registerThesaurus": "3",
-    "analyzeKeyword": "0",
-    "focusAnalysis": "Home",
-    "tabUdic": "Alt+1",
-    "tabCndic": "Alt+2",
-    "tabThesaurus": "Alt+3",
-    "tabMorpheme": "Alt+0",
-    "aiAnalysis": "/",
+    "prevLine": "ArrowUp",
+    "nextLine": "ArrowDown",
+    "registerUdic": "a",
+    "registerCndic": "s",
+    "registerThesaurus": "d",
+    "analyzeKeyword": "e",
+    "focusAnalysisSimple": "Home",
+    "focusAnalysisFull": "End",
+    "toggleAnalysisTab": "Tab",
+    "focusKeywordSearch": "q",
+    "aiAnalysis": "r",
     "undoHistory": "Escape",
+    "aiTabAI": "PageUp",
+    "aiTabWikipedia": "PageDown",
 }
 
 
