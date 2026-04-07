@@ -10,6 +10,7 @@ import { phase1API } from '../api/phase1'
 import { assignmentApi } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import 클라이언트 from '../api/client'
+import PageHeader from '../components/PageHeader'
 
 const { Title } = Typography
 
@@ -152,7 +153,11 @@ export default function Phase1Pipeline() {
     try {
       const { data } = await assignmentApi.프리징(selectedWorkspace, selectedDomain)
       setFreezeStatus('completed')
-      await useWorkspaceStore.getState().loadWorkspaceStatus()
+      // phase 전이: preprocess → work (이미 work이면 건너뛰기)
+      const currentPhase = useWorkspaceStore.getState().phase
+      if (currentPhase === 'preprocess') {
+        await useWorkspaceStore.getState().advancePhase('work')
+      }
       message.success(`프리징 완료: ${data.total || 0}건`)
       navigate('/assignment')
     } catch (e: any) {
@@ -215,7 +220,13 @@ export default function Phase1Pipeline() {
 
   return (
     <div style={{ padding: '0 0 24px' }}>
-      <Title level={3}>데이터 전처리</Title>
+      <PageHeader
+        title="데이터 전처리"
+        showNext={유효단계상태[5] === 'completed' && !실행중}
+        nextLabel="다음단계로 (데이터할당)"
+        nextLoading={freezeStatus === 'running'}
+        onNext={프리징핸들러}
+      />
 
       <Card title="파일관리" style={{ marginBottom: 16 }}>
         <Row gutter={16}>

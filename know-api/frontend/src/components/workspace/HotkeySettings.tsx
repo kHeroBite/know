@@ -13,33 +13,41 @@ interface HotkeyConfig {
 
 // 편집 가능한 단축키
 const 기본핫키: HotkeyConfig[] = [
+  { id: 'focusKeywordSearch', label: '키워드 검색', key: 'q' },
+  { id: 'analyzeKeyword', label: '키워드분석', key: 'e' },
+  { id: 'aiAnalysis', label: 'AI분석', key: 'r' },
+  { id: 'registerUdic', label: '사용자사전 등록', key: 'a' },
+  { id: 'registerCndic', label: '복합명사 등록', key: 's' },
+  { id: 'registerThesaurus', label: '유사어 등록', key: 'd' },
   { id: 'prevAnalysis', label: '← 이전 워드', key: 'ArrowLeft' },
   { id: 'nextAnalysis', label: '→ 다음 워드', key: 'ArrowRight' },
-  { id: 'registerUdic', label: '사용자사전 등록', key: '1' },
-  { id: 'registerCndic', label: '복합명사 등록', key: '2' },
-  { id: 'registerThesaurus', label: '유사어 등록', key: '3' },
-  { id: 'analyzeKeyword', label: '키워드분석', key: '0' },
-  { id: 'focusAnalysis', label: '분석결과 포커스', key: 'Home' },
-  { id: 'aiAnalysis', label: 'AI분석', key: '/' },
+  { id: 'prevLine', label: '↑ 윗줄 이동', key: 'ArrowUp' },
+  { id: 'nextLine', label: '↓ 아랫줄 이동', key: 'ArrowDown' },
+  { id: 'focusAnalysisSimple', label: '분석결과>심플', key: 'Home' },
+  { id: 'focusAnalysisFull', label: '분석결과>풀', key: 'End' },
+  { id: 'toggleAnalysisTab', label: '심플↔풀 전환', key: 'Tab' },
   { id: 'undoHistory', label: '작업취소', key: 'Escape' },
+  { id: 'prevKeyword', label: '이전 키워드', key: 'Alt+ArrowUp' },
+  { id: 'nextKeyword', label: '다음 키워드', key: 'Alt+ArrowDown' },
   { id: 'aiTabAI', label: 'AI분석>AI', key: 'PageUp' },
   { id: 'aiTabWikipedia', label: 'AI분석>Wikipedia', key: 'PageDown' },
   { id: 'thesaurusLlm', label: '유사어추천>AI분석', key: '.' },
-  { id: 'prevKeyword', label: 'Alt+↑ 이전 키워드', key: 'Alt+ArrowUp' },
-  { id: 'nextKeyword', label: 'Alt+↓ 다음 키워드', key: 'Alt+ArrowDown' },
 ]
 
-// 고정 단축키 (설정 불가, 설명만 표시)
-const 고정단축키 = [
-  { label: '↑ 윗줄 이동', desc: '분석결과 내 윗줄 워드로 이동 (첫줄→이전키워드 마지막줄)' },
-  { label: '↓ 아랫줄 이동', desc: '분석결과 내 아랫줄 워드로 이동 (마지막줄→다음키워드)' },
-  { label: 'Alt+← 줄 첫 워드', desc: '현재 줄의 첫 번째 워드로 이동' },
-  { label: 'Alt+→ 줄 끝 워드', desc: '현재 줄의 마지막 워드로 이동' },
+// 고정 단축키 설명서
+const 고정단축키설명 = [
+  { category: '탐색', items: [
+    { label: 'Alt+↑ / Alt+↓', desc: '이전/다음 키워드 이동' },
+    { label: 'Alt+← / Alt+→', desc: '현재 줄의 첫/끝 워드로 이동' },
+  ]},
+  { category: '사전탭', items: [
+    { label: 'Alt+{등록키}', desc: '해당 사전탭 열기 (등록키 변경 시 자동 반영)' },
+  ]},
 ]
 
 const keyDisplayMap: Record<string, string> = {
   ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
-  Escape: 'Esc', Home: 'Home', PageUp: 'PgUp', PageDown: 'PgDn',
+  Escape: 'Esc', Home: 'Home', End: 'End', Tab: 'Tab', PageUp: 'PgUp', PageDown: 'PgDn',
 }
 
 function displayKey(key: string): string {
@@ -70,6 +78,7 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
   const [hotkeys, setHotkeys] = useState<HotkeyConfig[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   useEffect(() => {
     if (!open) { setEditingId(null); return }
@@ -153,15 +162,6 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
         </Space>
       }
     >
-      {/* 탭 전환 안내 */}
-      <div style={{
-        background: '#f5f5f5', borderRadius: 6, padding: '8px 12px', marginBottom: 12,
-      }}>
-        <Text style={{ fontSize: 12 }}>
-          Alt+{'{등록키}'} = 해당 사전탭 열기 (등록키 변경 시 자동 반영)
-        </Text>
-      </div>
-
       {/* 편집 가능한 단축키 */}
       <Table
         dataSource={hotkeys}
@@ -170,18 +170,37 @@ export default function HotkeySettings({ open, onClose, onSave }: Props) {
         size="small"
         pagination={false}
         loading={loading}
-        scroll={{ y: 280 }}
+        scroll={{ y: 340 }}
       />
 
-      {/* 고정 단축키 안내 */}
-      <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 6, padding: '8px 12px' }}>
-        <Text strong style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>방향키 (고정)</Text>
-        {고정단축키.map((item, idx) => (
-          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: 11 }}>
-            <Text style={{ fontWeight: 500 }}>{item.label}</Text>
-            <Text type="secondary">{item.desc}</Text>
+      {/* 고정 단축키 설명서 (토글) */}
+      <div style={{ marginTop: 8 }}>
+        <div
+          onClick={() => setHelpOpen(!helpOpen)}
+          style={{
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 10px', background: '#fafafa', borderRadius: 6,
+            border: '1px solid #f0f0f0', userSelect: 'none',
+          }}
+        >
+          <span style={{ fontSize: 10, color: '#999', transition: 'transform 0.2s', transform: helpOpen ? 'rotate(90deg)' : 'none' }}>▶</span>
+          <Text style={{ fontSize: 11, fontWeight: 500, color: '#666' }}>고정 단축키 안내</Text>
+        </div>
+        {helpOpen && (
+          <div style={{ padding: '8px 12px', background: '#fafafa', borderRadius: '0 0 6px 6px', borderTop: 0, border: '1px solid #f0f0f0', borderTopColor: 'transparent' }}>
+            {고정단축키설명.map((group, gi) => (
+              <div key={gi} style={{ marginBottom: gi < 고정단축키설명.length - 1 ? 8 : 0 }}>
+                <Text style={{ fontSize: 10, color: '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{group.category}</Text>
+                {group.items.map((item, ii) => (
+                  <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: 11 }}>
+                    <Text style={{ fontWeight: 500, fontFamily: 'monospace', fontSize: 11 }}>{item.label}</Text>
+                    <Text type="secondary">{item.desc}</Text>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </Modal>
   )
