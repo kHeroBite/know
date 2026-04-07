@@ -1040,6 +1040,8 @@ export default function KnowledgeWork() {
   // race condition 방지: 현재 활성 요청의 selected.id 추적 (구버전 응답이면 캐시만 저장, setState 스킵)
   const liteRequestIdRef = useRef<string | number | null>(null)
   const fullRequestIdRef = useRef<string | number | null>(null)
+  // 프리패치 abort 관리: 키워드 이동 시 기존 프리패치 요청 취소
+  const prefetchAbortRef = useRef<AbortController | null>(null)
 
   // 사전 빌드 상태
   const [buildLoading, setBuildLoading] = useState(false)
@@ -1268,6 +1270,11 @@ export default function KnowledgeWork() {
 
   // 키워드 선택 시 LITE 실시간 분석 자동 호출 (캐시 우선)
   useEffect(() => {
+    // 키워드 이동 시 이전 프리패치 요청 즉시 취소
+    if (prefetchAbortRef.current) {
+      prefetchAbortRef.current.abort()
+      prefetchAbortRef.current = null
+    }
     if (!selected) {
       setLiteAnalysis(null)
       setLiteLoading(false)
@@ -1326,21 +1333,27 @@ export default function KnowledgeWork() {
     }
   }, [selected?.id, selectedDomain, selectedWorkspace])
 
-  // LITE 분析 완료 후 인접 항목 프리패치 (다른탭 + 이전/다음 키워드 각 5개 번갈아)
+  // 현재 분析 완료 후 인접 항목 프리패치 (다른탭 + 이전/다음 키워드 각 5개 번갈아)
+  // liteLoading이 false가 된 직후 실행 → 현재 화면은 이미 표시된 상태
   useEffect(() => {
     if (liteLoading || !selected?.keyword || !selectedDomain) return
 
     const currentKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
     const isFullTab = analysisTab === 'full'
 
-    // 캐시 미등록 키워드만 API 호출하는 헬퍼
+    // 이 프리패치 세션용 AbortController 생성
+    const abort = new AbortController()
+    prefetchAbortRef.current = abort
+
+    // 캐시 미등록 키워드만 API 호출하는 헬퍼 (abort 신호 포함)
     const prefetchKeyword = (keyword: string) => {
+      if (abort.signal.aborted) return
       const key = `${keyword}::${selectedDomain}::${selectedWorkspace}`
       if (isFullTab) {
         if (!fullCacheRef.current.has(key)) {
           클라이언트.post('/morpheme/analyze-full-realtime', {
             keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-          }).then(({ data }) => {
+          }, { signal: abort.signal }).then(({ data }) => {
             const result = data.full_analysis || null
             if (result) fullCacheRef.current.set(key, result)
           }).catch(() => {})
@@ -1349,7 +1362,7 @@ export default function KnowledgeWork() {
         if (!liteCacheRef.current.has(key)) {
           클라이언트.post('/morpheme/analyze-realtime', {
             keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-          }).then(({ data }) => {
+          }, { signal: abort.signal }).then(({ data }) => {
             const result = data.analysis || null
             if (result) liteCacheRef.current.set(key, result)
           }).catch(() => {})
@@ -1363,7 +1376,7 @@ export default function KnowledgeWork() {
         keyword: selected.keyword,
         domain: selectedDomain,
         workspace: selectedWorkspace || undefined,
-      }).then(({ data }) => {
+      }, { signal: abort.signal }).then(({ data }) => {
         const result = data.full_analysis || null
         if (result) fullCacheRef.current.set(currentKey, result)
       }).catch(() => {})
@@ -1371,15 +1384,19 @@ export default function KnowledgeWork() {
 
     // 2) 다음/이전 키워드 각 5개 번갈아 프리패치 (next1, prev1, next2, prev2, ...)
     const curIdx = filteredItems.findIndex(i => i.id === selected.id)
-    if (curIdx < 0) return
-    for (let offset = 1; offset <= 5; offset++) {
-      if (curIdx + offset < filteredItems.length) {
-        prefetchKeyword(filteredItems[curIdx + offset].keyword)
-      }
-      if (curIdx - offset >= 0) {
-        prefetchKeyword(filteredItems[curIdx - offset].keyword)
+    if (curIdx >= 0) {
+      for (let offset = 1; offset <= 5; offset++) {
+        if (abort.signal.aborted) break
+        if (curIdx + offset < filteredItems.length) {
+          prefetchKeyword(filteredItems[curIdx + offset].keyword)
+        }
+        if (curIdx - offset >= 0) {
+          prefetchKeyword(filteredItems[curIdx - offset].keyword)
+        }
       }
     }
+
+    return () => { abort.abort() }
   }, [liteLoading, selected?.id, selectedDomain, selectedWorkspace, analysisTab])
 
 
