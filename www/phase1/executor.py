@@ -203,9 +203,9 @@ def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
 def _sync_analyze(file_path: str, domain: str, workspace_dir: str) -> str:
     """analyze_morpheme: work/refine.txt → work/analyzed.txt"""
     _ensure_know_ops_path()
-    from know.pipeline.분석.analyze_morpheme래퍼 import analyze_morpheme래퍼
+    from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼
     설정값 = _make_config(workspace_dir)
-    래퍼 = analyze_morpheme래퍼(설정값=설정값)
+    래퍼 = 형태소분석래퍼(설정값=설정값)
     ws = Path(workspace_dir)
     os.makedirs(ws / "build" / "work", exist_ok=True)
     입력 = ws / "build" / "work" / "refine.txt"
