@@ -69,11 +69,12 @@ export default function Phase1Pipeline() {
       if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
         setStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
       }
-      // executor.py 메시지 형식: "추출 complete: /path/..." (status='running' row에 경로 있음)
+      // executor.py 메시지 형식: "추출 complete: /path/file.txt (3643건, ...)" (status='running' row)
       if (entry.message && entry.step_num >= 1) {
-        const m = entry.message.match(/complete:\s*(\/[^\s(]+)/)
+        const m = entry.message.match(/complete:\s*(\/[^\s(]+)\s*(\([^)]+\))?/)
         if (m) {
-          setStepOutputs(prev => ({ ...prev, [entry.step_num]: m[1].trim() }))
+          const output = m[1].trim() + (m[2] ? ' ' + m[2] : '')
+          setStepOutputs(prev => ({ ...prev, [entry.step_num]: output }))
         }
       }
     }
@@ -247,7 +248,7 @@ export default function Phase1Pipeline() {
 
       <Card bodyStyle={{ padding: 0 }}>
         <Row gutter={0}>
-          <Col xs={24} lg={10} style={{ borderRight: '1px solid #f0f0f0' }}>
+          <Col xs={24} lg={13} style={{ borderRight: '1px solid #f0f0f0' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
               {실행중 ? (
@@ -292,7 +293,7 @@ export default function Phase1Pipeline() {
               />
             </div>
           </Col>
-          <Col xs={24} lg={14}>
+          <Col xs={24} lg={11}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
             </div>

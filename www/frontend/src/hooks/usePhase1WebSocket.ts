@@ -101,7 +101,7 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
       }, 30000)
     }
 
-    // DB 폴링 — WebSocket 메시지 누락 시 fallback (2초 간격)
+    // DB 폴링 — 300ms 간격으로 실시간 추적
     const startPoll = () => {
       if (pollRef.current) return
       pollRef.current = setInterval(async () => {
@@ -110,7 +110,7 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
           return
         }
         await fetchLogs()
-      }, 2000)
+      }, 300)
     }
 
     const connectWs = () => {
