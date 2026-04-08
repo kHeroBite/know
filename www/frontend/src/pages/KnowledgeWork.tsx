@@ -1042,6 +1042,10 @@ export default function KnowledgeWork() {
   const fullRequestIdRef = useRef<string | number | null>(null)
   // 프리패치 abort 관리: 키워드 이동 시 기존 프리패치 요청 취소
   const prefetchAbortRef = useRef<AbortController | null>(null)
+  // 캐시 키 정규화: null/undefined → '' 로 통일 (코어 null vs "" 불일치 쿠시 미스 방지)
+  const mkCacheKey = useCallback((keyword: string) =>
+    `${keyword}::${selectedDomain ?? ''}::${selectedWorkspace ?? ''}`,
+  [selectedDomain, selectedWorkspace])
 
   // 사전 빌드 상태
   const [buildLoading, setBuildLoading] = useState(false)
@@ -1215,6 +1219,9 @@ export default function KnowledgeWork() {
   }, [다음페이지로드, 이전페이지로드, minPage])
 
   useEffect(() => {
+    // 도메인/워크스페이스 변경 시 캐시 충돌 방지를 위해 완전 지우기
+    liteCacheRef.current.clear()
+    fullCacheRef.current.clear()
     목록초기화()
     setSelected(null)
     setSelectedTokenIdx(-1)
@@ -1224,7 +1231,7 @@ export default function KnowledgeWork() {
   const liteAnalysisEffective = useMemo(() => {
     if (liteAnalysis) return liteAnalysis
     if (selected?.keyword && selectedDomain) {
-      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      const cacheKey = mkCacheKey(selected.keyword)
       return liteCacheRef.current.get(cacheKey) || null
     }
     return null
@@ -1285,7 +1292,7 @@ export default function KnowledgeWork() {
       return
     }
     // 이전 FULL 결과 초기화 (키워드 바뀌면 재호출 필요)
-    const fullCacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const fullCacheKey = mkCacheKey(selected.keyword)
     const cachedFull = fullCacheRef.current.get(fullCacheKey)
     if (cachedFull) {
       setFullAnalysisRT(cachedFull)
@@ -1298,7 +1305,7 @@ export default function KnowledgeWork() {
     setFullTokenIdx(-1)
 
     if (selected.keyword && selectedDomain) {
-      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      const cacheKey = mkCacheKey(selected.keyword)
       const cached = liteCacheRef.current.get(cacheKey)
       if (cached) {
         setLiteAnalysis(cached)
@@ -1338,14 +1345,14 @@ export default function KnowledgeWork() {
   useEffect(() => {
     if (liteLoading || !selected?.keyword || !selectedDomain) return
 
-    const currentKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const currentKey = mkCacheKey(selected.keyword)
     const isFullTab = analysisTab === 'full'
     const abort = new AbortController()
     prefetchAbortRef.current = abort
 
     const prefetch = (keyword: string) => {
       if (abort.signal.aborted) return
-      const key = `${keyword}::${selectedDomain}::${selectedWorkspace}`
+      const key = mkCacheKey(keyword)
       if (isFullTab) {
         if (fullCacheRef.current.has(key)) return
         클라이언트.post('/morpheme/analyze-full-realtime', {
@@ -1392,7 +1399,7 @@ export default function KnowledgeWork() {
   useEffect(() => {
     if (analysisTab !== 'full' || !selected?.keyword || !selectedDomain) return
     if (fullAnalysisRT !== null || fullLoading) return  // 이미 결과 있거나 로딩 중이면 재호출 안함
-    const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+    const cacheKey = mkCacheKey(selected.keyword)
     const cached = fullCacheRef.current.get(cacheKey)
     if (cached) {
       setFullAnalysisRT(cached)
@@ -1481,7 +1488,7 @@ export default function KnowledgeWork() {
   const fullAnalysisEffective = useMemo(() => {
     if (fullAnalysis) return fullAnalysis
     if (selected?.keyword && selectedDomain) {
-      const cacheKey = `${selected.keyword}::${selectedDomain}::${selectedWorkspace}`
+      const cacheKey = mkCacheKey(selected.keyword)
       return fullCacheRef.current.get(cacheKey) || null
     }
     return null
