@@ -17,6 +17,9 @@ PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
     1: {"name": "키워드추출", "type": "python", "func": "extract"},
     2: {"name": "정제",       "type": "python", "func": "refine"},
+    3: {"name": "형태소분석", "type": "python", "func": "analyze"},
+    4: {"name": "결과변환",   "type": "python", "func": "convert"},
+    5: {"name": "유사어검사", "type": "python", "func": "synonym"},
     6: {"name": "freeze_service",     "type": "python", "func": "freeze"},
 }
 

@@ -1,5 +1,34 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-08 — 전처리 5단계 복원 + 사전빌드 후 재분석 + 캐시 제거 + DB migration
+
+### 수정 내용
+
+**핵심 변경**: 프론트엔드 캐시 완전 제거, executor.py 전처리 단계 복원(3~5), 빌드 후 자동 재분석, DB 컬럼 추가
+
+#### 수정 파일 (총 8개)
+- `www/frontend/src/pages/KnowledgeWork.tsx` — liteCacheRef/fullCacheRef/prefetchAbortRef/mkCacheKey/프리패치useEffect 완전 제거 (131줄 감소) + useEffect 시작줄 복원 + setLiteAnalysis(result) 복원
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — end_step:5로 변경 (전처리 5단계 전체 실행)
+- `www/frontend/src/components/phase1/ControlPanel.tsx` — 단계 목록 확장 (3/4/5단계 추가)
+- `www/phase1/executor.py` — PHASE1_STEPS 3/4/5단계 복원 (키워드추출/결과변환/유사어체크)
+- `www/services/assignment_service.py` — reanalyze_after_build() 함수 추가 (빌드 후 자동 재분석)
+- `www/pipeline/build_wrapper.py` — 빌드 완료 후 reanalyze_after_build() 호출 추가
+- `www/frontend/src/api/pipeline.ts` — `/api/build/` → `/build/` (baseURL 중복 제거)
+- `www/main.py` — llm_settings.thesaurus_prompt 컬럼 migration (ALTER TABLE ADD COLUMN)
+- `www/frontend/dist/` — 빌드 결과물 갱신
+
+#### 아키텍처 변경
+- **캐시 제거**: KnowledgeWork.tsx 131줄 캐시 로직 완전 제거 → 단순 API 호출 방식 복원
+- **전처리 복원**: 전처리 3/4/5단계(키워드추출/결과변환/유사어체크)를 executor.py에 복원
+- **빌드 후 재분석**: build_wrapper.py가 빌드 완료 후 reanalyze_after_build() 자동 호출
+- **DB migration**: llm_settings 테이블에 thesaurus_prompt TEXT 컬럼 추가
+
+#### 교훈
+- L-036: ktest 팀에이전트 프롬프트에 curl localhost 하드코딩 금지
+- L-037: 신규 DB 컬럼 참조 시 migration SQL 동시 작성 필수
+
+---
+
 ## 2026-04-07 — 작업실 실시간 분석 구조 변경 — 전처리 단축 + 실시간 API + 사전빌드 (커밋: dd30078)
 
 ### 수정 내용

@@ -276,7 +276,7 @@ www/
 │   ├── tasks.py               # Celery 태스크 정의
 │   ├── refine.py              # 검색로그 정제 태스크
 │   ├── morpheme.py            # 형태소분석 태스크
-│   └── build_wrapper.py       # 사전빌드 래퍼 태스크
+│   └── build_wrapper.py       # 사전빌드 래퍼 태스크 (빌드 완료 후 reanalyze_after_build() 호출)
 ├── config/
 │   └── ai_prompt.json         # AI 분석 기본 프롬프트 설정 (관리자 수정 가능)
 ├── scripts/
@@ -285,7 +285,7 @@ www/
 └── frontend/                  # React SPA (Ant Design 5)
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
-    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시)
+    │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시, 캐시 제거됨)
     │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트)
     │   ├── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리 + 통합 phase 전이 버튼)
     │   └── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)

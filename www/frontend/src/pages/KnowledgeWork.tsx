@@ -13,6 +13,7 @@ import { workspaceAPI } from '../api/workspace'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
 import 클라이언트 from '../api/client'
+import { 빌드API } from '../api/pipeline'
 import AIAnalysis from '../components/workspace/AIAnalysis'
 import WorkHistory, { WorkHistoryRef, WorkHistoryItem } from '../components/workspace/WorkHistory'
 import HotkeySettings from '../components/workspace/HotkeySettings'
@@ -1034,18 +1035,9 @@ export default function KnowledgeWork() {
   const [fullAnalysisRT, setFullAnalysisRT] = useState<string | null>(null)
   const [fullLoading, setFullLoading] = useState(false)
 
-  // 분석결과 캐시 (키워드 → 분석결과)
-  const liteCacheRef = useRef<Map<string, string>>(new Map())
-  const fullCacheRef = useRef<Map<string, string>>(new Map())
-  // race condition 방지: 현재 활성 요청의 selected.id 추적 (구버전 응답이면 캐시만 저장, setState 스킵)
+  // race condition 방지: 현재 활성 요청의 selected.id 추적 (구버전 응답이면 setState 스킵)
   const liteRequestIdRef = useRef<string | number | null>(null)
   const fullRequestIdRef = useRef<string | number | null>(null)
-  // 프리패치 abort 관리: 키워드 이동 시 기존 프리패치 요청 취소
-  const prefetchAbortRef = useRef<AbortController | null>(null)
-  // 캐시 키 정규화: null/undefined → '' 로 통일 (코어 null vs "" 불일치 쿠시 미스 방지)
-  const mkCacheKey = useCallback((keyword: string) =>
-    `${keyword}::${selectedDomain ?? ''}::${selectedWorkspace ?? ''}`,
-  [selectedDomain, selectedWorkspace])
 
   // 사전 빌드 상태
   const [buildLoading, setBuildLoading] = useState(false)
@@ -1219,23 +1211,13 @@ export default function KnowledgeWork() {
   }, [다음페이지로드, 이전페이지로드, minPage])
 
   useEffect(() => {
-    // 도메인/워크스페이스 변경 시 캐시 충돌 방지를 위해 완전 지우기
-    liteCacheRef.current.clear()
-    fullCacheRef.current.clear()
     목록초기화()
     setSelected(null)
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
-  // ─── 분석결과 effective (캐시 포함) ─────────────────────────
-  const liteAnalysisEffective = useMemo(() => {
-    if (liteAnalysis) return liteAnalysis
-    if (selected?.keyword && selectedDomain) {
-      const cacheKey = mkCacheKey(selected.keyword)
-      return liteCacheRef.current.get(cacheKey) || null
-    }
-    return null
-  }, [liteAnalysis, selected?.keyword, selectedDomain, selectedWorkspace])
+  // ─── 분석결과 effective ─────────────────────────────────
+  const liteAnalysisEffective = liteAnalysis
 
   // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (LITE 탭)
   useEffect(() => {
@@ -1275,13 +1257,8 @@ export default function KnowledgeWork() {
     }
   }, [selected, analysisTab, liteAnalysisEffective])
 
-  // 키워드 선택 시 LITE 실시간 분석 자동 호출 (캐시 우선)
+  // 키워드 선택 시 LITE 실시간 분석 자동 호출
   useEffect(() => {
-    // 키워드 이동 시 이전 프리패치 요청 즉시 취소
-    if (prefetchAbortRef.current) {
-      prefetchAbortRef.current.abort()
-      prefetchAbortRef.current = null
-    }
     if (!selected) {
       setLiteAnalysis(null)
       setLiteLoading(false)
@@ -1291,27 +1268,10 @@ export default function KnowledgeWork() {
       setFullTokenIdx(-1)
       return
     }
-    // 이전 FULL 결과 초기화 (키워드 바뀌면 재호출 필요)
-    const fullCacheKey = mkCacheKey(selected.keyword)
-    const cachedFull = fullCacheRef.current.get(fullCacheKey)
-    if (cachedFull) {
-      setFullAnalysisRT(cachedFull)
-      setFullAnalysis(cachedFull)
-    } else {
-      setFullAnalysisRT(null)
-      setFullAnalysis(null)
-    }
     setFullLoading(false)
     setFullTokenIdx(-1)
 
     if (selected.keyword && selectedDomain) {
-      const cacheKey = mkCacheKey(selected.keyword)
-      const cached = liteCacheRef.current.get(cacheKey)
-      if (cached) {
-        setLiteAnalysis(cached)
-        setLiteLoading(false)
-        return
-      }
       setLiteLoading(true)
       setLiteAnalysis(null)
       liteRequestIdRef.current = selected.id  // 현재 요청 ID 등록
@@ -1322,8 +1282,6 @@ export default function KnowledgeWork() {
         workspace: selectedWorkspace || undefined,
       }).then(({ data }) => {
         const result = data.analysis || null
-        // 항상 캐시에 저장 (프리패치 효과 보존)
-        if (result) liteCacheRef.current.set(cacheKey, result)
         // 현재 선택된 키워드와 일치할 때만 화면 업데이트
         if (liteRequestIdRef.current === requestedId) {
           setLiteAnalysis(result)
@@ -1340,73 +1298,10 @@ export default function KnowledgeWork() {
     }
   }, [selected?.id, selectedDomain, selectedWorkspace])
 
-  // 현재 분析 완료 후 인접 항목 프리패치 (다른탭 + 이전/다음 키워드 각 5개 번갈아)
-  // 현재 분析 완료 후 인접 항목 프리패치 — 전체 동시 발사, abort로 즉시 취소
-  useEffect(() => {
-    if (liteLoading || !selected?.keyword || !selectedDomain) return
-
-    const currentKey = mkCacheKey(selected.keyword)
-    const isFullTab = analysisTab === 'full'
-    const abort = new AbortController()
-    prefetchAbortRef.current = abort
-
-    const prefetch = (keyword: string) => {
-      if (abort.signal.aborted) return
-      const key = mkCacheKey(keyword)
-      if (isFullTab) {
-        if (fullCacheRef.current.has(key)) return
-        클라이언트.post('/morpheme/analyze-full-realtime', {
-          keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-        }, { signal: abort.signal }).then(({ data }) => {
-          const r = data.full_analysis || null
-          if (r) fullCacheRef.current.set(key, r)
-        }).catch(() => {})
-      } else {
-        if (liteCacheRef.current.has(key)) return
-        클라이언트.post('/morpheme/analyze-realtime', {
-          keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-        }, { signal: abort.signal }).then(({ data }) => {
-          const r = data.analysis || null
-          if (r) liteCacheRef.current.set(key, r)
-        }).catch(() => {})
-      }
-    }
-
-    // 다른 탭(FULL) 현재 키워드 먼저
-    if (!isFullTab && !fullCacheRef.current.has(currentKey)) {
-      클라이언트.post('/morpheme/analyze-full-realtime', {
-        keyword: selected.keyword, domain: selectedDomain, workspace: selectedWorkspace || undefined,
-      }, { signal: abort.signal }).then(({ data }) => {
-        const r = data.full_analysis || null
-        if (r) fullCacheRef.current.set(currentKey, r)
-      }).catch(() => {})
-    }
-
-    // 이전10 + 다음10 동시 발사 (next1→prev1→next2→prev2 순서)
-    const curIdx = filteredItems.findIndex(i => i.id === selected.id)
-    if (curIdx >= 0) {
-      for (let offset = 1; offset <= 10; offset++) {
-        if (curIdx + offset < filteredItems.length) prefetch(filteredItems[curIdx + offset].keyword)
-        if (curIdx - offset >= 0) prefetch(filteredItems[curIdx - offset].keyword)
-      }
-    }
-
-    return () => { abort.abort() }
-  }, [liteLoading, selected?.id, selectedDomain, selectedWorkspace, analysisTab])
-
-
   // FULL 탭 전환 시 FULL 실시간 분석 lazy 호출 (캐시 우선)
   useEffect(() => {
     if (analysisTab !== 'full' || !selected?.keyword || !selectedDomain) return
     if (fullAnalysisRT !== null || fullLoading) return  // 이미 결과 있거나 로딩 중이면 재호출 안함
-    const cacheKey = mkCacheKey(selected.keyword)
-    const cached = fullCacheRef.current.get(cacheKey)
-    if (cached) {
-      setFullAnalysisRT(cached)
-      setFullAnalysis(cached)
-      setFullLoading(false)
-      return
-    }
     setFullLoading(true)
     fullRequestIdRef.current = selected.id  // 현재 요청 ID 등록
     const requestedId = selected.id
@@ -1416,8 +1311,6 @@ export default function KnowledgeWork() {
       workspace: selectedWorkspace || undefined,
     }).then(({ data }) => {
       const result = data.full_analysis || null
-      // 항상 캐시에 저장 (프리패치 효과 보존)
-      if (result) fullCacheRef.current.set(cacheKey, result)
       // 현재 선택된 키워드와 일치할 때만 화면 업데이트
       if (fullRequestIdRef.current === requestedId) {
         setFullAnalysisRT(result)
@@ -1485,14 +1378,8 @@ export default function KnowledgeWork() {
   const selectableTokens = tokens.filter(t => !t.lineBreak)
 
   // FullTest 토큰
-  const fullAnalysisEffective = useMemo(() => {
-    if (fullAnalysis) return fullAnalysis
-    if (selected?.keyword && selectedDomain) {
-      const cacheKey = mkCacheKey(selected.keyword)
-      return fullCacheRef.current.get(cacheKey) || null
-    }
-    return null
-  }, [fullAnalysis, selected?.keyword, selectedDomain, selectedWorkspace])
+  // FullTest 토큰
+  const fullAnalysisEffective = fullAnalysis
   const fullTokens = fullAnalysisEffective ? parseFullTestText(fullAnalysisEffective) : []
   const fullSelectableTokens = fullTokens.filter(t => !t.lineBreak)
 
@@ -1601,14 +1488,13 @@ export default function KnowledgeWork() {
     if (!selectedDomain || buildLoading) return
     setBuildLoading(true)
     try {
-      const wsParam = selectedWorkspace ? `?workspace=${selectedWorkspace}` : ''
-      await 클라이언트.post(`/api/build/${selectedDomain}${wsParam}`)
+      await 빌드API.빌드시작(selectedDomain, selectedWorkspace || undefined)
       // 빌드 상태 폴링 (최대 60초)
       let done = false
       for (let i = 0; i < 12; i++) {
         await new Promise(r => setTimeout(r, 5000))
         try {
-          const { data } = await 클라이언트.get(`/api/build/${selectedDomain}/status`)
+          const { data } = await 빌드API.상태조회(selectedDomain)
           const status = data?.status
           if (status === 'completed' || status === 'success') { done = true; break }
           if (status === 'failed') { message.error('빌드 실패'); return }
@@ -1616,9 +1502,6 @@ export default function KnowledgeWork() {
       }
       if (done) {
         message.success('사전 빌드 완료')
-        // 캐시 전체 초기화 (사전이 바뀌었으므로)
-        liteCacheRef.current.clear()
-        fullCacheRef.current.clear()
         // 현재 선택된 키워드 분석결과 갱신
         if (selected?.keyword && selectedDomain) {
           setLiteAnalysis(null)

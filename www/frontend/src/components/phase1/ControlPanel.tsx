@@ -7,11 +7,17 @@ const { Text } = Typography
 const 단계목록 = [
   { num: 1, name: '키워드추출', color: '#1677ff', output: 'keywords.txt' },
   { num: 2, name: '정제', color: '#52c41a', output: 'refine.txt' },
+  { num: 3, name: '형태소분석', color: '#fa8c16', output: 'analyzed.txt' },
+  { num: 4, name: '결과변환', color: '#722ed1', output: 'transform.txt' },
+  { num: 5, name: '유사어검사', color: '#eb2f96', output: 'synonym.txt' },
 ]
 
 export const 단계색상맵: Record<string, string> = {
   '키워드추출': '#1677ff',
   '정제': '#52c41a',
+  '형태소분석': '#fa8c16',
+  '결과변환': '#722ed1',
+  '유사어검사': '#eb2f96',
 }
 
 interface RunParams {
@@ -94,7 +100,7 @@ export default function ControlPanel({
     if (isRunning) return false
     if (stepNum === 1) return true
     if (stepStatuses[stepNum - 1] === 'completed') return true
-    for (let i = stepNum; i <= 2; i++) {
+    for (let i = stepNum; i <= 5; i++) {
       if (stepStatuses[i] === 'completed') return true
     }
     return false

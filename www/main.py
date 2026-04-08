@@ -1,6 +1,8 @@
 from __future__ import annotations
 import os
-from fastapi import FastAPI
+import time
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -25,11 +27,33 @@ from api.llm_settings import 라우터 as LLM설정라우터
 from api.dict_verify import 라우터 as 사전검증라우터
 
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+_접근로그 = logging.getLogger("access")
+# 멀티워커 환경에서도 로그가 파일에 기록되도록 FileHandler 추가
+_log_file_handler = logging.FileHandler("/tmp/know-api.log", encoding="utf-8")
+_log_file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%H:%M:%S"
+))
+_접근로그.addHandler(_log_file_handler)
+_접근로그.setLevel(logging.INFO)
+
 앱 = FastAPI(
     title="know-api",
     description="검색엔진 지식작업 관리도구 API",
     version="2.0.0",
 )
+
+@앱.middleware("http")
+async def 타이밍미들웨어(request: Request, call_next):
+    시작 = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - 시작) * 1000
+    _접근로그.info("%.0fms %s %s %d", ms, request.method, request.url.path, response.status_code)
+    return response
 
 앱.add_middleware(
     CORSMiddleware,

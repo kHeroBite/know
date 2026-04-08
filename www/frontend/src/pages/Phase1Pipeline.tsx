@@ -222,7 +222,7 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <PageHeader
         title="데이터 전처리"
-        showNext={유효단계상태[2] === 'completed' && !실행중}
+        showNext={유효단계상태[5] === 'completed' && !실행중}
         nextLabel="다음단계로 (데이터할당)"
         nextLoading={freezeStatus === 'running'}
         onNext={프리징핸들러}
@@ -249,8 +249,8 @@ export default function Phase1Pipeline() {
                   중지
                 </Button>
               ) : (
-                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 2 })}>
-                  전체 실행 (1→2)
+                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 5 })}>
+                  전체 실행 (1→5)
                 </Button>
               )}
             </div>
@@ -281,7 +281,7 @@ export default function Phase1Pipeline() {
                 onCombineModeChange={setCombineMode}
                 onSortByChange={setSortBy}
                 onFreeze={프리징핸들러}
-                freezeDisabled={실행중 || 유효단계상태[2] !== 'completed' || freezeStatus === 'running'}
+                freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
                 freezeLoading={freezeStatus === 'running'}
               />
             </div>

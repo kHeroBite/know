@@ -406,3 +406,85 @@ def process_complete_mode(db: Session, workspace: str, domain: str, user_id: str
     else:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"알 수 없는 mode: {mode}")
+
+
+def reanalyze_after_build(workspace: str, domain: str) -> dict:
+    """빌드 완료 후 3/4/5단계(분석→변환→유사어)를 재실행하여 keyword_assignments 업데이트.
+
+    1. _sync_analyze → _sync_convert → _sync_synonym 순차 실행
+    2. synonym.txt 파싱 → analysis 컬럼 UPDATE (lite)
+    3. FullTest 배치 분석 → full_analysis 컬럼 UPDATE
+    빌드 완료 후 새 사전 기반으로 재분석하기 위해 호출.
+    """
+    from core.database import 세션팩토리
+    from phase1.executor import _sync_analyze, _sync_convert, _sync_synonym, WORKSPACE_BASE
+    import os
+
+    workspace_dir = os.path.join(WORKSPACE_BASE, workspace)
+    refine_path = os.path.join(workspace_dir, "build", "work", "refine.txt")
+
+    # refine.txt 없으면 재분석 불가
+    if not os.path.isfile(refine_path):
+        logger.warning("reanalyze_after_build: refine.txt 없음 (%s) — 스킵", refine_path)
+        return {"skipped": True, "reason": "refine.txt 없음"}
+
+    try:
+        logger.info("reanalyze_after_build: 3단계(분석) 시작 — workspace=%s, domain=%s", workspace, domain)
+        _sync_analyze(refine_path, domain, workspace_dir)
+
+        logger.info("reanalyze_after_build: 4단계(변환) 시작")
+        _sync_convert(refine_path, workspace_dir)
+
+        logger.info("reanalyze_after_build: 5단계(유사어) 시작")
+        _sync_synonym(refine_path, domain, workspace_dir)
+    except Exception as e:
+        logger.error("reanalyze_after_build: 전처리 단계 실패 — %s", e)
+        return {"skipped": True, "reason": str(e)}
+
+    # synonym.txt 파싱 → keyword_assignments.analysis 업데이트 (lite)
+    try:
+        blocks = parse_synonym(workspace)
+    except Exception as e:
+        logger.error("reanalyze_after_build: synonym.txt 파싱 실패 — %s", e)
+        return {"skipped": True, "reason": f"synonym.txt 파싱 실패: {e}"}
+
+    db = 세션팩토리()
+    try:
+        _check_full_analysis_column(db)
+
+        # analysis 컬럼 업데이트 (lite)
+        for block in blocks:
+            db.execute(text("""
+                UPDATE keyword_assignments SET analysis=:ana
+                WHERE workspace=:ws AND domain=:dom AND keyword=:kw
+            """), {"ana": block["analysis"], "ws": workspace, "dom": domain, "kw": block["keyword"]})
+        db.commit()
+        logger.info("reanalyze_after_build: analysis 업데이트 complete — %d건", len(blocks))
+
+        # full_analysis 컬럼 업데이트 (FullTest 배치)
+        keywords = [b["keyword"] for b in blocks]
+        풀분석결과 = _batch_full_analyze(keywords, workspace)
+        if 풀분석결과:
+            full_count = 0
+            for block in blocks:
+                merged = _merge_full_analyze_synonyms(block, 풀분석결과)
+                if merged:
+                    db.execute(text("""
+                        UPDATE keyword_assignments SET full_analysis=:fa
+                        WHERE workspace=:ws AND domain=:dom AND keyword=:kw
+                    """), {"fa": merged, "ws": workspace, "dom": domain, "kw": block["keyword"]})
+                    full_count += 1
+            db.commit()
+            logger.info("reanalyze_after_build: full_analysis 업데이트 complete — %d건", full_count)
+        else:
+            full_count = 0
+            logger.warning("reanalyze_after_build: FullTest 결과 없음 — full_analysis 업데이트 스킵")
+
+        return {
+            "workspace": workspace,
+            "domain": domain,
+            "analysis_updated": len(blocks),
+            "full_analysis_updated": full_count,
+        }
+    finally:
+        db.close()

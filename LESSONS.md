@@ -254,6 +254,20 @@ elif os.path.isdir(path):
 **재발방지**: DB 내보내기 같은 공통 유틸은 services 계층 또는 별도 utils 모듈로 분리. pipeline → phase1 역방향 import 금지.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-036: ktest 팀에이전트 프롬프트에 curl localhost 하드코딩 금지 (2026-04-08)
+
+**현상**: ktest-1 팀에이전트 spawn 프롬프트에 `curl -s http://localhost:` 직접 명시 → L-110 hook 차단.
+**원인**: 팀에이전트에게 API 헬스체크 방법을 직접 명시하면서 curl 명령을 하드코딩.
+**재발방지**: 팀에이전트 프롬프트에 `curl localhost` 직접 명시 금지. ktest_run 스킬 위임 방식 사용. "헬스체크" 또는 "API 응답 확인" 등 추상적 지시만 포함할 것.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-037: 신규 DB 컬럼 참조 코드 작성 시 migration SQL 동시 작성 필수 (2026-04-08)
+
+**현상**: `assignment_service.py`에서 `llm_settings.thesaurus_prompt` 컬럼 참조 코드 작성 후 migration SQL 누락 → 500 오류 발생, 사후 ALTER TABLE 추가 필요.
+**원인**: 코드 작성 시 DB 컬럼 추가가 필요함을 인지했으나 migration SQL 파일 작성을 누락.
+**재발방지**: DB 모델/서비스에서 신규 컬럼 참조 코드 작성 시 `ALTER TABLE ... ADD COLUMN ...` migration SQL을 반드시 동시 작성. 코드-DB 동기화 원칙.
+**Level**: 1 (1회 발생, docs 기록)
+
 ---
 
 ## 반영 추적 테이블
@@ -283,3 +297,5 @@ elif os.path.isdir(path):
 | L-033 | PHASE1_STEPS 단계 번호 불연속 | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
 | L-034 | 경로 상수 다중 파일 중복 선언 | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
 | L-035 | phase1→pipeline 역방향 import | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
+| L-036 | ktest 프롬프트 curl localhost 하드코딩 | LESSONS | LESSONS.md | 2026-04-08 | ✅ |
+| L-037 | 신규 DB 컬럼 참조 시 migration SQL 누락 | LESSONS | LESSONS.md | 2026-04-08 | ✅ |

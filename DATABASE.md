@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS user_work_phase (
 | 2026-04-05 | user_work_phase 테이블 신규 생성 (user_id/domain/phase) | migrations/002_user_work_phase.sql |
 | 2026-04-05 | workspace phase enum 도입 (preprocess→work→build→verify) — isFrozen/isAssigned/isBuildPhase 제거 | workspace_service.py |
 | 2026-04-03 | llm_usage_log 테이블 신규 생성 (provider/model/user_id/tokens_used/duration_ms/success) | init_db.py |
+| 2026-04-08 | llm_settings.thesaurus_prompt TEXT 컬럼 추가 (ALTER TABLE ADD COLUMN) | main.py migration |
 | 2026-04-02 | llm_settings 테이블 신규 생성 (provider/api_key/model_name/enabled/extra_config) | init_db.py |
 | 2026-04-02 | keyword_assignments.flag 컬럼 추가 (R/W/'') + API PUT /flag | init_db.py, assignment_service.py, api/assignment.py |
 | 2026-04-01 | work_history 테이블 신규 생성 | init_db.py |
