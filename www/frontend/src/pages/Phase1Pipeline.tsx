@@ -69,8 +69,12 @@ export default function Phase1Pipeline() {
       if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
         setStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
       }
-      if (entry.message && entry.message.includes('완료: /')) {
-        setStepOutputs(prev => ({ ...prev, [entry.step_num]: entry.message.replace(/^[^ ]+ 완료: /, '') }))
+      // executor.py 메시지 형식: "추출 complete: /path/...", "정제 complete: ..."
+      if (entry.message && entry.status === 'completed') {
+        const m = entry.message.match(/complete:\s*(.+)/)
+        if (m) {
+          setStepOutputs(prev => ({ ...prev, [entry.step_num]: m[1].trim() }))
+        }
       }
     }
   }, [ws.logs])
@@ -130,11 +134,13 @@ export default function Phase1Pipeline() {
       } as any)
       setRunStartStep(params.start_step)
       setRunId(data.run_id)
-      // 전체실행 시에만 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
-      if (params.start_step === 1 && params.end_step === 2) {
+      // 1단계부터 시작 시 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
+      if (params.start_step === 1) {
         setFileTabs({})
         setActiveViewTab(null)
         setFileStatus({})
+        setStepElapsed({})
+        setStepOutputs({})
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')

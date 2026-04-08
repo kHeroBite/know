@@ -55,28 +55,27 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
 
     const applyLogs = (entries: LogEntry[]) => {
       setLogs(entries)
-      const newStatuses: Record<number, string> = {}
-      let lastStep = -1
+      // 각 step별 최신 상태만 추출 (step_num → 마지막 entry)
+      const stepLatest: Record<number, LogEntry> = {}
       let completed = false
       for (const e of entries) {
-        if (newStatuses[e.step_num] === 'completed' && e.status !== 'completed') continue
-        newStatuses[e.step_num] = e.status
-        if (e.step_num > lastStep) lastStep = e.step_num
+        stepLatest[e.step_num] = e
         if (e.step_num === -1 && e.status === 'completed') completed = true
         if (e.status === 'failed') completed = true
       }
-      // 기존 completed 상태 보존 + 새 로그 머지
+      // 기존 completed 상태 보존 + 새 로그 머지 (한 번만 setState)
       setStepStatuses(prev => {
         const merged: Record<number, string> = {}
         for (const [k, v] of Object.entries(prev)) {
           if (v === 'completed') merged[Number(k)] = v
         }
-        for (const [k, v] of Object.entries(newStatuses)) {
-          merged[Number(k)] = v
+        for (const [k, e] of Object.entries(stepLatest)) {
+          merged[Number(k)] = e.status
         }
         return merged
       })
-      setCurrentStep(lastStep)
+      const lastStep = Math.max(-1, ...Object.keys(stepLatest).map(Number).filter(n => n >= 0))
+      setCurrentStep(lastStep >= 0 ? lastStep : -1)
       if (completed) doMarkDone()
       return completed
     }
