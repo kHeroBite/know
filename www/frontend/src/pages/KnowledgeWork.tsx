@@ -1025,19 +1025,7 @@ export default function KnowledgeWork() {
   // 분석결과 탭 (LITE/FULL)
   const [analysisTab, setAnalysisTab] = useState<'simple' | 'full'>('simple')
   const [analysisRightTab, setAnalysisRightTab] = useState<'morpheme' | 'ai'>('morpheme')
-  const [fullAnalysis, setFullAnalysis] = useState<string | null>(null)
-  const [fullAnalysisLoading, setFullAnalysisLoading] = useState(false)
   const [fullTokenIdx, setFullTokenIdx] = useState(-1)
-
-  // 실시간 분석 상태
-  const [liteAnalysis, setLiteAnalysis] = useState<string | null>(null)
-  const [liteLoading, setLiteLoading] = useState(false)
-  const [fullAnalysisRT, setFullAnalysisRT] = useState<string | null>(null)
-  const [fullLoading, setFullLoading] = useState(false)
-
-  // race condition 방지: 현재 활성 요청의 selected.id 추적 (구버전 응답이면 setState 스킵)
-  const liteRequestIdRef = useRef<string | number | null>(null)
-  const fullRequestIdRef = useRef<string | number | null>(null)
 
   // 사전 빌드 상태
   const [buildLoading, setBuildLoading] = useState(false)
@@ -1216,12 +1204,9 @@ export default function KnowledgeWork() {
     setSelectedTokenIdx(-1)
   }, [selectedWorkspace, selectedDomain])
 
-  // ─── 분석결과 effective ─────────────────────────────────
-  const liteAnalysisEffective = liteAnalysis
-
   // REQ-20: 키워드 선택 시 자동포커스 + 첫/마지막 단어 선택 (LITE 탭)
   useEffect(() => {
-    const analysisText = liteAnalysisEffective ?? selected?.analysis
+    const analysisText = selected?.analysis || null
     if (analysisText) {
       const allTokens = parseAnalysisText(analysisText)
       const toks = allTokens.filter(t => !t.lineBreak)
@@ -1255,84 +1240,18 @@ export default function KnowledgeWork() {
     } else {
       setSelectedTokenIdx(-1)
     }
-  }, [selected, analysisTab, liteAnalysisEffective])
+  }, [selected, analysisTab])
 
-  // 키워드 선택 시 LITE 실시간 분석 자동 호출
+  // 키워드 선택 해제 시 FULL 토큰 인덱스 초기화
   useEffect(() => {
-    if (!selected) {
-      setLiteAnalysis(null)
-      setLiteLoading(false)
-      setFullAnalysisRT(null)
-      setFullLoading(false)
-      setFullAnalysis(null)
-      setFullTokenIdx(-1)
-      return
-    }
-    setFullLoading(false)
-    setFullTokenIdx(-1)
-
-    if (selected.keyword && selectedDomain) {
-      setLiteLoading(true)
-      setLiteAnalysis(null)
-      liteRequestIdRef.current = selected.id  // 현재 요청 ID 등록
-      const requestedId = selected.id
-      클라이언트.post('/morpheme/analyze-realtime', {
-        keyword: selected.keyword,
-        domain: selectedDomain,
-        workspace: selectedWorkspace || undefined,
-      }).then(({ data }) => {
-        const result = data.analysis || null
-        // 현재 선택된 키워드와 일치할 때만 화면 업데이트
-        if (liteRequestIdRef.current === requestedId) {
-          setLiteAnalysis(result)
-          setLiteLoading(false)
-        }
-      }).catch(() => {
-        if (liteRequestIdRef.current === requestedId) {
-          setLiteAnalysis(null)
-          setLiteLoading(false)
-        }
-      })
-    } else {
-      setLiteAnalysis(null)
-    }
-  }, [selected?.id, selectedDomain, selectedWorkspace])
-
-  // FULL 탭 전환 시 FULL 실시간 분석 lazy 호출 (캐시 우선)
-  useEffect(() => {
-    if (analysisTab !== 'full' || !selected?.keyword || !selectedDomain) return
-    if (fullAnalysisRT !== null || fullLoading) return  // 이미 결과 있거나 로딩 중이면 재호출 안함
-    setFullLoading(true)
-    fullRequestIdRef.current = selected.id  // 현재 요청 ID 등록
-    const requestedId = selected.id
-    클라이언트.post('/morpheme/analyze-full-realtime', {
-      keyword: selected.keyword,
-      domain: selectedDomain,
-      workspace: selectedWorkspace || undefined,
-    }).then(({ data }) => {
-      const result = data.full_analysis || null
-      // 현재 선택된 키워드와 일치할 때만 화면 업데이트
-      if (fullRequestIdRef.current === requestedId) {
-        setFullAnalysisRT(result)
-        setFullAnalysis(result)
-        setFullLoading(false)
-        setFullAnalysisLoading(false)
-      }
-    }).catch(() => {
-      if (fullRequestIdRef.current === requestedId) {
-        setFullAnalysisRT(null)
-        setFullAnalysis(null)
-        setFullLoading(false)
-        setFullAnalysisLoading(false)
-      }
-    })
-  }, [analysisTab, selected?.id, selectedDomain, selectedWorkspace])
+    if (!selected) setFullTokenIdx(-1)
+  }, [selected?.id])
 
   // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
   // FullTest 결과 로드 완료 시 첫/마지막 워드 자동 선택
   useEffect(() => {
-    if (fullAnalysis && analysisTab === 'full') {
-      const allTokens = parseFullTestText(fullAnalysis)
+    if (selected?.full_analysis && analysisTab === 'full') {
+      const allTokens = parseFullTestText(selected.full_analysis)
       const ftoks = allTokens.filter(t => !t.lineBreak)
       if (selectLastLineFirstRef.current) {
         // ↑방향키: 마지막 줄의 첫 워드 선택
@@ -1355,7 +1274,7 @@ export default function KnowledgeWork() {
         setFullTokenIdx(firstWord >= 0 ? firstWord : 0)
       }
     }
-  }, [fullAnalysis, analysisTab])
+  }, [selected?.full_analysis, analysisTab])
 
   // 선택 키워드 자동 중앙 스크롤 (필터 해제 시에도 유지)
   useEffect(() => {
@@ -1374,13 +1293,11 @@ export default function KnowledgeWork() {
 
   // ─── 토큰 ───────────────────────────────────────────────────
 
-  const tokens = liteAnalysisEffective ? parseAnalysisText(liteAnalysisEffective) : (selected?.analysis ? parseAnalysisText(selected.analysis) : [])
+  const tokens = selected?.analysis ? parseAnalysisText(selected.analysis) : []
   const selectableTokens = tokens.filter(t => !t.lineBreak)
 
   // FullTest 토큰
-  // FullTest 토큰
-  const fullAnalysisEffective = fullAnalysis
-  const fullTokens = fullAnalysisEffective ? parseFullTestText(fullAnalysisEffective) : []
+  const fullTokens = selected?.full_analysis ? parseFullTestText(selected.full_analysis) : []
   const fullSelectableTokens = fullTokens.filter(t => !t.lineBreak)
 
   // 현재 탭에 따라 활성 토큰 결정
@@ -1502,22 +1419,7 @@ export default function KnowledgeWork() {
       }
       if (done) {
         message.success('사전 빌드 완료')
-        // 현재 선택된 키워드 분석결과 갱신
-        if (selected?.keyword && selectedDomain) {
-          setLiteAnalysis(null)
-          setLiteLoading(true)
-          클라이언트.post('/morpheme/analyze-realtime', {
-            keyword: selected.keyword,
-            domain: selectedDomain,
-            workspace: selectedWorkspace || undefined,
-          }).then(({ data }) => setLiteAnalysis(data.analysis || null))
-            .catch(() => setLiteAnalysis(null))
-            .finally(() => setLiteLoading(false))
-          if (analysisTab === 'full') {
-            setFullAnalysisRT(null)
-            setFullAnalysis(null)
-          }
-        }
+        // 분석결과는 DB에서 자동 갱신 (키워드 목록 reload로 처리)
       } else {
         message.warning('빌드가 진행 중입니다. 잠시 후 확인하세요.')
       }
@@ -1788,7 +1690,7 @@ export default function KnowledgeWork() {
     // 방향키(prevLine/nextLine/prevAnalysis/nextAnalysis)는 키워드 선택 상태면 항상 동작 (포커스 모드 자동 진입)
     if ((action === 'prevLine' || action === 'nextLine' || action === 'prevAnalysis' || action === 'nextAnalysis') && selected) {
       // 분析결과 로딩 중에는 방향키 모두 차단
-      if (liteLoading || fullLoading) { e.preventDefault(); return }
+      if (!selected) { e.preventDefault(); return }
       if (!isCenterFocused) setIsCenterFocused(true)
       e.preventDefault()
     } else {
@@ -1998,7 +1900,7 @@ export default function KnowledgeWork() {
         break
       }
     }
-  }, [hotkeys, derivedHotkeys, isCenterFocused, liteLoading, fullLoading, items, filteredItems, selected, selectableTokens, selectedTokenIdx, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries, lineTokens, analysisTab, activeTokenIdx, activeSelectableTokens, setActiveTokenIdx, isActiveNavigable, fullTokenIdx, 컨텍스트메뉴.open])
+  }, [hotkeys, derivedHotkeys, isCenterFocused, items, filteredItems, selected, selectableTokens, selectedTokenIdx, selectedWord, selectedDomain, selectedWorkspace, escKeyword, escCount, 추천검색, 추천모달열림, 추천섹션목록, 추천포커스, LLM분석, llmModelBoundaries, lineTokens, analysisTab, activeTokenIdx, activeSelectableTokens, setActiveTokenIdx, isActiveNavigable, fullTokenIdx, 컨텍스트메뉴.open])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -2225,11 +2127,7 @@ export default function KnowledgeWork() {
             }}>
             {analysisTab === 'simple' ? (
               /* ── LITE 탭 ── */
-              liteLoading ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Spin size="small" tip="분석중..." />
-                </div>
-              ) : selected ? (
+              selected ? (
                 <div style={{ fontSize: 13, lineHeight: 2.0 }}>
                   {tokens.map((token, i) => {
                     if (token.lineBreak) return <br key={`br-${i}`} />
@@ -2276,11 +2174,7 @@ export default function KnowledgeWork() {
               )
             ) : (
               /* ── FULL 탭 (FullTest) ── */
-              fullLoading ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Spin size="small" tip="FULL 분석 중..." />
-                </div>
-              ) : fullAnalysis ? (
+              selected?.full_analysis ? (
                 <div style={{ fontSize: 13, lineHeight: 2.0 }}>
                   {fullTokens.map((token, i) => {
                     if (token.lineBreak) return <br key={`fbr-${i}`} />
