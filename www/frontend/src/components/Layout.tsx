@@ -1,18 +1,35 @@
 import { useState, useEffect } from 'react'
-import { Layout as AntLayout, Menu, Button, Typography } from 'antd'
+import { Layout as AntLayout, Menu, Button, Typography, Tooltip, Space } from 'antd'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
   TeamOutlined, EditOutlined, TagsOutlined, RocketOutlined, BulbOutlined,
   SettingOutlined, BarChartOutlined, HistoryOutlined, UserOutlined, QuestionCircleOutlined,
-  CheckCircleOutlined,
+  CheckCircleOutlined, DashboardOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
 import { isMenuEnabled } from '../App'
+import { useNotification } from '../hooks/useNotification'
+import GlobalSearch from './GlobalSearch'
 
 const { Sider, Content } = AntLayout
+
+// disabled 이유 결정
+function getDisabledReason(key: string, wsSelected: boolean, phase: string, myPhase: string): string {
+  if (!wsSelected) return '워크스페이스를 먼저 선택하세요'
+  if (key === '/preprocess' && phase !== 'preprocess') return '전처리 단계가 아닙니다'
+  if (key === '/assignment' && phase !== 'work') return '작업 단계가 아닙니다'
+  if (key === '/assignment' && myPhase !== 'idle') return '이미 작업 중입니다'
+  if (key === '/knowledge-work' && phase !== 'work') return '작업 단계가 아닙니다'
+  if (key === '/knowledge-work' && myPhase !== 'working') return '데이터 할당을 먼저 받으세요'
+  if (key === '/build-history' && phase !== 'build') return '빌드 단계가 아닙니다'
+  if (key === '/dict-verify' && phase !== 'verify') return '검증 단계가 아닙니다'
+  if ((key === '/category' || key === '/pipeline' || key === '/knowledge') && phase !== 'work') return '작업 단계가 아닙니다'
+  if ((key === '/category' || key === '/pipeline' || key === '/knowledge') && myPhase !== 'working') return '데이터 할당을 먼저 받으세요'
+  return '현재 사용 불가'
+}
 
 export default function Layout() {
   const user = useAuthStore(s => s.user)
@@ -21,6 +38,9 @@ export default function Layout() {
   const location = useLocation()
   const { selectedWorkspace, selectedDomain, selectedColor, phase, myPhase } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
+
+  // 알림 WebSocket 훅
+  useNotification(user?.user_id || null)
 
   // ─── 핫키 표시 (REQ-17) ─────────────────────────────
   const 핫키기본값: Record<string, string> = {
@@ -74,6 +94,17 @@ export default function Layout() {
     document.documentElement.style.setProperty('--sider-bg-end', color)
   }, [selectedColor, selectedWorkspace])
 
+  // Tooltip이 적용된 메뉴 label 생성
+  const tooltipLabel = (label: string, menuKey: string, disabled: boolean) => {
+    if (!disabled) return label
+    const reason = getDisabledReason(menuKey, wsSelected, phase, myPhase)
+    return (
+      <Tooltip title={reason} placement="right">
+        <span>{label}</span>
+      </Tooltip>
+    )
+  }
+
   const menuItems = [
     {
       key: 'knowledge-group',
@@ -81,14 +112,14 @@ export default function Layout() {
       icon: <BulbOutlined />,
       children: [
         { key: '/workspace', label: '워크스페이스', icon: <AppstoreOutlined /> },
-        { key: '/preprocess', label: '데이터 전처리', icon: <FilterOutlined />, disabled: !wsSelected || phase !== 'preprocess' },
-        { key: '/assignment', label: '데이터 할당', icon: <TeamOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'idle' },
-        { key: '/knowledge-work', label: '작업실', icon: <EditOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
-        { key: '/build-history', label: '사전 빌드', icon: <HistoryOutlined />, disabled: !wsSelected || phase !== 'build' },
-        { key: '/dict-verify', label: '사전 검증', icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'verify' },
-        { key: '/category', label: '카테고리 관리', icon: <TagsOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
-        { key: '/pipeline', label: '파이프라인', icon: <RocketOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
-        { key: '/knowledge', label: '지식작업', icon: <BulbOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/preprocess', label: tooltipLabel('데이터 전처리', '/preprocess', !wsSelected || phase !== 'preprocess'), icon: <FilterOutlined />, disabled: !wsSelected || phase !== 'preprocess' },
+        { key: '/assignment', label: tooltipLabel('데이터 할당', '/assignment', !wsSelected || phase !== 'work' || myPhase !== 'idle'), icon: <TeamOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'idle' },
+        { key: '/knowledge-work', label: tooltipLabel('작업실', '/knowledge-work', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <EditOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/build-history', label: tooltipLabel('사전 빌드', '/build-history', !wsSelected || phase !== 'build'), icon: <HistoryOutlined />, disabled: !wsSelected || phase !== 'build' },
+        { key: '/dict-verify', label: tooltipLabel('사전 검증', '/dict-verify', !wsSelected || phase !== 'verify'), icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'verify' },
+        { key: '/category', label: tooltipLabel('카테고리 관리', '/category', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <TagsOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/pipeline', label: tooltipLabel('파이프라인', '/pipeline', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <RocketOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
+        { key: '/knowledge', label: tooltipLabel('지식작업', '/knowledge', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <BulbOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
       ],
     },
     {
@@ -96,6 +127,7 @@ export default function Layout() {
       label: '관리',
       icon: <SettingOutlined />,
       children: [
+        { key: '/dashboard', label: '대시보드', icon: <DashboardOutlined /> },
         { key: '/domain-manage', label: '도메인 관리', icon: <SettingOutlined /> },
         { key: '/statistics', label: '통계', icon: <BarChartOutlined /> },
         { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
@@ -187,7 +219,26 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        <Content style={{ margin: 0, marginLeft: 200, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh' }}>
+        {/* 상단 검색 바 */}
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 200,
+          right: 0,
+          height: 44,
+          background: '#fff',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 16px',
+          zIndex: 99,
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        }}>
+          <Space>
+            <GlobalSearch />
+          </Space>
+        </div>
+        <Content style={{ margin: 0, marginLeft: 200, marginTop: 44, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: 'calc(100vh - 44px)' }}>
           {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />

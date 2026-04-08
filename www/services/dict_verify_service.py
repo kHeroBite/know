@@ -23,9 +23,7 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
-JAVA_HOME = "/home/know/jdk1.7.0_80"
-DOMAIN_BASE = "/home/know/apps/know-ops/domain"
+from core.constants import DEFAULT_JIANA_HOME, JAVA_HOME, DOMAIN_DIR as DOMAIN_BASE
 MORPHEME_TIMEOUT = 120  # 배치 처리용 충분한 시간
 
 

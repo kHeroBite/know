@@ -13,9 +13,7 @@ from models.pipeline import BuildHistory
 
 logger = logging.getLogger(__name__)
 
-# 사전 파일 경로 상수
-DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
-DICT_BACKUP_DIR = "/home/know/dict_backup"
+from core.constants import DEFAULT_JIANA_HOME, DICT_BACKUP_DIR
 
 
 def ws_export_dict_file(db, workspace: str, domain: str, jiana_home: str) -> dict:

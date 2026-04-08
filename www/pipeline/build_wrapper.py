@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
+from core.constants import DEFAULT_JIANA_HOME, WORKSPACE_BASE
 
 
 # 전역 빌드 Lock: 동시 빌드 방지 (threading.Lock — Celery worker sync 환경)
@@ -394,11 +394,10 @@ def _export_thesaurus_before_build(
     내보내기 실패해도 빌드 자체는 계속 진행 (경고만 기록).
     """
     from pathlib import Path
-    workspace_base = "/home/know/apps/know-ops/workspace"
-    출력파일 = Path(workspace_base) / workspace / "synonym_full_v2.txt"
+    출력파일 = Path(WORKSPACE_BASE) / workspace / "synonym_full_v2.txt"
     try:
-        from phase1.executor import _export_db_thesaurus_to_file
-        cnt = _export_db_thesaurus_to_file(workspace, domain, 출력파일)
+        from services.dict_export_service import export_db_thesaurus_to_file
+        cnt = export_db_thesaurus_to_file(workspace, domain, 출력파일)
         msg = f"[thesaurus export] {출력파일} — {cnt}건"
         logger.info(msg)
         _update_build_history(build_history_id, log_text=msg)

@@ -347,3 +347,33 @@ www/
 | POST /api/workspaces/{domain}/my-phase | 내 작업 phase 설정 |
 | POST /api/dict-verify/run | 사전검증 실행 (user.ks/cnlist.ks/synonym.UTF-8 교차검증) |
 | GET /api/dict-verify/status | 사전검증 마지막 결과 조회 |
+
+---
+
+## 최근 변경사항 요약 (2026-04-09, k5 파이프라인)
+
+### Phase 1: 백엔드 구조 정비
+- `core/constants.py` 신규: 18개 전역 경로 상수 통합 (중복 하드코딩 제거)
+- `core/exceptions.py` 신규: 커스텀 예외 계층 (KnowError 기반)
+- `main.py`: CORS 환경변수화 + lifespan 마이그레이션 + 전역 예외 핸들러
+- `services/dict_export_service.py` 신규: 역방향 import 해소 (phase1→pipeline 의존성 제거)
+
+### Phase 2: 프론트엔드 컴포넌트 분리
+- `components/workspace/DicTab.tsx` 신규 (548줄): 사전탭 컴포넌트 분리
+- `utils/analysis.ts` 신규: 분석 유틸 함수 분리
+- `utils/keyboard.tsx` 신규: 키보드 핫키 유틸
+- `utils/hangul.ts` 신규: 한글 입력 처리
+- `KnowledgeWork.tsx`: 2281줄 → 1470줄 (컴포넌트 분리로 감축)
+
+### Phase 3: 대시보드 + 일괄 작업 모드
+- `api/dashboard.py` + `services/dashboard_service.py` 신규
+- `/api/assignments/bulk-register`, `bulk-delete` 엔드포인트 추가
+- `pages/Dashboard.tsx` 신규: 도메인별 현황 대시보드
+- `Layout.tsx`: 대시보드 메뉴 추가
+
+### Phase 4: 실시간 알림 + UX 개선
+- `services/notification_service.py` + `api/notification.py` 신규
+- `hooks/useNotification.ts` 신규 (WebSocket 기반 실시간 알림)
+- `components/GlobalSearch.tsx` 신규 (통합 검색)
+- `Layout.tsx`: disabled Tooltip + GlobalSearch 헤더 통합
+- `Workspace.tsx`: 진행률 표시 개선

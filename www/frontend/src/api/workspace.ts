@@ -106,4 +106,7 @@ export const workspaceAPI = {
 
   setMyPhase: (workspace: string, domain: string, phase: 'idle' | 'working' | 'done') =>
     클라이언트.put(`/workspaces/${encodeURIComponent(workspace)}/my-phase`, { domain, phase }),
+
+  멤버상태조회: (workspace: string) =>
+    클라이언트.get(`/workspaces/${encodeURIComponent(workspace)}/members-status`),
 }

@@ -10,8 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-KNOW_OPS_SRC = "/home/know/apps/know-ops/src"
-WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+from core.constants import KNOW_OPS_SRC, WORKSPACE_BASE
 
 PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
@@ -241,29 +240,9 @@ def _sync_convert(file_path: str, workspace_dir: str = "") -> str:
 
 
 def _export_db_thesaurus_to_file(workspace: str, domain: str, 출력파일: Path) -> int:
-    """DB thesaurus 테이블을 synonym_full_v2.txt(CSV) 형식으로 내보내기."""
-    from core.database import 세션팩토리
-    from sqlalchemy import text
-    from models.dictionary import ws_dict_site_name
-    db = 세션팩토리()
-    try:
-        site = ws_dict_site_name(workspace, domain)
-        rows = db.execute(text(f"SELECT _HEAD_WORD, _TAIL_WORD FROM {site}_THESAURUS")).fetchall()
-        cnt = 0
-        with open(출력파일, "w", encoding="utf-8") as f:
-            for head, tail in rows:
-                if not head:
-                    continue
-                tails = [t.strip() for t in (tail or "").split(",") if t.strip()]
-                if tails:
-                    f.write(f"{head.strip()},{','.join(tails)}\n")
-                    cnt += 1
-        return cnt
-    except Exception as e:
-        logger.warning(f"DB thesaurus 내보내기 실패: {e}")
-        return 0
-    finally:
-        db.close()
+    """DB thesaurus 내보내기 — services.dict_export_service로 위임."""
+    from services.dict_export_service import export_db_thesaurus_to_file
+    return export_db_thesaurus_to_file(workspace, domain, 출력파일)
 
 
 def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:

@@ -17,7 +17,8 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 # 기본 서버 경로 (워크스페이스 jiana가 없을 때 ��용)
-DEFAULT_COTTON_TEST_SH = "/home/know/jiana1.5.12/cotton_test.sh"
+from core.constants import DEFAULT_JIANA_HOME
+DEFAULT_COTTON_TEST_SH = os.path.join(DEFAULT_JIANA_HOME, "cotton_test.sh")
 MORPHEME_OUTPUT_DIR = "/home/know/apps/know-api/uploads/morpheme"
 
 # analyze_morpheme 타임아웃: 30분

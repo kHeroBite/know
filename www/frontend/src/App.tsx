@@ -19,6 +19,7 @@ import Assignment from './pages/Assignment'
 import KnowledgeWork from './pages/KnowledgeWork'
 import LLMSettings from './pages/LLMSettings'
 import DictVerify from './pages/DictVerify'
+import Dashboard from './pages/Dashboard'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -28,6 +29,7 @@ export function isMenuEnabled(
 ) {
   const { wsSelected, phase, myPhase } = ctx
   const rules: Record<string, boolean> = {
+    '/dashboard': true,
     '/workspace': true,
     '/preprocess': wsSelected && phase === 'preprocess',
     '/assignment': wsSelected && phase === 'work' && myPhase === 'idle',
@@ -80,6 +82,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<DefaultRoute />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />
         <Route path="preprocess" element={<Phase1Pipeline />} />
         <Route path="assignment" element={<Assignment />} />

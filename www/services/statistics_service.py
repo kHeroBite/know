@@ -8,6 +8,63 @@ from models.account import 계정테이블
 from core.database import 엔진
 
 
+def get_statistics_by_period(db: Session, period: str, user_id: str | None = None) -> dict:
+    """기간별(day/week/month) 키워드 처리 건수 통계.
+
+    work_history 테이블 기반으로 집계.
+    period: 'day' | 'week' | 'month'
+    """
+    period_map = {
+        "day": ("%Y-%m-%d", "일별"),
+        "week": ("%Y-%W", "주별"),
+        "month": ("%Y-%m", "월별"),
+    }
+    if period not in period_map:
+        period = "day"
+    fmt, label = period_map[period]
+
+    params: dict = {}
+    user_filter = ""
+    if user_id:
+        user_filter = " AND user_id=:uid"
+        params["uid"] = user_id
+
+    with 엔진.connect() as conn:
+        rows = conn.execute(text(f"""
+            SELECT strftime('{fmt}', created_at) as period_key,
+                   user_id,
+                   COUNT(*) as count
+            FROM work_history
+            WHERE undone=0 {user_filter}
+            GROUP BY period_key, user_id
+            ORDER BY period_key DESC
+            LIMIT 300
+        """), params).fetchall()
+
+    # 사용자 이름 매핑
+    user_ids = sorted(set(r.user_id for r in rows))
+    name_map: dict[str, str] = {}
+    if user_ids:
+        with 엔진.connect() as conn2:
+            name_rows = conn2.execute(
+                select(계정테이블.c._USER_ID, 계정테이블.c._NAME)
+                .where(계정테이블.c._USER_ID.in_(user_ids))
+            ).fetchall()
+        name_map = {r._USER_ID: r._NAME for r in name_rows}
+
+    result = []
+    for r in rows:
+        name = name_map.get(r.user_id)
+        result.append({
+            "period": r.period_key,
+            "user_id": r.user_id,
+            "user_name": name or r.user_id,
+            "count": r.count,
+        })
+
+    return {"period_type": period, "label": label, "data": result}
+
+
 def _check_table_exists(db: Session, table_name: str) -> bool:
     """테이블 존재 여부 확인 (sqlite_master)."""
     try:

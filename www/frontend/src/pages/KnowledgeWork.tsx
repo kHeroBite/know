@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Typography, Card, Tabs, Input, Button, Form, Modal, Dropdown,
-  Popconfirm, message, Spin, Switch, Tag, Space, Tooltip, Divider,
+  Typography, Card, Tabs, Input, Button, Modal,
+  message, Spin, Space, Checkbox,
 } from 'antd'
 import {
-  PlusOutlined, DeleteOutlined, SearchOutlined, SettingOutlined, EditOutlined,
-  SwapOutlined, CheckCircleOutlined, LinkOutlined,
+  SettingOutlined, CheckCircleOutlined, DeleteOutlined, PlusCircleOutlined, CloseOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
@@ -17,972 +16,21 @@ import { 빌드API } from '../api/pipeline'
 import AIAnalysis from '../components/workspace/AIAnalysis'
 import WorkHistory, { WorkHistoryRef, WorkHistoryItem } from '../components/workspace/WorkHistory'
 import HotkeySettings from '../components/workspace/HotkeySettings'
+import ThesaurusRecommendModal from '../components/workspace/ThesaurusRecommendModal'
+import LLMPromptModal from '../components/workspace/LLMPromptModal'
+import CompleteModal from '../components/workspace/CompleteModal'
+import DicTab, { DicType } from '../components/workspace/DicTab'
+import MorphemeTab from '../components/workspace/MorphemeTab'
+import { 기본핫키맵, encodeKeyEvent, displayKey, displayTabKey, KbdKey } from '../utils/keyboard'
+import { getTypoVariants } from '../utils/hangul'
+import {
+  Token, FullToken,
+  parseAnalysisText, parseFullTestText,
+  isWordToken, isNavigableToken, isFullNavigableToken,
+} from '../utils/analysis'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const PAGE_SIZE = 100
-
-// ─── 핫키 기본값 ────────────────────────────────────────────────
-
-const 기본핫키맵: Record<string, string> = {
-  prevAnalysis: 'ArrowLeft',
-  nextAnalysis: 'ArrowRight',
-  prevLine: 'ArrowUp',
-  nextLine: 'ArrowDown',
-  registerUdic: 'a',
-  registerCndic: 's',
-  registerThesaurus: 'd',
-  analyzeKeyword: 'e',
-  focusAnalysisSimple: 'Home',
-  focusAnalysisFull: 'End',
-  toggleAnalysisTab: 'Tab',
-  focusKeywordSearch: 'q',
-  aiAnalysis: 'r',
-  undoHistory: 'Escape',
-  aiTabAI: 'PageUp',
-  aiTabWikipedia: 'PageDown',
-}
-
-function encodeKeyEvent(e: KeyboardEvent): string {
-  const parts: string[] = []
-  if (e.altKey) parts.push('Alt')
-  if (e.ctrlKey) parts.push('Ctrl')
-  if (e.shiftKey) parts.push('Shift')
-  const k = e.key === ' ' ? 'Space' : e.key
-  if (!['Alt', 'Control', 'Shift', 'Meta'].includes(k)) parts.push(k)
-  return parts.join('+')
-}
-
-// ─── 한↔영 키보드 변환 (오타추천용) ─────────────────────────────
-const KO_MAP = 'ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ'
-const EN_MAP = 'qwertyuiopasdfghjklzxcvbnm'
-const KO_SHIFT = 'ㅃㅉㄸㄲㅆㅛㅕㅑㅒㅖㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ'
-const EN_SHIFT = 'QWERTYUIOPASDFGHJKLZXCVBNM'
-
-function koToEn(text: string): string {
-  // 한글 자모 → 영문 키보드
-  const 초성 = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
-  const 중성 = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ'
-  const 종성 = ['', 'ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ']
-  const 종성분해: Record<string, string[]> = {
-    'ㄳ':['ㄱ','ㅅ'],'ㄵ':['ㄴ','ㅈ'],'ㄶ':['ㄴ','ㅎ'],'ㄺ':['ㄹ','ㄱ'],'ㄻ':['ㄹ','ㅁ'],
-    'ㄼ':['ㄹ','ㅂ'],'ㄽ':['ㄹ','ㅅ'],'ㄾ':['ㄹ','ㅌ'],'ㄿ':['ㄹ','ㅍ'],'ㅀ':['ㄹ','ㅎ'],
-    'ㅄ':['ㅂ','ㅅ'],'ㄲ':['ㄱ','ㄱ'],'ㅆ':['ㅅ','ㅅ']
-  }
-  const 중성분해: Record<string, string[]> = {
-    'ㅘ':['ㅗ','ㅏ'],'ㅙ':['ㅗ','ㅐ'],'ㅚ':['ㅗ','ㅣ'],'ㅝ':['ㅜ','ㅓ'],'ㅞ':['ㅜ','ㅔ'],
-    'ㅟ':['ㅜ','ㅣ'],'ㅢ':['ㅡ','ㅣ'],'ㅒ':['ㅑ','ㅣ'],'ㅖ':['ㅕ','ㅣ']
-  }
-  const jamoToEn = (c: string): string => {
-    let i = KO_MAP.indexOf(c)
-    if (i >= 0) return EN_MAP[i] || c
-    i = KO_SHIFT.indexOf(c)
-    if (i >= 0) return EN_SHIFT[i] || c
-    return c
-  }
-  let result = ''
-  for (const ch of text) {
-    const code = ch.charCodeAt(0)
-    if (code >= 0xAC00 && code <= 0xD7A3) {
-      const offset = code - 0xAC00
-      const cho = Math.floor(offset / (21 * 28))
-      const jung = Math.floor((offset % (21 * 28)) / 28)
-      const jong = offset % 28
-      result += jamoToEn(초성[cho])
-      const jungChar = 중성[jung]
-      if (중성분해[jungChar]) 중성분해[jungChar].forEach(j => result += jamoToEn(j))
-      else result += jamoToEn(jungChar)
-      if (jong > 0) {
-        const jongChar = 종성[jong]
-        if (종성분해[jongChar]) 종성분해[jongChar].forEach(j => result += jamoToEn(j))
-        else result += jamoToEn(jongChar)
-      }
-    } else {
-      const ki = KO_MAP.indexOf(ch)
-      if (ki >= 0) result += EN_MAP[ki] || ch
-      else result += ch
-    }
-  }
-  return result
-}
-
-function enToKo(text: string): string {
-  // 영문 키보드 → 한글 자모 (조합 없이 자모 나열)
-  let result = ''
-  for (const ch of text) {
-    const lower = ch.toLowerCase()
-    const i = EN_MAP.indexOf(lower)
-    if (i >= 0) result += (ch === ch.toUpperCase() && ch !== ch.toLowerCase()) ? (KO_SHIFT[i] || KO_MAP[i]) : KO_MAP[i]
-    else result += ch
-  }
-  return result
-}
-
-function getTypoVariants(keyword: string): { label: string; value: string }[] {
-  if (!keyword) return []
-  const results: { label: string; value: string }[] = []
-  const hasKorean = /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(keyword)
-  const hasEnglish = /[a-zA-Z]/.test(keyword)
-  if (hasKorean) results.push({ label: '한→영', value: koToEn(keyword) })
-  if (hasEnglish) results.push({ label: '영→한', value: enToKo(keyword) })
-  return results
-}
-
-// ─── 분석결과 토큰 파싱 ─────────────────────────────────────────
-
-interface Token {
-  text: string
-  index: number
-  lineBreak?: boolean
-}
-
-function parseAnalysisText(text: string): Token[] {
-  if (!text) return []
-  const tokens: Token[] = []
-  let idx = 0
-  let prevLineWasSynList = false  // 직전 줄이 <<유사어목록>>이었는지
-  const lines = text.split('\n')
-  lines.forEach((line, li) => {
-    const trimmed = line.trim()
-    // <<유사어목록>> 라인은 하나의 토큰으로 처리 (워드 추출 제외 대상)
-    if (trimmed.startsWith('<<') && trimmed.endsWith('>>')) {
-      tokens.push({ text: trimmed, index: idx })
-      idx++
-      prevLineWasSynList = true
-    } else {
-      // 탭 구분 데이터
-      const tabParts = trimmed.split('\t')
-      const isSynDetail = prevLineWasSynList  // 유사어목록 직후 줄은 유사어별 줄바꿈
-      // 일반 줄: 어절=분석결과 동일하면 어절(ti=0) 생략
-      const skipEojeol = !isSynDetail && tabParts.length > 1 && tabParts[0].trim() === tabParts[1].trim()
-      tabParts.forEach((tabPart, ti) => {
-        const seg = tabPart.trim()
-        if (!seg) return
-        // <<유사어목록>> 직후 줄의 첫 번째 탭 세그먼트는 유사어 중복 → 스킵
-        if (ti === 0 && isSynDetail) return
-        // 일반 줄: 어절=분석결과 동일 → 어절 생략
-        if (ti === 0 && skipEojeol) return
-        // 유사어 상세 줄: 각 유사어별 줄바꿈 (두 번째 유사어부터)
-        if (isSynDetail && ti > 1) {
-          tokens.push({ text: '\n', index: -1, lineBreak: true })
-        }
-        // <유사어> 패턴 내부 개별 워드도 분리: "워드 <SYN1 SYN2>" → ["워드", "SYN1", "SYN2"]
-        const segments = seg.match(/(<[^<>]+>|[^\s<>]+)/g) || []
-        segments.forEach(part => {
-          if (part.startsWith('<') && part.endsWith('>')) {
-            const inner = part.slice(1, -1).trim()
-            inner.split(/\s+/).filter(Boolean).forEach(w => {
-              tokens.push({ text: w, index: idx })
-              idx++
-            })
-          } else {
-            const subParts = part.split(/(<<|>>|,)/).filter(Boolean)
-            subParts.forEach(sp => {
-              tokens.push({ text: sp, index: idx })
-              idx++
-            })
-          }
-        })
-      })
-      prevLineWasSynList = false
-    }
-    if (li < lines.length - 1) {
-      tokens.push({ text: '\n', index: -1, lineBreak: true })
-    }
-  })
-  return tokens
-}
-
-// ─── FullTest 분석결과 토큰 파싱 ─────────────────────────────────
-// FullTest 출력: "어절\t형태소 품사\t형태소 품사\n..."
-// 의미있는 워드 = 형태소(품사 아닌 것), 품사태그 = 네비게이션 스킵
-
-interface FullToken {
-  text: string
-  index: number
-  lineBreak?: boolean
-  isPosTag?: boolean   // 품사태그 여부 (ncn, ncp, jp, ef 등)
-  eojeol?: string      // 원래 어절 (첫 탭 앞 부분)
-}
-
-const POS_TAG_SET = new Set([
-  'ncn','ncp','ncpa','nq','nq_per','nq_loc','nq_tmp','nq_unt','nq_etc',
-  'np','npd','npp','nbu','nbn',
-  'pv','pvd','pvg','pa','pad','pag','px','pxm',
-  'ec','ef','ep','etn','etm','ecs','ecx',
-  'jc','jca','jcj','jcs','jcv','jco','jcr','jp','jxt','jxc',
-  'mm','mmd','mmn','mag','maj',
-  'ii','xp','xpn','xsn','xsv','xsa','xsm',
-  'sf','sp','ss','se','so','sl','sw','sh','sn',
-  'f','un','uv','uu','uf',
-  'ukall','eng','j','chn','jpn','sy',
-])
-
-function parseFullTestText(text: string): FullToken[] {
-  if (!text) return []
-  const tokens: FullToken[] = []
-  let idx = 0
-  let prevLineWasSynList = false  // 직전 줄이 <<유사어목록>>이었는지
-  const lines = text.split('\n')
-  lines.forEach((line, li) => {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      prevLineWasSynList = false
-      if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
-      return
-    }
-    // <<유사어목록>> 라인 — 하나의 토큰 (네비게이션 스킵됨)
-    if (trimmed.startsWith('<<') && trimmed.endsWith('>>')) {
-      tokens.push({ text: trimmed, index: idx })
-      idx++
-      prevLineWasSynList = true
-      if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
-      return
-    }
-    // <<유사어목록>> 직후 줄: 유사어 상세 (첫 탭 스킵, 각 탭별 줄바꿈)
-    if (prevLineWasSynList) {
-      prevLineWasSynList = false
-      const tabParts = trimmed.split('\t')
-      tabParts.forEach((tabPart, ti) => {
-        if (ti === 0) return  // 첫 탭 세그먼트 스킵 (유사어 중복 나열)
-        const seg = tabPart.trim()
-        if (!seg) return
-        if (ti > 1) {
-          tokens.push({ text: '\n', index: -1, lineBreak: true })
-        }
-        tokens.push({ text: seg, index: idx })
-        idx++
-      })
-      if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
-      return
-    }
-    prevLineWasSynList = false
-    // "워드 <유사어>" 패턴 (부분 유사어) — 탭 없음
-    if (!trimmed.includes('\t') && /<[^<>]+>/.test(trimmed)) {
-      // "워드 <SYN1 SYN2>" → 워드와 개별 유사어로 분리
-      const segments = trimmed.match(/(<[^<>]+>|[^\s<>]+)/g) || []
-      segments.forEach(seg => {
-        if (seg.startsWith('<') && seg.endsWith('>')) {
-          // <SYN1 SYN2> → 꺽쇠 제거 후 개별 워드로 분리
-          const inner = seg.slice(1, -1).trim()
-          inner.split(/\s+/).filter(Boolean).forEach(w => {
-            tokens.push({ text: w, index: idx })
-            idx++
-          })
-        } else {
-          tokens.push({ text: seg, index: idx })
-          idx++
-        }
-      })
-      if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
-      return
-    }
-    // 형태소 분석 결과 라인 (탭 구분) — 어절 + 형태소쌍을 같은 줄에 표시
-    const parts = line.split('\t')
-    const eojeol = parts[0]?.trim() || ''
-    // 어절 표시
-    tokens.push({ text: eojeol, index: idx, eojeol })
-    idx++
-    // 탭 이후: "형태소 품사" 쌍들 — 어절과 같은 줄에 표시
-    // 어절=형태소이고 1개뿐이면 어절 생략, 품사태그만 표시
-    // 그 외는 어절 옆에 형태소+품사태그 쌍 나열
-    const morphParts = parts.slice(1).map(s => s.trim()).filter(Boolean)
-    if (morphParts.length > 0) {
-      const isSingleSame = morphParts.length === 1 && morphParts[0].split(' ')[0] === eojeol
-      morphParts.forEach(segment => {
-        const lastSpace = segment.lastIndexOf(' ')
-        if (lastSpace > 0) {
-          const morpheme = segment.substring(0, lastSpace)
-          const posTag = segment.substring(lastSpace + 1)
-          if (!(isSingleSame && morpheme === eojeol)) {
-            tokens.push({ text: morpheme, index: idx, eojeol })
-            idx++
-          }
-          tokens.push({ text: posTag, index: idx, isPosTag: POS_TAG_SET.has(posTag.toLowerCase()), eojeol })
-          idx++
-        } else {
-          tokens.push({ text: segment, index: idx, isPosTag: POS_TAG_SET.has(segment.toLowerCase()), eojeol })
-          idx++
-        }
-      })
-    }
-    if (li < lines.length - 1) {
-      tokens.push({ text: '\n', index: -1, lineBreak: true })
-    }
-  })
-  return tokens
-}
-
-function isFullNavigableToken(toks: FullToken[], idx: number): boolean {
-  const t = toks[idx]
-  if (t.lineBreak || t.isPosTag) return false
-  if (!isWordToken(t.text)) return false
-  // 동일 텍스트의 첫 번째만 네비게이션 가능 (중복 skip)
-  for (let i = 0; i < idx; i++) {
-    if (!toks[i].lineBreak && !toks[i].isPosTag && toks[i].text === t.text && isWordToken(toks[i].text)) return false
-  }
-  return true
-}
-
-// ─── 토큰 필터 + 핫키 표시 ──────────────────────────────────────
-const keyDisplayMap: Record<string, string> = {
-  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
-  Escape: 'Esc', Home: 'Home', End: 'End', Tab: 'Tab',
-}
-function displayKey(key: string): string {
-  if (key.includes('+')) {
-    return key.split('+').map(p => keyDisplayMap[p] || p).join('+')
-  }
-  return keyDisplayMap[key] || key
-}
-function isWordToken(text: string): boolean {
-  // 한글, 영문, 일본어(히라가나/카타카나), 한자
-  if (!/[가-힣a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text)) return false
-  // <<유사어목록>> 토큰, 꺽쇠 잔여 조각, 품사태그는 워드가 아님
-  if (text.startsWith('<<') && text.endsWith('>>')) return false
-  if (text.includes('<') || text.includes('>')) return false
-  if (POS_TAG_SET.has(text.toLowerCase())) return false
-  return true
-}
-function isNavigableToken(toks: Token[], idx: number): boolean {
-  const t = toks[idx]
-  if (!isWordToken(t.text)) return false
-  if (t.text === 'comp' && toks[idx + 1]?.text === ':') return false
-  // 동일 텍스트의 첫 번째 토큰만 네비게이션 가능 (중복 skip)
-  for (let i = 0; i < idx; i++) {
-    if (toks[i].text === t.text && isWordToken(toks[i].text)) return false
-  }
-  return true
-}
-function displayTabKey(key: string): string {
-  return key.replace(/^Alt\+/, '')
-}
-const KbdKey = ({ children }: { children: React.ReactNode }) => {
-  const [pressed, setPressed] = useState(false)
-  return (
-    <kbd
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-      onMouseLeave={() => setPressed(false)}
-      style={{
-        display: 'inline-block', padding: '1px 6px', fontSize: '11px', lineHeight: '1.4',
-        color: '#444',
-        background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)',
-        border: '1px solid #adb5bd',
-        borderBottom: pressed ? '1px solid #adb5bd' : '3px solid #adb5bd',
-        borderRadius: 4,
-        boxShadow: pressed
-          ? '0 0px 1px rgba(0,0,0,0.1)'
-          : '0 1px 0 rgba(0,0,0,0.2), 0 2px 3px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.8)',
-        textShadow: '0 1px 0 rgba(255,255,255,0.8)',
-        fontFamily: 'monospace', whiteSpace: 'nowrap',
-        cursor: 'default',
-        transform: pressed ? 'translateY(1px)' : 'none',
-        transition: 'transform 0.05s, box-shadow 0.05s',
-        userSelect: 'none' as React.CSSProperties['userSelect'],
-      }}
-    >{children}</kbd>
-  )
-}
-
-// ─── 사전 컴포넌트 (DomainManage.tsx DicColumn 패턴 재사용) ────────
-
-type DicType = 'udic' | 'cndic' | 'thesaurus'
-
-const 사전설정: Record<DicType, { title: string; label: string }> = {
-  udic: { title: '사용자사전', label: '사용자사전(udic)' },
-  cndic: { title: '복합명사사전', label: '복합명사사전(cndic)' },
-  thesaurus: { title: '유사어사전', label: '유사어사전(thesaurus)' },
-}
-
-function 사전컬럼(dicType: DicType) {
-  return (삭제버튼: (r: any) => React.ReactNode, 편집버튼?: (r: any) => React.ReactNode) => {
-    if (dicType === 'thesaurus') {
-      return [
-        { title: '키워드', dataIndex: 'head_word', key: 'head_word', ellipsis: true },
-        { title: '유사어', dataIndex: 'tail_word', key: 'tail_word', ellipsis: true },
-        { title: '', key: 'action', width: 80, render: (_: unknown, r: any) => (
-          <Space size={0}>
-            {편집버튼?.(r)}
-            {삭제버튼(r)}
-          </Space>
-        )},
-      ]
-    }
-    return [
-      { title: '단어', dataIndex: 'word', key: 'word', ellipsis: true },
-      { title: '메모', dataIndex: 'memo', key: 'memo', ellipsis: true },
-      { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
-    ]
-  }
-}
-
-function DicTab({ dicType, domain, workspace, refreshKey, externalSearch, autoFocusTrigger, thesaurusExternalOpen, onModalClose }: {
-  dicType: DicType; domain: string; workspace?: string; refreshKey?: number; externalSearch?: string; autoFocusTrigger?: number
-  thesaurusExternalOpen?: { head_word: string; tail_word: string; n: number; editMode?: boolean } | null
-  onModalClose?: () => void
-}) {
-  // workspace가 있으면 모든 사전 API에 ?workspace= 추가하는 래퍼
-  const wsParam = workspace ? { workspace } : {}
-  const dicGet = (url: string, params?: any) => 클라이언트.get(url, { params: { ...params, ...wsParam } })
-  const dicPost = (url: string, data?: any) => 클라이언트.post(url + (workspace ? `?workspace=${workspace}` : ''), data)
-  const dicPut = (url: string, data?: any) => 클라이언트.put(url + (workspace ? `?workspace=${workspace}` : ''), data)
-  const dicDel = (url: string) => 클라이언트.delete(url, { params: wsParam })
-  const 컨테이너Ref = useRef<HTMLDivElement>(null)
-  const [테이블높이, set테이블높이] = useState(160)
-  const 검색입력Ref = useRef<any>(null)
-  const [데이터, set데이터] = useState<any[]>([])
-  const [검색어, set검색어] = useState('')
-  const [검색쿼리, set검색쿼리] = useState('')
-  const [로딩, set로딩] = useState(false)
-  const [모달열림, set모달열림] = useState(false)
-  const [저장중, set저장중] = useState(false)
-  const [총건수, set총건수] = useState(0)
-  const [현재페이지, set현재페이지] = useState(1)
-  const [form] = Form.useForm()
-  const cfg = 사전설정[dicType]
-
-  // 유사어 통합 모달 상태 (등록/편집 공용)
-  const [유사어모달열림, set유사어모달열림] = useState(false)
-  const [유사어키워드, set유사어키워드] = useState('')
-  const [유사어키워드확정, set유사어키워드확정] = useState(false)
-  const [편집유사어목록, set편집유사어목록] = useState<string[]>([])
-  const [새유사어, set새유사어] = useState('')
-  const [신규추가항목, set신규추가항목] = useState<string[]>([])
-  const 유사어목록Ref = useRef<HTMLDivElement>(null)
-  const [양방향, set양방향] = useState(false)
-  const [편집저장중, set편집저장중] = useState(false)
-
-  const 데이터조회 = useCallback(async () => {
-    if (!domain) return
-    set로딩(true)
-    try {
-      const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
-      const res = await dicGet(`/dictionaries/${domain}/${경로}`, {
-        page: 현재페이지, size: 5, ...(검색쿼리 ? { search: 검색쿼리 } : {}),
-      })
-      set데이터(res.data?.items || [])
-      set총건수(res.data?.total || 0)
-    } catch {
-      message.error(`${cfg.title} 조회 실패`)
-    } finally {
-      set로딩(false)
-    }
-  }, [domain, dicType, 현재페이지, 검색쿼리])
-
-  useEffect(() => {
-    const timer = setTimeout(() => { set검색쿼리(검색어); set현재페이지(1) }, 100)
-    return () => clearTimeout(timer)
-  }, [검색어])
-
-  useEffect(() => { if (domain) 데이터조회() }, [domain, 데이터조회])
-
-  // 컨테이너 높이 감지 → 테이블 스크롤 높이 자동 조절
-  useEffect(() => {
-    const el = 컨테이너Ref.current
-    if (!el) return
-    const observer = new ResizeObserver(() => {
-      // 검색바(~40) + 페이지네이션(~40) + 여유(8) 제외
-      const h = el.clientHeight - 88
-      set테이블높이(Math.max(80, h))
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  // refreshKey 변경 시 강제 리로드
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0 && domain) 데이터조회()
-  }, [refreshKey])
-
-  // externalSearch: 외부에서 검색어 주입
-  useEffect(() => {
-    if (externalSearch !== undefined && externalSearch !== '') {
-      set검색어(externalSearch)
-    }
-  }, [externalSearch])
-
-  // autoFocusTrigger: 탭 전환 시 검색 입력 자동 포커스
-  useEffect(() => {
-    if (autoFocusTrigger && autoFocusTrigger > 0) {
-      setTimeout(() => 검색입력Ref.current?.focus(), 50)
-    }
-  }, [autoFocusTrigger])
-
-  // 외부 트리거: 추천 모달에서 선택 시 유사어 모달 열기
-  useEffect(() => {
-    if (thesaurusExternalOpen && dicType === 'thesaurus') {
-      유사어모달열기(thesaurusExternalOpen)
-    }
-  }, [thesaurusExternalOpen?.n])
-
-  const 삭제 = async (record: any) => {
-    try {
-      const word = dicType === 'thesaurus' ? record.head_word : record.word
-      await dicDel(`/dictionaries/${domain}/${dicType}/${encodeURIComponent(word)}`)
-      message.success('삭제 완료')
-      데이터조회()
-    } catch { message.error('삭제 실패') }
-  }
-
-  // tail_word 콤마 구분 문자열 → 개별 배열로 분리
-  const 유사어분리 = (tailWord: string): string[] =>
-    (tailWord || '').split(',').map(s => s.trim()).filter(Boolean)
-
-  // 양방향 자동 감지: 모든 키워드가 양방향 pair로 존재하는지 확인
-  const 양방향자동감지 = async (headWord: string, tailWords: string[]) => {
-    if (tailWords.length === 0) { set양방향(false); return }
-    try {
-      const allWords = [headWord, ...tailWords]
-      let isBidirectional = true
-      for (const tw of tailWords) {
-        const res = await dicGet(`/dictionaries/${domain}/thesaurus/list`, { search: tw, size: 100 })
-        const matched = (res.data?.items || []).find((i: any) => i.head_word === tw)
-        if (!matched) { isBidirectional = false; break }
-        const existingTails = 유사어분리(matched.tail_word)
-        const others = allWords.filter(w => w !== tw)
-        if (!others.every(o => existingTails.includes(o))) { isBidirectional = false; break }
-      }
-      set양방향(isBidirectional)
-    } catch { set양방향(false) }
-  }
-
-  // 유사어 모달 열기 (등록/편집 통합)
-  // record.editMode=true → 편집모드 (기존 유사어 로드), false/undefined → 등록모드 (tail_word pre-fill)
-  const 유사어모달열기 = async (record?: any) => {
-    set양방향(false)
-    set새유사어('')
-    set신규추가항목([])
-    if (record && record.head_word) {
-      const isEdit = record.editMode === true || !record.n  // 편집 모드 판정
-      if (isEdit) {
-        // 편집 모드: 기존 유사어 확정 로드
-        set유사어키워드(record.head_word)
-        set유사어키워드확정(true)
-        try {
-          const res = await dicGet(`/dictionaries/${domain}/thesaurus/list`, { search: record.head_word, size: 100 })
-          const matched = (res.data?.items || []).find((i: any) => i.head_word === record.head_word)
-          const tails = matched ? 유사어분리(matched.tail_word) : []
-          // 양방향 감지: 추가 전 기존 목록 기준
-          양방향자동감지(record.head_word, tails)
-          // tail_word 추가 요청 — 단일 키워드만 추가 (쉼표 포함 원본 문자열 제외)
-          if (record.tail_word && !record.tail_word.includes(',') && !tails.includes(record.tail_word)) {
-            tails.push(record.tail_word)
-            set신규추가항목([record.tail_word])
-            setTimeout(() => 유사어목록Ref.current?.scrollTo({ top: 유사어목록Ref.current.scrollHeight, behavior: 'smooth' }), 100)
-          }
-          set편집유사어목록(tails)
-        } catch {
-          set편집유사어목록(record.tail_word ? [record.tail_word] : [])
-        }
-      } else {
-        // 등록 모드: 키워드 pre-fill + 미확정
-        set유사어키워드(record.head_word)
-        set유사어키워드확정(false)
-        set편집유사어목록([])
-        if (record.tail_word) set새유사어(record.tail_word)
-      }
-    } else {
-      // 등록 모드: 빈 상태
-      set유사어키워드('')
-      set유사어키워드확정(false)
-      set편집유사어목록([])
-    }
-    set유사어모달열림(true)
-  }
-
-  // 키워드 확정 시 기존 유사어 로드
-  const 유사어키워드확정하기 = async () => {
-    const kw = 유사어키워드.trim()
-    if (!kw) return
-    set유사어키워드확정(true)
-    try {
-      const res = await dicGet(`/dictionaries/${domain}/thesaurus/list`, { search: kw, size: 100 })
-      const matched = (res.data?.items || []).find((i: any) => i.head_word === kw)
-      set편집유사어목록(matched ? 유사어분리(matched.tail_word) : [])
-    } catch {
-      set편집유사어목록([])
-    }
-  }
-
-  // 로컬 상태만 변경 (DB 저장은 일괄저장에서)
-  const 유사어개별삭제 = (tailWord: string) => {
-    set편집유사어목록(prev => prev.filter(w => w !== tailWord))
-  }
-
-  const 유사어개별추가 = () => {
-    const word = 새유사어.trim()
-    if (!word) return
-    if (편집유사어목록.includes(word)) {
-      message.warning(`"${word}" 이미 등록됨`)
-      return
-    }
-    const 새목록 = [...편집유사어목록, word]
-    set편집유사어목록(새목록)
-    set신규추가항목(prev => [...prev, word])
-    set새유사어('')
-    // 추가 후 양방향 state 업데이트 (비동기, 추가 자체는 이미 진행됨)
-    if (유사어키워드.trim()) 양방향자동감지(유사어키워드.trim(), 새목록)
-    setTimeout(() => 유사어목록Ref.current?.scrollTo({ top: 유사어목록Ref.current.scrollHeight, behavior: 'smooth' }), 100)
-  }
-
-  // DB 일괄 저장
-  const 유사어일괄저장 = async () => {
-    const headWord = 유사어키워드.trim()
-    if (!headWord) { message.warning('키워드를 입력하세요'); return }
-    // 새유사어 입력란에 텍스트가 있으면 먼저 목록에 추가 후 저장
-    let currentList = [...편집유사어목록]
-    const pendingWord = 새유사어.trim()
-    if (pendingWord && !currentList.includes(pendingWord)) {
-      currentList = [...currentList, pendingWord]
-      set편집유사어목록(currentList)
-      set신규추가항목(prev => [...prev, pendingWord])
-      set새유사어('')
-    }
-    set편집저장중(true)
-    try {
-      if (currentList.length === 0) {
-        // 값이 모두 삭제됨 → 키(head)도 삭제
-        try {
-          await dicDel(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
-        } catch { /* 미존재 무시 */ }
-        message.success(`"${headWord}" 유사어 세트 삭제됨`)
-      } else {
-        // PUT 우선 시도 (기존 항목 갱신), 404면 POST (신규 등록)
-        try {
-          await dicPut(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
-            tail_word: currentList.join(','),
-          })
-        } catch (e: any) {
-          if (e?.response?.status === 404) {
-            await dicPost(`/dictionaries/${domain}/thesaurus`, {
-              head_word: headWord, tail_word: currentList.join(','), memo: '',
-            })
-          } else throw e
-        }
-        // 양방향 처리
-        if (양방향) {
-          for (const word of currentList) {
-            try {
-              const others = [headWord, ...currentList.filter(w => w !== word)]
-              try {
-                await dicPost(`/dictionaries/${domain}/thesaurus`, {
-                  head_word: word, tail_word: others.join(','), memo: '',
-                })
-              } catch {
-                await dicPut(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(word)}`, {
-                  tail_word: others.join(','),
-                })
-              }
-            } catch { /* 역방향 실패 무시 */ }
-          }
-        }
-        message.success(`"${headWord}" 유사어 저장 완료${양방향 ? ' (양방향)' : ''}`)
-      }
-      데이터조회()
-      set유사어모달열림(false)
-    } catch (err: any) {
-      message.error(err?.response?.data?.detail || '저장 실패')
-    } finally { set편집저장중(false) }
-  }
-
-  const 저장 = async () => {
-    try {
-      const values = await form.validateFields()
-      set저장중(true)
-      await dicPost(`/dictionaries/${domain}/${dicType}`, values)
-      message.success('추가 완료')
-      set모달열림(false)
-      form.resetFields()
-      데이터조회()
-    } catch (err: any) {
-      if (err?.errorFields) return
-      message.error('추가 실패: ' + (err?.response?.data?.detail || '오류'))
-    } finally { set저장중(false) }
-  }
-
-  const 삭제버튼 = (record: any) => {
-    if (dicType === 'thesaurus') {
-      return (
-        <Button size="small" icon={<DeleteOutlined />} danger type="text" onClick={() => {
-          const headWord = record.head_word
-          const tailWords = 유사어분리(record.tail_word)
-          Modal.confirm({
-            title: `"${headWord}" 유사어 삭제`,
-            content: tailWords.length > 0
-              ? '양방향으로 연결된 유사어도 모두 삭제하시겠습니까?'
-              : '삭제하시겠습니까?',
-            okText: tailWords.length > 0 ? '양방향 삭제' : '삭제',
-            cancelText: tailWords.length > 0 ? '단방향만 삭제' : '취소',
-            okButtonProps: { danger: true },
-            onOk: async () => {
-              // 양방향 삭제: headWord + 모든 tailWord의 유사어 세트 삭제
-              try {
-                await dicDel(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
-                for (const tw of tailWords) {
-                  try { await dicDel(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(tw)}`) } catch {}
-                }
-                message.success('양방향 삭제 완료')
-                데이터조회()
-              } catch { message.error('삭제 실패') }
-            },
-            onCancel: async () => {
-              if (tailWords.length > 0) {
-                // 단방향만 삭제
-                try {
-                  await dicDel(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
-                  message.success('단방향 삭제 완료')
-                  데이터조회()
-                } catch { message.error('삭제 실패') }
-              }
-            },
-          })
-        }} />
-      )
-    }
-    return (
-      <Popconfirm title="삭제?" onConfirm={() => 삭제(record)} okText="삭제" cancelText="취소">
-        <Button size="small" icon={<DeleteOutlined />} danger type="text" />
-      </Popconfirm>
-    )
-  }
-
-  const 편집버튼렌더 = dicType === 'thesaurus' ? (record: any) => (
-    <Tooltip title="편집">
-      <Button size="small" icon={<EditOutlined />} type="text" onClick={() => 유사어모달열기(record)} />
-    </Tooltip>
-  ) : undefined
-
-  const columns = 사전컬럼(dicType)(삭제버튼, 편집버튼렌더)
-
-  const 모달폼내용 = () => {
-    if (dicType === 'thesaurus') {
-      return (<>
-        <Form.Item name="head_word" label="키워드" rules={[{ required: true }]}><Input /></Form.Item>
-        <Form.Item name="tail_word" label="유사어" rules={[{ required: true }]}><Input /></Form.Item>
-      </>)
-    }
-    return (<>
-      <Form.Item name="word" label="단어" rules={[{ required: true }]}><Input /></Form.Item>
-      <Form.Item name="memo" label="메모"><Input /></Form.Item>
-    </>)
-  }
-
-  return (
-    <div ref={컨테이너Ref} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
-        <Input
-          ref={검색입력Ref}
-          placeholder="검색..." value={검색어} onChange={e => set검색어(e.target.value)}
-          allowClear size="small" prefix={<SearchOutlined />} style={{ width: 200 }}
-        />
-        <Button size="small" type="primary" icon={<PlusOutlined />}
-          onClick={() => {
-            const kw = 검색어.trim()
-            if (kw) {
-              // 검색어가 있으면 확인 후 바로 등록
-              const cfg = { udic: '사용자사전', cndic: '복합명사사전', thesaurus: '유사어사전', category: '카테고리' } as any
-              if (dicType === 'thesaurus') {
-                Modal.confirm({
-                  title: `"${kw}" 키워드를 ${cfg[dicType]}에 등록하시겠습니까?`,
-                  okText: '확인', cancelText: '취소',
-                  onOk: () => { 유사어모달열기({ head_word: kw, tail_word: '', n: Date.now() }) },
-                })
-              } else {
-                Modal.confirm({
-                  title: `"${kw}" 키워드를 ${cfg[dicType]}에 등록하시겠습니까?`,
-                  okText: '확인', cancelText: '취소',
-                  onOk: async () => {
-                    try {
-                      await dicPost(`/dictionaries/${domain}/${dicType}`, { word: kw, memo: '' })
-                      message.success(`"${kw}" 등록 완료`)
-                      데이터조회()
-                    } catch (e: any) {
-                      message.error(e?.response?.data?.detail || '등록 실패')
-                    }
-                  },
-                })
-              }
-            } else {
-              if (dicType === 'thesaurus') { 유사어모달열기() }
-              else { form.resetFields(); set모달열림(true) }
-            }
-          }}>추가</Button>
-      </div>
-      <Table
-        dataSource={데이터} columns={columns}
-        rowKey={dicType === 'thesaurus' ? (r: any) => `${r.head_word}-${r.tail_word}` : 'word'}
-        loading={로딩} size="small" scroll={{ y: 테이블높이 }}
-        pagination={{
-          current: 현재페이지, pageSize: 5, total: 총건수,
-          showTotal: (total) => `총 ${total.toLocaleString()}건`,
-          showSizeChanger: false, size: 'small',
-          onChange: (page) => set현재페이지(page),
-        }}
-      />
-      {/* udic/cndic 등록 모달 */}
-      {dicType !== 'thesaurus' && (
-        <Modal title={`${cfg.label} 추가`} open={모달열림} onOk={저장}
-          onCancel={() => set모달열림(false)} confirmLoading={저장중} okText="저장" cancelText="취소">
-          <Form form={form} layout="vertical">{모달폼내용()}</Form>
-        </Modal>
-      )}
-
-      {/* 유사어 통합 모달 (등록/편집 공용) */}
-      {dicType === 'thesaurus' && (
-        <Modal
-          title={유사어키워드확정 ? `유사어 편집: ${유사어키워드}` : '유사어 등록/편집'}
-          open={유사어모달열림}
-          onCancel={() => set유사어모달열림(false)}
-          afterClose={() => setTimeout(() => onModalClose?.(), 50)}
-          zIndex={1060}
-          footer={<Space><Button onClick={() => set유사어모달열림(false)}>닫기</Button><Button type="primary" loading={편집저장중} onClick={유사어일괄저장}>저장</Button></Space>}
-          width={420}
-        >
-          {/* 키워드 입력 (등록 모드: 편집 가능, 편집 모드: 고정) */}
-          <div style={{ marginBottom: 12 }}>
-            <Text strong style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>키워드</Text>
-            {!유사어키워드확정 ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Input
-                  placeholder="키워드를 입력하세요"
-                  value={유사어키워드}
-                  onChange={e => set유사어키워드(e.target.value)}
-                  onPressEnter={유사어키워드확정하기}
-                  size="small"
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <Button size="small" type="primary" onClick={유사어키워드확정하기}
-                  disabled={!유사어키워드.trim()}>확인</Button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Text style={{ fontSize: 14, fontWeight: 600 }}>{유사어키워드}</Text>
-                <Button size="small" type="link" onClick={() => set유사어키워드확정(false)}>변경</Button>
-              </div>
-            )}
-          </div>
-          {true && (
-            <>
-              {/* 등록된 유사어 목록 */}
-              <div style={{ marginBottom: 12 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  등록된 유사어 ({편집유사어목록.length}건):
-                </Text>
-                <div ref={유사어목록Ref} style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 4 }}>
-                  {편집유사어목록.length === 0 ? (
-                    <div style={{ padding: '12px', textAlign: 'center' }}>
-                      <Text type="secondary">등록된 유사어가 없습니다.</Text>
-                    </div>
-                  ) : 편집유사어목록.map(w => (
-                    <div key={w} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '4px 8px', borderBottom: '1px solid #f0f0f0',
-                      background: 신규추가항목.includes(w) ? '#FFF9C4' : undefined,
-                      transition: 'background 0.3s',
-                    }}>
-                      <span style={{ fontSize: 13 }}>{w}</span>
-                      <Button size="small" type="text" danger icon={<DeleteOutlined />}
-                        onClick={() => 유사어개별삭제(w)} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 새 유사어 추가 */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <Input
-                  placeholder="새 유사어 입력"
-                  value={새유사어}
-                  onChange={e => set새유사어(e.target.value)}
-                  onPressEnter={유사어개별추가}
-                  size="small"
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <Button size="small" type="primary" onClick={유사어개별추가}>추가</Button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Switch size="small" checked={양방향} onChange={set양방향} />
-                <Text style={{ fontSize: 12 }}>
-                  {양방향 ? (
-                    <><SwapOutlined /> 양방향 (A↔B 모두 등록)</>
-                  ) : (
-                    <>단방향 (A→B만 등록)</>
-                  )}
-                </Text>
-              </div>
-            </>
-          )}
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-// ─── 형태소분석 탭 ───────────────────────────────────────────────
-
-function MorphemeTab({ domain, workspace, prefillKeyword, prefillTrigger, autoFocusTrigger }: {
-  domain: string; workspace?: string; prefillKeyword?: string; prefillTrigger?: number; autoFocusTrigger?: number
-}) {
-  const [keyword, setKeyword] = useState('')
-  const morphInputRef = useRef<any>(null)
-  const [result, setResult] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  const 분석실행 = async (value: string) => {
-    const kw = value.trim()
-    if (!kw) return
-    setLoading(true)
-    try {
-      const { data } = await 클라이언트.post('/morpheme/analyze', { keyword: kw, domain, workspace })
-      setResult(data.result || '결과 없음')
-    } catch {
-      message.error('형태소분석 실패')
-      setResult(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 외부에서 키워드 주입 + 자동 분석
-  useEffect(() => {
-    if (prefillTrigger && prefillTrigger > 0 && prefillKeyword) {
-      setKeyword(prefillKeyword)
-      분석실행(prefillKeyword)
-    }
-  }, [prefillTrigger])
-
-  // autoFocusTrigger: 탭 전환 시 입력 자동 포커스
-  useEffect(() => {
-    if (autoFocusTrigger && autoFocusTrigger > 0) {
-      setTimeout(() => morphInputRef.current?.focus(), 50)
-    }
-  }, [autoFocusTrigger])
-
-  return (
-    <div>
-      <Input.Search
-        ref={morphInputRef}
-        enterButton="분석"
-        value={keyword}
-        onChange={e => setKeyword(e.target.value)}
-        onSearch={분석실행}
-        loading={loading}
-        style={{ maxWidth: 400, marginBottom: 12 }}
-      />
-      {result !== null && (
-        <pre style={{
-          maxHeight: 260, overflow: 'auto', padding: 12,
-          background: '#f5f5f5', borderRadius: 6, fontSize: 13,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-        }}>
-          {result}
-        </pre>
-      )}
-    </div>
-  )
-}
 
 // ─── 메인 페이지 ─────────────────────────────────────────────────
 
@@ -1090,6 +138,9 @@ export default function KnowledgeWork() {
   // 키워드 카운트
   const [workedCount, setWorkedCount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+
+  // 일괄 작업 선택
+  const [bulkSelectedKeys, setBulkSelectedKeys] = useState<number[]>([])
 
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
@@ -1837,7 +888,8 @@ export default function KnowledgeWork() {
         } else {
           클라이언트.post(`/dictionaries/${selectedDomain}/${dicType}${selectedWorkspace ? `?workspace=${selectedWorkspace}` : ''}`, { word: selectedWord, memo: '' })
             .then(() => {
-              message.success(`${사전설정[dicType].title}에 "${selectedWord}" 등록`)
+              const 사전명 = dicType === 'udic' ? '사용자사전' : dicType === 'cndic' ? '복합명사사전' : '유사어사전'
+              message.success(`${사전명}에 "${selectedWord}" 등록`)
               setEscKeyword(selectedWord)
               setEscCount(0)
               setDicRefreshKey(prev => prev + 1)
@@ -1956,6 +1008,42 @@ export default function KnowledgeWork() {
     }
   }, [selectedWorkspace, selectedDomain, navigate])
 
+  // ─── 일괄 작업 ──────────────────────────────────────────────
+
+  const bulkRegisterKeywords = useCallback(async (keywords: string[], dicType: string) => {
+    if (!selectedWorkspace || !selectedDomain) return
+    try {
+      await 클라이언트.post('/assignment/bulk-register', {
+        workspace_id: selectedWorkspace,
+        domain_id: selectedDomain,
+        keywords,
+        dic_type: dicType,
+      })
+      message.success(`${keywords.length}개 키워드를 ${dicType} 사전에 등록했습니다.`)
+      setBulkSelectedKeys([])
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '일괄 등록 실패')
+    }
+  }, [selectedWorkspace, selectedDomain])
+
+  const bulkDeleteKeywords = useCallback(async () => {
+    if (!selectedWorkspace || !selectedDomain || bulkSelectedKeys.length === 0) return
+    const selectedItems = items.filter(i => bulkSelectedKeys.includes(i.id))
+    const keywords = selectedItems.map(i => i.keyword)
+    try {
+      await 클라이언트.post('/assignment/bulk-delete', {
+        workspace_id: selectedWorkspace,
+        domain_id: selectedDomain,
+        keywords,
+      })
+      message.success(`${keywords.length}개 키워드를 삭제했습니다.`)
+      setItems(prev => prev.filter(i => !bulkSelectedKeys.includes(i.id)))
+      setBulkSelectedKeys([])
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '일괄 삭제 실패')
+    }
+  }, [selectedWorkspace, selectedDomain, bulkSelectedKeys, items])
+
   // ─── Guard ──────────────────────────────────────────────────
 
   if (!selectedWorkspace || !selectedDomain) {
@@ -1984,7 +1072,37 @@ export default function KnowledgeWork() {
         background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderRadius: 6,
       }}>
         <span style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>작업실</span>
-        <Space>
+        <Space wrap>
+          {bulkSelectedKeys.length > 0 && (
+            <>
+              <Button
+                icon={<PlusCircleOutlined />}
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const selectedItems = items.filter(i => bulkSelectedKeys.includes(i.id))
+                  bulkRegisterKeywords(selectedItems.map(i => i.keyword), 'udic')
+                }}
+              >
+                사전 일괄 등록 ({bulkSelectedKeys.length})
+              </Button>
+              <Button
+                icon={<DeleteOutlined />}
+                size="small"
+                danger
+                onClick={(e) => { e.stopPropagation(); bulkDeleteKeywords() }}
+              >
+                일괄 삭제 ({bulkSelectedKeys.length})
+              </Button>
+              <Button
+                icon={<CloseOutlined />}
+                size="small"
+                onClick={(e) => { e.stopPropagation(); setBulkSelectedKeys([]) }}
+              >
+                선택 해제
+              </Button>
+            </>
+          )}
           <Button
             loading={buildLoading}
             disabled={!selectedDomain || buildLoading}
@@ -2026,13 +1144,39 @@ export default function KnowledgeWork() {
                 allowClear size="small" style={{ width: '100%' }}
               />
             </div>
+            {/* 전체 선택 체크박스 */}
+            {(() => {
+              const filtered = items.filter(r => !키워드필터 || r.keyword.includes(키워드필터))
+              const filteredIds = filtered.map(i => i.id)
+              const allChecked = filteredIds.length > 0 && filteredIds.every(id => bulkSelectedKeys.includes(id))
+              const indeterminate = filteredIds.some(id => bulkSelectedKeys.includes(id)) && !allChecked
+              return (
+                <div style={{ padding: '2px 8px', flexShrink: 0, borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
+                  <Checkbox
+                    checked={allChecked}
+                    indeterminate={indeterminate}
+                    onChange={() => {
+                      if (allChecked) {
+                        setBulkSelectedKeys(prev => prev.filter(k => !filteredIds.includes(k)))
+                      } else {
+                        setBulkSelectedKeys(prev => [...new Set([...prev, ...filteredIds])])
+                      }
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: '#666' }}>
+                      전체 선택{bulkSelectedKeys.length > 0 ? ` (${bulkSelectedKeys.length})` : ''}
+                    </span>
+                  </Checkbox>
+                </div>
+              )
+            })()}
             <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
               {loadingPrev && (
                 <div style={{ textAlign: 'center', padding: 8 }}><Spin size="small" /></div>
               )}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-              ) : items.filter(r => !키워드필터 || r.keyword.includes(키워드필터)).map((record, index) => (
+              ) : items.filter(r => !키워드필터 || r.keyword.includes(키워드필터)).map((record) => (
                 <div
                   key={record.id}
                   ref={(el) => { itemRefs.current[record.id] = el }}
@@ -2053,7 +1197,15 @@ export default function KnowledgeWork() {
                     color: record.status === 'completed' ? '#999' : '#333',
                   }}
                 >
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span onClick={(e) => {
+                      e.stopPropagation()
+                      setBulkSelectedKeys(prev =>
+                        prev.includes(record.id) ? prev.filter(k => k !== record.id) : [...prev, record.id]
+                      )
+                    }} style={{ flexShrink: 0 }}>
+                      <Checkbox checked={bulkSelectedKeys.includes(record.id)} onChange={() => {}} />
+                    </span>
                     <span style={{ width: 28, flexShrink: 0, textAlign: 'right', color: '#999', fontSize: 12 }}>
                       {record.line_num}
                     </span>
@@ -2372,218 +1524,43 @@ export default function KnowledgeWork() {
       </div>
 
       {/* 유사어 추천 모달 */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 24 }}>
-            <span>{`유사어 추천 — ${추천키워드}`}</span>
-            <Button size="small" icon={<EditOutlined />} onClick={() => set추천프롬프트모달(true)}>프롬프트</Button>
-          </div>
-        }
+      <ThesaurusRecommendModal
         open={추천모달열림}
         onCancel={() => { if (!추천프롬프트모달) set추천모달열림(false) }}
         afterClose={() => setTimeout(() => setIsCenterFocused(true), 50)}
-        footer={null}
-        width={680}
-        keyboard={!추천프롬프트모달}
-        destroyOnClose
-      >
-
-        {/* 등록 키워드셋 */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 등록키워드셋.length > 0 ? '#C62828' : '#999', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 3, height: 12, background: 등록키워드셋.length > 0 ? '#EF5350' : '#ddd', borderRadius: 2 }} />
-            등록 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({등록키워드셋.length})</span>
-          </div>
-          {등록키워드셋.length === 0 ? (
-            <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>등록된 유사어 없음</Text>
-          ) : (
-            <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 150, overflowY: 'auto', background: 등록키워드셋.length > 0 ? '#FFEBEE' : undefined }}>
-              {등록키워드셋.map((item: any, idx: number) => (
-                <div key={idx} data-recommend-section={0} data-recommend-item={idx}
-                  style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                  onClick={() => setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: '', n: (prev?.n || 0) + 1, editMode: true } as any))}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
-                >
-                  <span style={{ fontSize: 12 }}>
-                    <Text strong>{item.head_word}</Text>
-                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{(item.tail_word || '').split(',').map((s: string) => s.trim()).filter(Boolean).join(', ')}</Text>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 추천 키워드셋 */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#558B2F', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 3, height: 12, background: '#8BC34A', borderRadius: 2 }} />
-            추천 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({추천결과.filter((i: any) => i.head_word !== 추천키워드).length})</span>
-          </div>
-          <Spin spinning={추천로딩}>
-            {추천결과.filter((i: any) => i.head_word !== 추천키워드).length === 0 && !추천로딩 ? (
-              <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>결과 없음</Text>
-            ) : (
-              <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 180, overflowY: 'auto' }}>
-                {추천결과.filter((i: any) => i.head_word !== 추천키워드).map((item: any, idx: number) => (
-                  <div key={idx} data-recommend-section={1} data-recommend-item={idx}
-                    style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 추천포커스.section === 1 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                    onClick={() => setThesaurusExternalOpen(prev => ({ head_word: item.head_word, tail_word: 추천키워드, n: (prev?.n || 0) + 1, editMode: true } as any))}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 1 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
-                  >
-                    <span style={{ fontSize: 12 }}>
-                      {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}
-                      <Text strong>{item.head_word}</Text>
-                      <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{((item.tail_words || []) as string[]).slice(0, 5).join(', ')}</Text>
-                    </span>
-                    <Text type="secondary" style={{ fontSize: 10 }}>{item.score}</Text>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Spin>
-        </div>
-
-        {/* 한영오타 키워드 */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#0277BD', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 3, height: 12, background: '#29B6F6', borderRadius: 2 }} />
-            한영오타 키워드 <span style={{ fontSize: 10, color: '#999' }}>({getTypoVariants(추천키워드).length})</span>
-          </div>
-          {getTypoVariants(추천키워드).length === 0 ? (
-            <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>변환 결과 없음</Text>
-          ) : (
-            <div style={{ border: '1px solid #f0f0f0', borderRadius: 4 }}>
-              {getTypoVariants(추천키워드).map((v, idx) => (
-                <div key={idx} data-recommend-section={2} data-recommend-item={idx}
-                  style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, background: 추천포커스.section === 2 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
-                  onClick={() => setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: v.value, n: (prev?.n || 0) + 1, editMode: true } as any))}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 2 && 추천포커스.item === idx ? '#E6F4FF' : '' }}
-                >
-                  {등록키워드Set.has(v.value) && <LinkOutlined style={{ color: '#52c41a', marginRight: 2, fontSize: 10 }} />}
-                  <Text type="secondary" style={{ fontSize: 10 }}>{v.label}</Text>
-                  <Text>{추천키워드}</Text>
-                  <Text type="secondary">→</Text>
-                  <Text strong>{v.value}</Text>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* AI추천 키워드 */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#E65100', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 3, height: 12, background: '#FF9800', borderRadius: 2 }} />
-              AI추천 키워드 <span style={{ fontSize: 10, color: '#999' }}>({llm모델별결과.reduce((s: number, m: any) => s + (m.items || []).filter((i: any) => i.head_word !== 추천키워드).length, 0)})</span>
-            </span>
-            <Button size="small" type="primary" loading={llm로딩} onClick={LLM분석}>분석 실행 <KbdKey>{displayKey(hotkeys.aiAnalysis || 'r')}</KbdKey></Button>
-          </div>
-          <div>
-        <Spin spinning={llm로딩}>
-          {llm모델별결과.length === 0 && !llm로딩 && <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>분석 실행 버튼을 클릭하세요</Text>}
-          {llm모델별결과.length > 0 && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(() => { let globalIdx = 0; return llm모델별결과.map((modelResult: any, mIdx: number) => (
-                <div key={mIdx} style={{ flex: 1, minWidth: 0, border: '1px solid #f0f0f0', borderRadius: 4 }}>
-                  <div style={{ padding: '3px 8px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', fontWeight: 600, fontSize: 10, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {(modelResult.model || '').split('/').pop()}
-                  </div>
-                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                    {(modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).length === 0 ? (
-                      <div style={{ padding: 8, textAlign: 'center' }}><Text type="secondary" style={{ fontSize: 11 }}>{modelResult.raw_response ? '결과 없음' : '오류'}</Text></div>
-                    ) : (modelResult.items || []).filter((item: any) => item.head_word !== 추천키워드).map((item: any, idx: number) => {
-                      const gi = globalIdx++; return (
-                      <div
-                        key={idx}
-                        data-recommend-section={3} data-recommend-item={gi}
-                        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #f5f5f5', fontSize: 12, background: 추천포커스.section === 3 && 추천포커스.item === gi ? '#E6F4FF' : undefined }}
-                        onClick={() => setThesaurusExternalOpen(prev => ({ head_word: 추천키워드, tail_word: item.head_word, n: (prev?.n || 0) + 1, editMode: true } as any))}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 추천포커스.section === 3 && 추천포커스.item === gi ? '#E6F4FF' : '' }}
-                      >
-                        {등록키워드Set.has(item.head_word) && <LinkOutlined style={{ color: '#52c41a', marginRight: 4, fontSize: 10 }} />}{item.head_word}
-                      </div>
-                    )})}
-                  </div>
-                </div>
-              )); })()}
-            </div>
-          )}
-        </Spin>
-        </div></div>
-      </Modal>
+        keyword={추천키워드}
+        hotkeys={hotkeys}
+        등록키워드셋={등록키워드셋}
+        등록키워드Set={등록키워드Set}
+        추천결과={추천결과}
+        추천로딩={추천로딩}
+        llm모델별결과={llm모델별결과}
+        llm로딩={llm로딩}
+        LLM분석={LLM분석}
+        추천포커스={추천포커스}
+        추천프롬프트모달={추천프롬프트모달}
+        set추천프롬프트모달={set추천프롬프트모달}
+        setThesaurusExternalOpen={setThesaurusExternalOpen}
+      />
 
       {/* 유사어 LLM 프롬프트 편집 모달 */}
-      <Modal
-        title="유사어 추천 LLM 프롬프트"
+      <LLMPromptModal
         open={추천프롬프트모달}
         onCancel={() => set추천프롬프트모달(false)}
-        onOk={() => {
-          클라이언트.put('/llm-settings/thesaurus-prompt', { prompt: llm프롬프트 })
-            .then(() => message.success('프롬프트 저장 완료'))
-            .catch(() => message.error('프롬프트 저장 실패'))
-          set추천프롬프트모달(false)
-        }}
-        okText="저장"
-        cancelText="취소"
-        width={600}
-        zIndex={1100}
-      >
-        <Input.TextArea
-          value={llm프롬프트}
-          onChange={e => setLlm프롬프트(e.target.value)}
-          rows={10}
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
-        />
-        <div style={{ marginTop: 8, textAlign: 'right' }}>
-          <Button size="small" onClick={() => setLlm프롬프트(기본추천프롬프트)}>기본값 복원</Button>
-        </div>
-      </Modal>
+        llm프롬프트={llm프롬프트}
+        setLlm프롬프트={setLlm프롬프트}
+        기본추천프롬프트={기본추천프롬프트}
+      />
 
       {/* 작업완료 모달 */}
-      <Modal
-        title="작업 완료 처리"
+      <CompleteModal
         open={completeModalOpen}
         onCancel={() => setCompleteModalOpen(false)}
-        footer={null}
-        width={420}
-      >
-        <div style={{ marginBottom: 16, color: '#666', fontSize: 13 }}>
-          처리 대상: <strong>{workedCount}</strong> / {totalCount} 키워드 작업됨
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Button
-            block
-            type="primary"
-            loading={completeLoading}
-            onClick={() => handleCompleteWithMode('all_complete')}
-          >
-            전체 완료 처리
-          </Button>
-          <Button
-            block
-            loading={completeLoading}
-            onClick={() => handleCompleteWithMode('all_incomplete')}
-          >
-            전체 미완료 처리
-          </Button>
-          <Button
-            block
-            loading={completeLoading}
-            onClick={() => handleCompleteWithMode('by_history')}
-          >
-            작업이력 기준 처리
-          </Button>
-          <Button block onClick={() => setCompleteModalOpen(false)}>
-            취소
-          </Button>
-        </div>
-      </Modal>
+        workedCount={workedCount}
+        totalCount={totalCount}
+        loading={completeLoading}
+        onComplete={handleCompleteWithMode}
+      />
 
       {/* 핫키 설정 모달 */}
       <HotkeySettings

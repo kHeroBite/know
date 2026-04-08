@@ -70,6 +70,7 @@ export default function Workspace() {
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [연결해제중, set연결해제중] = useState(false)
   const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
+  const [작업진행률, set작업진행률] = useState<Record<string, number>>({})
   const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
   const isSuper = currentUser?.auth === 'A'
@@ -118,6 +119,24 @@ export default function Workspace() {
       Object.values(폴링ref.current).forEach(clearInterval)
     }
   }, [])
+
+  // USED 상태 워크스페이스 작업 진행률 로드
+  useEffect(() => {
+    const usedList = 목록.filter(ws => ws.status === 'USED' && ws.domain)
+    if (usedList.length === 0) return
+    usedList.forEach(async (ws) => {
+      try {
+        const res = await workspaceAPI.멤버상태조회(ws.name)
+        const data = res.data
+        const total = data?.total_keywords ?? 0
+        const completed = data?.completed_keywords ?? 0
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+        set작업진행률(prev => ({ ...prev, [ws.name]: percent }))
+      } catch {
+        // 진행률 조회 실패 시 무시
+      }
+    })
+  }, [목록])
 
   const 폴링종료 = async (wsName: string) => {
     clearInterval(폴링ref.current[wsName])
@@ -528,6 +547,27 @@ export default function Workspace() {
                       </Text>
                     )}
                   </div>
+
+                  {/* 작업 진행률 (USED 상태이고 도메인 있을 때) */}
+                  {ws.status === 'USED' && ws.domain && 작업진행률[ws.name] !== undefined && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={{ fontSize: 11, color: isSelected ? 'rgba(255,255,255,0.7)' : '#999' }}>
+                          작업 진행률
+                        </Text>
+                        <Text style={{ fontSize: 11, color: isSelected ? 'rgba(255,255,255,0.85)' : undefined }}>
+                          {작업진행률[ws.name]}%
+                        </Text>
+                      </div>
+                      <Progress
+                        percent={작업진행률[ws.name]}
+                        size="small"
+                        showInfo={false}
+                        strokeColor={isSelected ? 'rgba(255,255,255,0.85)' : undefined}
+                        trailColor={isSelected ? 'rgba(255,255,255,0.2)' : undefined}
+                      />
+                    </div>
+                  )}
 
                   {/* FAILED 에러 메시지 표시 */}
                   {ws.status === 'FAILED' && 에러메시지[ws.name] && (

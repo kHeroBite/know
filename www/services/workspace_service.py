@@ -17,14 +17,11 @@ COPY_PROGRESS: dict[str, dict[str, Any]] = {}
 # 복사 취소 플래그: {ws_name: threading.Event()}
 COPY_CANCEL: dict[str, threading.Event] = {}
 
-WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
-DOMAIN_DIR = "/home/know/apps/know-ops/domain"
-JIANA_BASE_DIR = "/home/know/apps/know-ops/jiana"
-STATE_FILE = "/home/know/apps/know-ops/workspace/.state.json"
-USER_PREF_FILE = "/home/know/apps/know-ops/workspace/.user_pref.json"
-DOMAIN_META_FILE = "/home/know/apps/know-ops/domain/.meta.json"
-# 도메인별 마지막 사용 jiana 버전 기억 파일
-DOMAIN_JIANA_PREF_FILE = "/home/know/apps/know-ops/domain/.jiana_pref.json"
+from core.constants import (
+    WORKSPACE_DIR, DOMAIN_DIR, JIANA_BASE_DIR,
+    STATE_FILE, USER_PREF_FILE, DOMAIN_META_FILE, DOMAIN_JIANA_PREF_FILE,
+    OLD_DOMAIN_DIR, DOMAIN_PROGRESS_DIR,
+)
 
 # 워크스페이스 phase 순서 (preprocess → work → build → verify)
 PHASES = ["preprocess", "work", "build", "verify"]
@@ -491,7 +488,7 @@ def save_hotkey_settings_service(user_id: str, hotkeys: dict[str, str]) -> dict[
     return {"message": "저장 complete"}
 
 
-OLD_DOMAIN_DIR = "/home/know/apps/jiana_admin_server"
+
 
 
 def list_old_domains() -> list[str]:
@@ -506,7 +503,7 @@ def list_old_domains() -> list[str]:
     )
 
 
-DOMAIN_PROGRESS_DIR = "/tmp/know_domain_progress"
+
 
 
 def _write_domain_progress(name: str, data: dict[str, Any]) -> None:

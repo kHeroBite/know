@@ -11,7 +11,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
 from models.dictionary import validate_site_name, get_dict_table
 
-DOMAIN_DIR = "/home/know/apps/know-ops/domain"
+from core.constants import DOMAIN_DIR
 
 # 사전 타입 허용 list_tasks
 _허용사전타입 = {"udic", "cndic"}

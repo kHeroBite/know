@@ -10,8 +10,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
-JAVA_HOME = "/home/know/jdk1.7.0_80"
+from core.constants import DEFAULT_JIANA_HOME, JAVA_HOME, KNOW_OPS_SRC, WORKSPACE_BASE
 MORPHEME_TIMEOUT = 30  # 단일 키워드이므로 30초 충분
 
 
@@ -194,8 +193,7 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
             }
 
 
-KNOW_OPS_SRC = "/home/know/apps/know-ops/src"
-WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+
 
 
 def _ensure_know_ops_path() -> None:

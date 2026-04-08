@@ -14,7 +14,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-KNOW_OPS_SRC = "/home/know/apps/know-ops/src"
+from core.constants import KNOW_OPS_SRC
 
 
 def _ensure_know_ops_path() -> None:

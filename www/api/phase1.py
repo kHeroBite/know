@@ -95,7 +95,7 @@ async def view_file(path: str = Query("")):
 @라우터.get("/preprocess/step-status")
 async def check_step_status(workspace: str = Query("")):
     """각 단계별 결과 파일 존재 여부 반환."""
-    WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+    from core.constants import WORKSPACE_BASE
     work_dir = os.path.join(WORKSPACE_BASE, workspace, "build", "work")
     return {
         "keywords": os.path.isfile(os.path.join(work_dir, "keywords.txt")),

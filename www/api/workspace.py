@@ -398,3 +398,55 @@ def get_copy_progress(
     if "file_count" in 진행:
         result["file_count"] = 진행["file_count"]
     return result
+
+
+@라우터.get("/{workspace_id}/members-status")
+def get_members_status(
+    workspace_id: str,
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """워크스페이스에 할당된 사용자 목록 + 각자 오늘 처리한 건수."""
+    from sqlalchemy import text as _text
+    from models.account import 계정테이블
+    from sqlalchemy import select
+
+    # 오늘 날짜 기준
+    rows = db.execute(_text("""
+        SELECT wh.user_id, COUNT(*) as today_count
+        FROM work_history wh
+        WHERE wh.workspace = :ws
+          AND wh.undone = 0
+          AND date(wh.created_at) = date('now')
+        GROUP BY wh.user_id
+    """), {"ws": workspace_id}).fetchall()
+
+    today_map = {r.user_id: r.today_count for r in rows}
+
+    # 워크스페이스에 한번이라도 참여한 사용자 목록 (work_history 전체 기준)
+    all_user_rows = db.execute(_text("""
+        SELECT DISTINCT user_id FROM work_history WHERE workspace = :ws
+    """), {"ws": workspace_id}).fetchall()
+
+    user_ids = [r.user_id for r in all_user_rows]
+
+    # 계정 이름 조회
+    name_map: Dict[str, str] = {}
+    if user_ids:
+        name_rows = db.execute(
+            select(계정테이블.c._USER_ID, 계정테이블.c._NAME)
+            .where(계정테이블.c._USER_ID.in_(user_ids))
+        ).fetchall()
+        name_map = {r._USER_ID: r._NAME for r in name_rows}
+
+    members = [
+        {
+            "user_id": uid,
+            "user_name": name_map.get(uid, uid),
+            "today_count": today_map.get(uid, 0),
+        }
+        for uid in user_ids
+    ]
+    members.sort(key=lambda x: x["today_count"], reverse=True)
+
+    return {"workspace": workspace_id, "members": members}

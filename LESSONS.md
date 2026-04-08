@@ -268,6 +268,20 @@ elif os.path.isdir(path):
 **재발방지**: DB 모델/서비스에서 신규 컬럼 참조 코드 작성 시 `ALTER TABLE ... ADD COLUMN ...` migration SQL을 반드시 동시 작성. 코드-DB 동기화 원칙.
 **Level**: 1 (1회 발생, docs 기록)
 
+### L-039: team-report.sh 타세션 에이전트를 "정리 필요"로 오표시 — 정보 표시로 변경 (2026-04-08)
+
+**현상**: team-report.sh가 다른 tmux 세션에서 정상 실행 중인 에이전트를 "파이프라인 미완료 — kfinish 진입 금지"로 경고. "정리 필요"가 표시되어 이 세션에서 생성한 팀이 다른 세션에 있다는 잘못된 분석 유발.
+**원인**: session-env는 모든 세션이 공유하는 글로벌 디렉토리. 다른 프로젝트 세션의 에이전트 pane이 MY_SESSION과 다르다는 이유만으로 경고를 발생시킨 설계 오류.
+**재발방지**: team-report.sh에서 타세션 에이전트는 노란색 ℹ️ 정보 표시로만 출력(HAS_ISSUE 미설정). kstatus SKILL.md에 session-env 범위 이해 섹션 추가. "정리 필요"는 실제 고착 파이프라인/고아 pane에만 표시.
+**Level**: 2 (스크립트 + 스킬 수정)
+
+### L-038: Agent-mode 에이전트는 tmux pane kill로 종료 불가 — TeamDelete 필수 (2026-04-08)
+
+**현상**: kstatus에서 deployer 에이전트의 tmux pane(%101)을 kill -9로 소멸시켰음에도 idle_notification이 계속 수신됨. shutdown_request 2회 발송 후에야 TeamDelete로 완전 제거.
+**원인**: Agent 도구로 spawn된 에이전트는 Claude Code 내부 실행 방식이라 tmux pane과 독립적으로 동작. pane 소멸 = 화면 소멸이지 프로세스 종료가 아님.
+**재발방지**: Agent-mode 에이전트(know-deploy 같은 임시 팀) 정리 순서: ① shutdown_request 발송 → ② ack 대기(최대 10초) → ③ TeamDelete 호출. pane kill 단독으로는 완전 종료 불가.
+**Level**: 2 (MEMORY.md 반영)
+
 ---
 
 ## 반영 추적 테이블
@@ -299,3 +313,42 @@ elif os.path.isdir(path):
 | L-035 | phase1→pipeline 역방향 import | LESSONS | LESSONS.md | 2026-04-07 | ✅ |
 | L-036 | ktest 프롬프트 curl localhost 하드코딩 | LESSONS | LESSONS.md | 2026-04-08 | ✅ |
 | L-037 | 신규 DB 컬럼 참조 시 migration SQL 누락 | LESSONS | LESSONS.md | 2026-04-08 | ✅ |
+| L-038 | Agent-mode 에이전트는 TeamDelete로만 완전 종료 가능 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-08 | ✅ |
+| L-039 | 타세션 에이전트를 정리 필요로 오표시 | Script+Skill | team-report.sh+kstatus/SKILL.md | 2026-04-08 | ✅ |
+| L-040 | TeamCreate config.json 누락 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-041 | bash_exec python3 heredoc 따옴표 충돌 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-042 | JSX 포함 파일 .ts 확장자 사용 금지 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-043 | Agent tool 에이전트 tmux pane 없음 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+
+---
+
+## [2026-04-09] k5 Know 프로젝트 전반적 개선 작업
+
+### L-040: TeamCreate config.json 누락 문제
+
+**현상**: TeamCreate 성공 후 config.json 파일이 생성되지 않아 Agent spawn 시 "Team does not exist" 에러 반복 발생
+**원인**: TeamDelete → TeamCreate 사이에 인박스 디렉토리 잔류로 config.json 미생성
+**해결**: TeamDelete → TeamCreate 순서 재실행으로 복구
+**재발방지**: TeamCreate 후 config.json 존재 확인 단계 추가
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-041: kio MCP bash_exec에서 python3 heredoc 따옴표 이슈
+
+**현상**: bash_exec 내 python3 -c "..." 구문에서 exit_code=2 (syntax error) 발생
+**원인**: 명령 문자열 내 중첩 따옴표가 셸 파싱 시 충돌
+**해결**: 따옴표 이스케이프 또는 단일 복잡 명령 대신 분리 실행
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-042: 프론트엔드 keyboard.ts → keyboard.tsx 변경 필요
+
+**현상**: JSX를 포함한 파일을 .ts 확장자로 저장하면 TypeScript 빌드 에러
+**원인**: JSX 포함 파일은 반드시 .tsx 확장자 사용
+**해결**: 파일 생성 시 JSX 포함 여부 사전 확인
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-043: Agent tool 방식 에이전트는 tmux pane이 없음
+
+**현상**: kstatus 진단 시 agents/ 파일은 없고, teams/ config.json도 없어 팀 상태 파악 불가
+**원인**: Agent tool 방식은 pane 없이 실행되므로 kstatus의 tmux pane 기반 진단과 불일치
+**해결**: kstatus Step 7 수량 리포팅에 Agent tool 방식 정상 처리 로직 추가 완료
+**Level**: 2 (스킬 수정)

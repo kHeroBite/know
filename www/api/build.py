@@ -62,7 +62,8 @@ def download_build_file(
     if bh.output_path:
         jiana_dir = os.path.dirname(bh.output_path)
     else:
-        jiana_dir = "/home/know/jiana1.5.12"  # fallback: output_path 없는 레거시 빌드
+        from core.constants import DEFAULT_JIANA_HOME
+        jiana_dir = DEFAULT_JIANA_HOME  # fallback: output_path 없는 레거시 빌드
     allowed = {"data.tar", "synonym.UTF-8"}
     if filename not in allowed:
         raise HTTPException(400, detail=f"허용되지 않는 파일: {filename}")

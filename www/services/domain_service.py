@@ -135,7 +135,8 @@ def delete_domain_ws(db: Session, site: str) -> None:
     db.commit()
 
     # 서버 디렉토리 삭제
-    도메인경로 = f"/home/know/apps/know-ops/domain/{site_upper.lower()}"
+    from core.constants import DOMAIN_DIR
+    도메인경로 = os.path.join(DOMAIN_DIR, site_upper.lower())
     if os.path.isdir(도메인경로):
         shutil.rmtree(도메인경로, ignore_errors=True)
 

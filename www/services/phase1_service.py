@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Dict
 from core.database import 세션팩토리
 
-WORKSPACE_DIR = "/home/know/apps/know-ops/workspace"
+from core.constants import WORKSPACE_DIR
+
 BUILD_DIR = "/home/know/apps/know-ops/build"  # fallback (워크스페이스 미선택 시)
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
 

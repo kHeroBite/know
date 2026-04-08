@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import HTTPException
 
+from core.constants import WORKSPACE_BASE
+
 logger = logging.getLogger(__name__)
-WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
 
 
 import re as _re

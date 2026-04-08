@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from api.auth import get_current_user
 from services import assignment_service
 from services.work_history_service import delete_all_history_service
 from services.workspace_service import phase_forward, get_phase, set_user_phase, get_user_phase
+from services import dictionary_service
 
 라우터 = APIRouter()
 
@@ -99,6 +100,18 @@ class 완료모드요청(BaseModel):
     mode: str  # all_complete | all_incomplete | by_history
 
 
+class 일괄등록요청(BaseModel):
+    domain: str  # site 이름 (예: EPOST, MALL)
+    dic_type: str  # udic 또는 cndic
+    keywords: List[str]  # 등록할 단어 목록
+
+
+class 일괄삭제요청(BaseModel):
+    domain: str  # site 이름
+    dic_type: str  # udic 또는 cndic
+    words: List[str]  # 삭제할 단어 목록
+
+
 @라우터.post("/complete-with-mode")
 def complete_mode(body: 완료모드요청, db: Session = Depends(db_session),
                   current: dict = Depends(get_current_user)):
@@ -111,6 +124,38 @@ def complete_mode(body: 완료모드요청, db: Session = Depends(db_session),
         "by_history": "작업이력대로 process_complete",
     }
     return {"success": True, "message": mode_labels.get(body.mode, body.mode), **result}
+
+@라우터.post("/bulk-register")
+def bulk_register_keywords(
+    body: 일괄등록요청,
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
+):
+    """다중 키워드 일괄 사전 등록."""
+    items = [{"word": w} for w in body.keywords]
+    result = dictionary_service.bulk_add_items(
+        db, body.domain, body.dic_type, items, user_id=current["user_id"]
+    )
+    return result
+
+
+@라우터.post("/bulk-delete")
+def bulk_delete_keywords(
+    body: 일괄삭제요청,
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
+):
+    """다중 키워드 일괄 삭제."""
+    deleted = 0
+    errors = []
+    for word in body.words:
+        try:
+            dictionary_service.delete_dict_item_service(db, body.domain, body.dic_type, word)
+            deleted += 1
+        except Exception as e:
+            errors.append({"word": word, "error": str(e)})
+    return {"deleted": deleted, "errors": errors}
+
 
 @라우터.post("/reset")
 def initialize(workspace: str = Query(...), domain: str = Query(...),
@@ -138,7 +183,7 @@ def initialize(workspace: str = Query(...), domain: str = Query(...),
     delete_all_history_service(db, workspace, domain)
 
     # 6. 업로드 파일 정리 (popular / fails 폴더 내 파일 삭제)
-    WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
+    from core.constants import WORKSPACE_BASE
     for folder in ("popular", "fails"):
         dir_path = os.path.join(WORKSPACE_BASE, workspace, "build", folder)
         if os.path.isdir(dir_path):
