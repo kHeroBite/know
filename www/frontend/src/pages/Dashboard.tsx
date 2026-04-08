@@ -1,39 +1,34 @@
 import { useState, useEffect } from 'react'
 import PageHeader from '../components/PageHeader'
-import { Card, Statistic, Row, Col, Table, Typography, Spin, message, Tag } from 'antd'
+import { Card, Statistic, Row, Col, Table, Typography, Spin, message } from 'antd'
 import {
   AppstoreOutlined, CheckCircleOutlined, ClockCircleOutlined, PlayCircleOutlined,
 } from '@ant-design/icons'
 import 클라이언트 from '../api/client'
 
 interface Summary {
-  not_started: number
-  in_progress: number
+  total: number
+  pending: number
+  assigned: number
   completed: number
-  today_count: number
-  recent_works: RecentWork[]
+  today_processed: number
+  workspaces: WorkspaceStat[]
 }
 
-interface RecentWork {
+interface WorkspaceStat {
   workspace: string
   domain: string
-  keyword: string
-  action: string
-  worked_at: string
+  total: number
+  completed: number
+  progress: number
 }
 
 interface DomainStat {
   domain: string
   total: number
   completed: number
-  in_progress: number
-}
-
-const statusColor: Record<string, string> = {
-  등록: 'green',
-  수정: 'blue',
-  삭제: 'red',
-  작업: 'default',
+  pending: number
+  completion_rate: number
 }
 
 export default function Dashboard() {
@@ -72,45 +67,6 @@ export default function Dashboard() {
     조회()
   }, [])
 
-  const 최근작업컬럼 = [
-    {
-      title: '워크스페이스',
-      dataIndex: 'workspace',
-      key: 'workspace',
-      width: 140,
-      ellipsis: true,
-    },
-    {
-      title: '도메인',
-      dataIndex: 'domain',
-      key: 'domain',
-      width: 120,
-      ellipsis: true,
-    },
-    {
-      title: '키워드',
-      dataIndex: 'keyword',
-      key: 'keyword',
-      width: 150,
-      ellipsis: true,
-    },
-    {
-      title: '작업',
-      dataIndex: 'action',
-      key: 'action',
-      width: 80,
-      render: (action: string) => (
-        <Tag color={statusColor[action] || 'default'}>{action}</Tag>
-      ),
-    },
-    {
-      title: '작업일시',
-      dataIndex: 'worked_at',
-      key: 'worked_at',
-      render: (val: string) => val ? new Date(val).toLocaleString('ko-KR') : '-',
-    },
-  ]
-
   const 도메인통계컬럼 = [
     { title: '도메인', dataIndex: 'domain', key: 'domain', width: 150, ellipsis: true },
     {
@@ -118,29 +74,28 @@ export default function Dashboard() {
       dataIndex: 'total',
       key: 'total',
       width: 80,
-      render: (v: number) => <Typography.Text>{v.toLocaleString()}</Typography.Text>,
+      render: (v: number) => <Typography.Text>{(v ?? 0).toLocaleString()}</Typography.Text>,
     },
     {
       title: '완료',
       dataIndex: 'completed',
       key: 'completed',
       width: 80,
-      render: (v: number) => <Typography.Text type="success">{v.toLocaleString()}</Typography.Text>,
+      render: (v: number) => <Typography.Text type="success">{(v ?? 0).toLocaleString()}</Typography.Text>,
     },
     {
-      title: '진행중',
-      dataIndex: 'in_progress',
-      key: 'in_progress',
+      title: '미완료',
+      dataIndex: 'pending',
+      key: 'pending',
       width: 80,
-      render: (v: number) => <Typography.Text type="warning">{v.toLocaleString()}</Typography.Text>,
+      render: (v: number) => <Typography.Text type="warning">{(v ?? 0).toLocaleString()}</Typography.Text>,
     },
     {
       title: '진행률',
-      key: 'rate',
-      render: (_: any, row: DomainStat) => {
-        const rate = row.total > 0 ? Math.round((row.completed / row.total) * 100) : 0
-        return <Typography.Text>{rate}%</Typography.Text>
-      },
+      dataIndex: 'completion_rate',
+      key: 'completion_rate',
+      width: 80,
+      render: (v: number) => <Typography.Text>{v ?? 0}%</Typography.Text>,
     },
   ]
 
@@ -159,22 +114,22 @@ export default function Dashboard() {
             <Col xs={12} sm={6}>
               <Card bordered>
                 <Statistic
-                  title="미시작"
-                  value={summary?.not_started ?? 0}
+                  title="전체 키워드"
+                  value={summary?.total ?? 0}
                   suffix="개"
-                  prefix={<AppstoreOutlined style={{ color: '#8c8c8c' }} />}
-                  valueStyle={{ color: '#8c8c8c' }}
+                  prefix={<AppstoreOutlined style={{ color: '#1677ff' }} />}
+                  valueStyle={{ color: '#1677ff' }}
                 />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card bordered>
                 <Statistic
-                  title="진행중"
-                  value={summary?.in_progress ?? 0}
+                  title="미배정"
+                  value={summary?.pending ?? 0}
                   suffix="개"
-                  prefix={<PlayCircleOutlined style={{ color: '#1677ff' }} />}
-                  valueStyle={{ color: '#1677ff' }}
+                  prefix={<ClockCircleOutlined style={{ color: '#8c8c8c' }} />}
+                  valueStyle={{ color: '#8c8c8c' }}
                 />
               </Card>
             </Col>
@@ -192,30 +147,42 @@ export default function Dashboard() {
             <Col xs={12} sm={6}>
               <Card bordered>
                 <Statistic
-                  title="오늘 작업"
-                  value={summary?.today_count ?? 0}
+                  title="오늘 처리"
+                  value={summary?.today_processed ?? 0}
                   suffix="건"
-                  prefix={<ClockCircleOutlined style={{ color: '#fa8c16' }} />}
+                  prefix={<PlayCircleOutlined style={{ color: '#fa8c16' }} />}
                   valueStyle={{ color: '#fa8c16' }}
                 />
               </Card>
             </Col>
           </Row>
 
-          {/* 최근 작업 이력 */}
+          {/* 워크스페이스별 현황 */}
           <Card
-            title="최근 작업 이력"
+            title="워크스페이스별 현황"
             bordered
             size="small"
             style={{ marginBottom: 24 }}
           >
             <Table
-              dataSource={summary?.recent_works || []}
-              columns={최근작업컬럼}
-              rowKey={(r, i) => String(i)}
+              dataSource={summary?.workspaces || []}
+              columns={[
+                { title: '워크스페이스', dataIndex: 'workspace', key: 'workspace', ellipsis: true },
+                { title: '도메인', dataIndex: 'domain', key: 'domain', width: 140, ellipsis: true },
+                { title: '전체', dataIndex: 'total', key: 'total', width: 70 },
+                { title: '완료', dataIndex: 'completed', key: 'completed', width: 70 },
+                {
+                  title: '진행률',
+                  dataIndex: 'progress',
+                  key: 'progress',
+                  width: 80,
+                  render: (v: number) => `${v ?? 0}%`,
+                },
+              ]}
+              rowKey={(r) => `${r.workspace}-${r.domain}`}
               size="small"
               pagination={false}
-              locale={{ emptyText: '작업 이력이 없습니다.' }}
+              locale={{ emptyText: '데이터가 없습니다.' }}
             />
           </Card>
         </>

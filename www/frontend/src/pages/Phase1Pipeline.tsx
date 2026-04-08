@@ -32,6 +32,20 @@ export default function Phase1Pipeline() {
   const [countPreset, setCountPreset] = useState('5')
   const [combineMode, setCombineMode] = useState<'and' | 'or'>('and')
   const [sortBy, setSortBy] = useState<'count' | 'rank'>('count')
+  const [freezeStatus, setFreezeStatus] = useState<'idle' | 'running'>('idle')
+
+  const 프리징핸들러 = async () => {
+    if (!selectedWorkspace || !selectedDomain) return
+    setFreezeStatus('running')
+    try {
+      await 클라이언트.post('/phase1/freeze', { workspace: selectedWorkspace, domain: selectedDomain })
+      message.success('프리징 완료')
+    } catch {
+      message.error('프리징 실패')
+    } finally {
+      setFreezeStatus('idle')
+    }
+  }
 
   // 파일 존재 여부 체크
   useEffect(() => {
