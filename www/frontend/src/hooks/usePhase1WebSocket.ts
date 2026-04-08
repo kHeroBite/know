@@ -56,8 +56,7 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
     }
 
     const applyLogs = (entries: LogEntry[], prevStatuses?: Record<number, string>) => {
-      setLogs(entries)
-      // 각 step별 최신 상태만 추출 (step_num → 마지막 entry)
+      // 각 step별 최신 상태 추출
       const stepLatest: Record<number, LogEntry> = {}
       let pipelineCompleted = false
       let hasFailed = false
@@ -72,29 +71,35 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
         .filter(n => n >= 1)
         .sort((a, b) => a - b)
 
-      // 아직 UI에 반영 안 된 step만 순차 업데이트 (300ms 간격)
+      // 이미 UI에 반영된 step 제외
       const already = prevStatuses ?? {}
       const newSteps = sortedSteps.filter(n => !already[n] || already[n] === 'running')
 
       if (newSteps.length === 0) {
-        // 모두 이미 표시됨 — 즉시 완료 처리
+        setLogs(entries)
         if (pipelineCompleted || hasFailed) doMarkDone()
         return pipelineCompleted || hasFailed
       }
 
+      // 새 step들을 400ms 간격으로 순차 표시 (로그도 함께)
       newSteps.forEach((stepNum, idx) => {
         setTimeout(() => {
+          // 해당 step까지의 로그만 표시
+          const visibleSteps = new Set([...Object.keys(already).map(Number), ...newSteps.slice(0, idx + 1), -1])
+          setLogs(entries.filter(e => visibleSteps.has(e.step_num)))
+
           const status = stepLatest[stepNum].status
           stepStatusesRef.current = { ...stepStatusesRef.current, [stepNum]: status }
           setStepStatuses(prev => ({ ...prev, [stepNum]: status }))
           setCurrentStep(stepNum)
           if (idx === newSteps.length - 1 && (pipelineCompleted || hasFailed)) {
+            setLogs(entries) // 마지막엔 전체 로그 표시
             doMarkDone()
           }
-        }, idx * 350)
+        }, idx * 400)
       })
 
-      return false // setTimeout 비동기 처리 — 즉시 완료 반환 안 함
+      return false
     }
 
     const fetchLogs = async (): Promise<boolean> => {
