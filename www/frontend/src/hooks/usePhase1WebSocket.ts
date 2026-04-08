@@ -55,8 +55,8 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     }
 
-    const applyLogs = (entries: LogEntry[], prevStatuses?: Record<number, string>) => {
-      // 각 step별 최신 상태 추출
+    const applyLogs = (entries: LogEntry[]) => {
+      setLogs(entries)
       const stepLatest: Record<number, LogEntry> = {}
       let pipelineCompleted = false
       let hasFailed = false
@@ -65,48 +65,27 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
         if (e.step_num === -1 && e.status === 'completed') pipelineCompleted = true
         if (e.status === 'failed') hasFailed = true
       }
-
-      const sortedSteps = Object.keys(stepLatest)
-        .map(Number)
-        .filter(n => n >= 1)
-        .sort((a, b) => a - b)
-
-      // 이미 UI에 반영된 step 제외
-      const already = prevStatuses ?? {}
-      const newSteps = sortedSteps.filter(n => !already[n] || already[n] === 'running')
-
-      if (newSteps.length === 0) {
-        setLogs(entries)
-        if (pipelineCompleted || hasFailed) doMarkDone()
-        return pipelineCompleted || hasFailed
+      const newStatuses: Record<number, string> = {}
+      for (const [k, e] of Object.entries(stepLatest)) {
+        if (Number(k) >= 1) newStatuses[Number(k)] = e.status
       }
-
-      // 새 step들을 400ms 간격으로 순차 표시 (로그도 함께)
-      newSteps.forEach((stepNum, idx) => {
-        setTimeout(() => {
-          // 해당 step까지의 로그만 표시
-          const visibleSteps = new Set([...Object.keys(already).map(Number), ...newSteps.slice(0, idx + 1), -1])
-          setLogs(entries.filter(e => visibleSteps.has(e.step_num)))
-
-          const status = stepLatest[stepNum].status
-          stepStatusesRef.current = { ...stepStatusesRef.current, [stepNum]: status }
-          setStepStatuses(prev => ({ ...prev, [stepNum]: status }))
-          setCurrentStep(stepNum)
-          if (idx === newSteps.length - 1 && (pipelineCompleted || hasFailed)) {
-            setLogs(entries) // 마지막엔 전체 로그 표시
-            doMarkDone()
-          }
-        }, idx * 400)
+      stepStatusesRef.current = { ...stepStatusesRef.current, ...newStatuses }
+      setStepStatuses(prev => {
+        const merged = { ...prev }
+        for (const [k, v] of Object.entries(newStatuses)) merged[Number(k)] = v
+        return merged
       })
-
-      return false
+      const lastStep = Math.max(-1, ...Object.keys(stepLatest).map(Number).filter(n => n >= 1))
+      if (lastStep >= 1) setCurrentStep(lastStep)
+      if (pipelineCompleted || hasFailed) doMarkDone()
+      return pipelineCompleted || hasFailed
     }
 
     const fetchLogs = async (): Promise<boolean> => {
       try {
         const { data } = await 클라이언트.get(`/preprocess/logs/${runId}`)
         if (Array.isArray(data) && data.length > 0) {
-          return applyLogs(data, stepStatusesRef.current)
+          return applyLogs(data)
         }
       } catch { /* ignore */ }
       return false

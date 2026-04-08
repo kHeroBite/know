@@ -69,9 +69,9 @@ export default function Phase1Pipeline() {
       if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
         setStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
       }
-      // executor.py 메시지 형식: "추출 complete: /path/...", "정제 complete: ..."
-      if (entry.message && entry.status === 'completed') {
-        const m = entry.message.match(/complete:\s*(.+)/)
+      // executor.py 메시지 형식: "추출 complete: /path/..." (status='running' row에 경로 있음)
+      if (entry.message && entry.step_num >= 1) {
+        const m = entry.message.match(/complete:\s*(\/[^\s(]+)/)
         if (m) {
           setStepOutputs(prev => ({ ...prev, [entry.step_num]: m[1].trim() }))
         }
