@@ -150,12 +150,9 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
       ws.onerror = () => { ws.close() }
     }
 
-    const init = async () => {
-      // 1. DB에서 히스토리 로드
-      const done = await fetchLogs()
-      if (done || cancelled) return
-
-      // 2. WebSocket 연결 + DB 폴링 fallback 시작
+    const init = () => {
+      if (cancelled) return
+      // WebSocket 연결 + DB 폴링으로 실시간 추적
       connectWs()
       startPoll()
     }

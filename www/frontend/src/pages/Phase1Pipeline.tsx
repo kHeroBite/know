@@ -248,7 +248,7 @@ export default function Phase1Pipeline() {
 
       <Card bodyStyle={{ padding: 0 }}>
         <Row gutter={0}>
-          <Col xs={24} lg={13} style={{ borderRight: '1px solid #f0f0f0' }}>
+          <Col xs={24} lg={11} style={{ borderRight: '1px solid #f0f0f0' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
               {실행중 ? (
@@ -293,7 +293,7 @@ export default function Phase1Pipeline() {
               />
             </div>
           </Col>
-          <Col xs={24} lg={11}>
+          <Col xs={24} lg={13}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
             </div>
