@@ -10,6 +10,7 @@ const 단계목록 = [
   { num: 3, name: '형태소분석', color: '#fa8c16', output: 'analyzed.txt' },
   { num: 4, name: '결과변환', color: '#722ed1', output: 'transform.txt' },
   { num: 5, name: '유사어검사', color: '#eb2f96', output: 'synonym.txt' },
+  { num: 6, name: 'DB업데이트', color: '#13c2c2', output: '' },
 ]
 
 export const 단계색상맵: Record<string, string> = {
@@ -18,6 +19,7 @@ export const 단계색상맵: Record<string, string> = {
   '형태소분석': '#fa8c16',
   '결과변환': '#722ed1',
   '유사어검사': '#eb2f96',
+  'DB업데이트': '#13c2c2',
 }
 
 interface RunParams {
@@ -100,7 +102,7 @@ export default function ControlPanel({
     if (isRunning) return false
     if (stepNum === 1) return true
     if (stepStatuses[stepNum - 1] === 'completed') return true
-    for (let i = stepNum; i <= 5; i++) {
+    for (let i = stepNum; i <= 6; i++) {
       if (stepStatuses[i] === 'completed') return true
     }
     return false

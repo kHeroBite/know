@@ -164,7 +164,7 @@ export default function Assignment() {
         onPrev={() => {
           Modal.confirm({
             title: '이전단계로 돌아가시겠습니까?',
-            content: '프리징된 할당 데이터가 모두 삭제됩니다. 데이터 전처리 단계로 돌아갑니다.',
+            content: 'DB에 저장된 할당 데이터가 모두 삭제됩니다. 데이터 전처리 단계로 돌아갑니다.',
             okText: '확인',
             cancelText: '취소',
             okButtonProps: { danger: true },

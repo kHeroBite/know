@@ -148,28 +148,25 @@ export default function Phase1Pipeline() {
     }
   }
 
-  // 프리징 (6단계)
-  const [freezeStatus, setFreezeStatus] = useState<string>('')
+  // 다음단계 전이 (6단계 완료 후 phase preprocess → work)
+  const [nextLoading, setNextLoading] = useState(false)
 
-  const 프리징핸들러 = async () => {
+  const 다음단계핸들러 = async () => {
     if (!selectedWorkspace || !selectedDomain) {
       message.warning('워크스페이스와 도메인을 선택하세요')
       return
     }
-    setFreezeStatus('running')
+    setNextLoading(true)
     try {
-      const { data } = await assignmentApi.프리징(selectedWorkspace, selectedDomain)
-      setFreezeStatus('completed')
-      // phase 전이: preprocess → work (이미 work이면 건너뛰기)
       const currentPhase = useWorkspaceStore.getState().phase
       if (currentPhase === 'preprocess') {
         await useWorkspaceStore.getState().advancePhase('work')
       }
-      message.success(`프리징 완료: ${data.total || 0}건`)
       navigate('/assignment')
     } catch (e: any) {
-      setFreezeStatus('failed')
-      message.error(e.response?.data?.detail || '프리징 실패')
+      message.error(e.response?.data?.detail || '단계 전이 실패')
+    } finally {
+      setNextLoading(false)
     }
   }
 
@@ -229,10 +226,10 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <PageHeader
         title="데이터 전처리"
-        showNext={유효단계상태[5] === 'completed' && !실행중}
+        showNext={유효단계상태[6] === 'completed' && !실행중}
         nextLabel="다음단계로 (데이터할당)"
-        nextLoading={freezeStatus === 'running'}
-        onNext={프리징핸들러}
+        nextLoading={nextLoading}
+        onNext={다음단계핸들러}
       />
 
       <Card title="파일관리" style={{ marginBottom: 16 }}>
@@ -256,8 +253,8 @@ export default function Phase1Pipeline() {
                   중지
                 </Button>
               ) : (
-                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 5 })}>
-                  전체 실행 (1→5)
+                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 6 })}>
+                  전체 실행 (1→6)
                 </Button>
               )}
             </div>

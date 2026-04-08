@@ -20,7 +20,7 @@ PHASE1_STEPS = {
     3: {"name": "형태소분석", "type": "python", "func": "analyze"},
     4: {"name": "결과변환",   "type": "python", "func": "convert"},
     5: {"name": "유사어검사", "type": "python", "func": "synonym"},
-    6: {"name": "freeze_service",     "type": "python", "func": "freeze"},
+    6: {"name": "DB업데이트",           "type": "python", "func": "freeze"},
 }
 
 logger = logging.getLogger(__name__)
@@ -306,16 +306,22 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
 
 
 def _sync_freeze(domain: str, workspace_dir: str) -> str:
-    """freeze_service: synonym.txt → keyword_assignments DB INSERT"""
+    """DB업데이트: freeze_service(키워드 INSERT) + reanalyze_after_build(analysis/full_analysis UPDATE)"""
     from core.database import 세션팩토리
-    from services.assignment_service import freeze_service
+    from services.assignment_service import freeze_service, reanalyze_after_build
     ws_name = Path(workspace_dir).name  # "A", "B" 등
     db = 세션팩토리()
     try:
         result = freeze_service(db, ws_name, domain)
-        return f"{result['total']}건"
+        total = result['total']
     finally:
         db.close()
+
+    # analysis / full_analysis 업데이트
+    reanalyze_result = reanalyze_after_build(ws_name, domain)
+    ana_cnt = reanalyze_result.get("analysis_updated", 0)
+    full_cnt = reanalyze_result.get("full_analysis_updated", 0)
+    return f"{total}건 (분석 {ana_cnt}건, full {full_cnt}건)"
 
 
 async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
@@ -345,7 +351,7 @@ async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_
     elif func == "freeze":
         result = await loop.run_in_executor(None, _sync_freeze, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"freeze_service complete: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"DB업데이트 complete: {result}", "running", elapsed)
 
 
 def _sync_register(domain: str, file_path: str) -> int:
