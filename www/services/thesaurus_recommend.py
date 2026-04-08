@@ -5,9 +5,9 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import MetaData, select
 
-from models.dictionary import 사전테이블가져오기, 사이트명검증
-from services.typo_matcher import 검색변형생성
-from services.llm_settings_service import LLM질의
+from models.dictionary import get_dict_table, validate_site_name
+from services.typo_matcher import generate_search_variants
+from services.llm_settings_service import llm_query
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,13 @@ _기본프롬프트 = """당신은 검색엔진 유사어 사전 전문가입니
 
 # ─── 유틸 ──────────────────────────────────────────────────────────────────────
 
-def 세트정규화키(head: str, tail: str) -> frozenset:
+def normalize_set_key(head: str, tail: str) -> frozenset:
     """양방향 중복 제거용 키: (head, tail 단어들)의 집합 → 순서 무관 비교."""
     tail_set = frozenset(w.strip() for w in tail.split(',') if w.strip())
     return frozenset({head.strip()} | tail_set)
 
 
-def _매칭점수(
+def _matching_score(
     변형어: str,
     keyword: str,
     유형: str,
@@ -69,7 +69,7 @@ def _매칭점수(
 
 # ─── 후보 검색 ─────────────────────────────────────────────────────────────────
 
-def 유사어추천후보검색(
+def search_similar_candidates(
     db: Session,
     site: str,
     keyword: str,
@@ -77,21 +77,21 @@ def 유사어추천후보검색(
 ) -> list[dict]:
     """유사어 추천 후보 검색 후 점수 순 반환.
 
-    1. 검색변형생성(keyword) 변형 목록 생성
+    1. generate_search_variants(keyword) 변형 list_tasks 생성
     2. DB thesaurus 전체 로드
     3. 각 행 변형 매칭 → 점수 계산
     4. 양방향 중복 제거 (정규화키)
     5. 상위 limit개 반환: [{"head_word", "tail_words", "score", "match_type", "members"}]
     """
-    사이트명검증(site)
+    validate_site_name(site)
 
-    # 1. 변형 목록
-    변형들 = 검색변형생성(keyword)  # [(변형어, 유형, 감산), ...]
+    # 1. 변형 list_tasks
+    변형들 = generate_search_variants(keyword)  # [(변형어, 유형, 감산), ...]
     변형맵: dict[str, tuple[str, int]] = {v[0]: (v[1], v[2]) for v in 변형들}
 
     # 2. thesaurus 전체 로드
     meta = MetaData()
-    tbl = 사전테이블가져오기(site.upper(), 'thesaurus', meta)
+    tbl = get_dict_table(site.upper(), 'thesaurus', meta)
 
     try:
         rows = db.execute(select(tbl)).mappings().all()
@@ -118,7 +118,7 @@ def 유사어추천후보검색(
 
             # head 완전 일치
             if head_upper == 변형_upper:
-                점수 = _매칭점수(변형어, keyword, 유형, True, True) + 감산
+                점수 = _matching_score(변형어, keyword, 유형, True, True) + 감산
                 if 점수 > best_score:
                     best_score = 점수
                     best_match_type = f'head완전' if 변형어 == keyword else f'head완전_{유형}'
@@ -126,7 +126,7 @@ def 유사어추천후보검색(
 
             # tail 완전 일치
             if 변형_upper in tail_upper_list:
-                점수 = _매칭점수(변형어, keyword, 유형, True, False) + 감산
+                점수 = _matching_score(변형어, keyword, 유형, True, False) + 감산
                 if 점수 > best_score:
                     best_score = 점수
                     best_match_type = f'tail완전' if 변형어 == keyword else f'tail완전_{유형}'
@@ -134,7 +134,7 @@ def 유사어추천후보검색(
 
             # head 부분 일치
             if 변형_upper in head_upper or head_upper in 변형_upper:
-                점수 = _매칭점수(변형어, keyword, 유형, False, True) + 감산
+                점수 = _matching_score(변형어, keyword, 유형, False, True) + 감산
                 if 점수 > best_score:
                     best_score = 점수
                     best_match_type = f'head부분' if 변형어 == keyword else f'head부분_{유형}'
@@ -142,7 +142,7 @@ def 유사어추천후보검색(
 
             # tail 부분 일치
             if any(변형_upper in w or w in 변형_upper for w in tail_upper_list):
-                점수 = _매칭점수(변형어, keyword, 유형, False, False) + 감산
+                점수 = _matching_score(변형어, keyword, 유형, False, False) + 감산
                 if 점수 > best_score:
                     best_score = 점수
                     best_match_type = f'tail부분' if 변형어 == keyword else f'tail부분_{유형}'
@@ -151,7 +151,7 @@ def 유사어추천후보검색(
             continue
 
         # 양방향 중복 제거 (동일 세트 중 최고 점수 유지)
-        정규화키 = 세트정규화키(head, tail_raw)
+        정규화키 = normalize_set_key(head, tail_raw)
         if 정규화키 in seen_keys:
             # 기존 항목보다 점수가 높으면 교체
             기존idx = seen_keys[정규화키]
@@ -181,7 +181,7 @@ def 유사어추천후보검색(
 
 # ─── LLM 재순위 ────────────────────────────────────────────────────────────────
 
-async def LLM재순위(
+async def rerank_with_llm(
     keyword: str,
     candidates: list[dict],
     context: str = '',
@@ -203,7 +203,7 @@ async def LLM재순위(
                       .replace('{candidates}', '(없음 — 키워드 기반 직접 추천)'))
         try:
             import re
-            llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
+            llm결과 = await llm_query(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
             results_by_model = []
             for r in llm결과.get('results', []):
                 raw = r.get('result') or ''
@@ -237,25 +237,25 @@ async def LLM재순위(
     if not llm_candidates:
         return {'items': [], 'provider': None, 'raw_response': ''}
 
-    # 후보 목록 포맷 (번호 1-based, LLM 후보만)
+    # 후보 list_tasks 포맷 (번호 1-based, LLM 후보만)
     후보텍스트 = '\n'.join(
         f"{i + 1}. [{c['head_word']}] → {', '.join(c['tail_words'][:5])}"
         for i, c in enumerate(llm_candidates)
     )
 
-    # {context}, {candidates} 치환 — {keyword}는 LLM질의 내부에서 처리
+    # {context}, {candidates} 치환 — {keyword}는 llm_query 내부에서 처리
     최종프롬프트 = (사용프롬프트
                   .replace('{context}', context or '없음')
                   .replace('{candidates}', 후보텍스트))
 
     try:
-        llm결과 = await LLM질의(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
+        llm결과 = await llm_query(keyword, 최종프롬프트, user_id=user_id, usage_type='thesaurus_recommend')
         raw = llm결과.get('result') or ''
         provider = llm결과.get('provider')
         error = llm결과.get('error')
 
         if error or not raw:
-            logger.warning('[LLM재순위] LLM 응답 없음, 점수 기준 폴백: %s', error)
+            logger.warning('[rerank_with_llm] LLM 응답 없음, 점수 기준 폴백: %s', error)
             return {'items': llm_candidates[:5], 'provider': provider, 'raw_response': raw or error or ''}
 
         # 응답에서 번호 파싱 (쉼표/공백/줄바꿈 구분)
@@ -279,5 +279,5 @@ async def LLM재순위(
         return {'items': 선택항목, 'provider': provider, 'raw_response': raw}
 
     except Exception as e:
-        logger.error('[LLM재순위] 예외 발생: %s', e)
+        logger.error('[rerank_with_llm] 예외 발생: %s', e)
         return {'items': llm_candidates[:5], 'provider': None, 'raw_response': str(e)}

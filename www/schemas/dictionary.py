@@ -9,7 +9,7 @@ class 사전항목생성(BaseModel):
     memo: Optional[str] = None
 
 
-class 사전항목수정(BaseModel):
+class update_dict_item_service(BaseModel):
     """사전 항목 수정 요청 모델."""
     memo: Optional[str] = None
 
@@ -26,7 +26,7 @@ class 사전항목응답(BaseModel):
 class 유의어항목생성(BaseModel):
     """유의어 등록 요청 모델 (_HEAD_WORD 기준 단일 행)."""
     head_word: str
-    tail_word: str  # 쉼표 구분 동의어 목록 (Java 호환)
+    tail_word: str  # 쉼표 구분 동의어 list_tasks (Java 호환)
     memo: Optional[str] = None
 
 

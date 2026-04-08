@@ -8,7 +8,7 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
-    # 워커 동시성: subprocess 형태소분석/빌드가 CPU 집약적이므로 1로 제한
+    # 워커 동시성: subprocess analyze_morpheme/빌드가 CPU 집약적이므로 1로 제한
     worker_concurrency=1,
     # 직렬화 설정
     task_serializer="json",

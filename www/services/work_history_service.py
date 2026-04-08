@@ -9,11 +9,11 @@ from sqlalchemy import MetaData, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from models.dictionary import 사전테이블가져오기
+from models.dictionary import get_dict_table
 
 
-def 이력목록조회(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """사용자별 작업이력 목록 조회 + 현재 할당 시작시간."""
+def get_history_list(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """사용자별 작업이력 list_tasks 조회 + 현재 assign 시작시간."""
     rows = db.execute(
         text(
             "SELECT id, workspace, domain, user_id, action_type, dic_type, "
@@ -25,7 +25,7 @@ def 이력목록조회(db: Session, workspace: str, domain: str, user_id: str) -
         {"ws": workspace, "dom": domain, "uid": user_id},
     ).mappings().all()
     items = [dict(r) for r in rows]
-    # 현재 할당 세션의 시작시간 (가장 이른 assigned_at)
+    # 현재 assign 세션의 시작시간 (가장 이른 assigned_at)
     assigned_at = db.execute(
         text(
             "SELECT MIN(assigned_at) FROM keyword_assignments "
@@ -36,7 +36,7 @@ def 이력목록조회(db: Session, workspace: str, domain: str, user_id: str) -
     return {"items": items, "total": len(items), "assigned_at": assigned_at}
 
 
-def 이력추가(
+def add_history(
     db: Session,
     workspace: str,
     domain: str,
@@ -68,10 +68,10 @@ def 이력추가(
         },
     )
     db.commit()
-    return {"id": result.lastrowid, "message": "기록 완료"}
+    return {"id": result.lastrowid, "message": "기록 complete"}
 
 
-def 이력취소(db: Session, history_id: int, user_id: str) -> dict:
+def cancel_history_service(db: Session, history_id: int, user_id: str) -> dict:
     """작업 취소/롤백 — undo 로직.
 
     1. work_history에서 해당 id 조회
@@ -102,7 +102,7 @@ def 이력취소(db: Session, history_id: int, user_id: str) -> dict:
     meta = MetaData()
 
     if dic_type in ("udic", "cndic"):
-        tbl = 사전테이블가져오기(domain.upper(), dic_type, meta)
+        tbl = get_dict_table(domain.upper(), dic_type, meta)
         # word NULL 시 head_word → tail_word 순서로 fallback
         word_to_use = row["word"] or row["head_word"] or row["tail_word"]
         try:
@@ -122,7 +122,7 @@ def 이력취소(db: Session, history_id: int, user_id: str) -> dict:
         except OperationalError:
             pass  # 테이블 미존재 시 graceful 처리
     elif dic_type == "thesaurus":
-        tbl = 사전테이블가져오기(domain.upper(), "thesaurus", meta)
+        tbl = get_dict_table(domain.upper(), "thesaurus", meta)
         try:
             if action_type == "add":
                 db.execute(tbl.delete().where(tbl.c._HEAD_WORD == row["head_word"]))
@@ -145,14 +145,14 @@ def 이력취소(db: Session, history_id: int, user_id: str) -> dict:
     db.commit()
 
     reversed_action = "delete" if action_type == "add" else "add"
-    return {"message": "취소 완료", "reversed_action": reversed_action}
+    return {"message": "취소 complete", "reversed_action": reversed_action}
 
 
-def 이력전체삭제(db: Session, workspace: str, domain: str) -> dict:
+def delete_all_history_service(db: Session, workspace: str, domain: str) -> dict:
     """워크스페이스 해제 시 전체 이력 삭제."""
     result = db.execute(
         text("DELETE FROM work_history WHERE workspace=:ws AND domain=:dom"),
         {"ws": workspace, "dom": domain},
     )
     db.commit()
-    return {"message": f"이력 {result.rowcount}건 삭제 완료"}
+    return {"message": f"이력 {result.rowcount}건 삭제 complete"}

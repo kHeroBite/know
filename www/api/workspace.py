@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.auth import 현재사용자가져오기
-from core.database import DB세션
+from api.auth import get_current_user
+from core.database import db_session
 from schemas.workspace import (
     MyPhaseRequest,
     MyPhaseResponse,
@@ -16,31 +16,31 @@ from schemas.workspace import (
     WorkspacePhaseResponse,
 )
 from services.workspace_service import (
-    phase전이,
-    phase역전이,
-    phase조회,
-    도메인목록,
-    도메인연결,
-    도메인삭제,
-    도메인이름변경,
-    도메인추가,
-    도메인추가진행률,
-    도메인jiana버전조회,
-    jiana버전목록,
-    연결취소,
-    사용자phase설정,
-    사용자phase조회,
-    old도메인목록,
-    사용자설정읽기,
-    사용자설정저장,
-    색상변경,
-    워크스페이스목록,
-    워크스페이스삭제,
-    워크스페이스생성,
-    워크스페이스해제,
-    진행률조회,
-    핫키설정읽기,
-    핫키설정저장,
+    phase_forward,
+    phase_backward,
+    get_phase,
+    list_domains_service,
+    link_domain,
+    delete_domain_ws,
+    rename_domain,
+    add_domain_service,
+    get_domain_add_progress_service,
+    get_domain_jiana_version,
+    list_jiana_versions_service,
+    unlink_domain_service,
+    set_user_phase,
+    get_user_phase,
+    list_old_domains,
+    read_user_settings,
+    save_user_settings,
+    change_color,
+    list_workspaces_service,
+    delete_workspace,
+    create_workspace,
+    release_workspace,
+    get_progress,
+    read_hotkey_settings,
+    save_hotkey_settings_service,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -85,7 +85,7 @@ class 도메인이름변경요청(BaseModel):
     new_name: str
 
 
-def _super권한확인(current: dict) -> None:
+def _check_super(current: dict) -> None:
     if current.get("auth") != "A":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자(A) 권한 필요")
 
@@ -93,209 +93,209 @@ def _super권한확인(current: dict) -> None:
 # ─── 리터럴 경로 (/{name} 보다 먼저 정의) ───
 
 @라우터.get("/preference")
-def 워크스페이스설정조회(
-    current: dict = Depends(현재사용자가져오기),
+def get_workspace_settings(
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """사용자 워크스페이스 설정 조회."""
-    pref = 사용자설정읽기(current.get("user_id", ""))
+    pref = read_user_settings(current.get("user_id", ""))
     if pref is None:
         return {"workspace": None, "domain": None, "color": None}
     return pref
 
 
 @라우터.put("/preference")
-def 워크스페이스설정저장처리(
+def save_workspace_settings(
     요청: 워크스페이스설정요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """사용자 워크스페이스 설정 저장."""
-    return 사용자설정저장(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color, 요청.last_menu)
+    return save_user_settings(current.get("user_id", ""), 요청.workspace, 요청.domain, 요청.color, 요청.last_menu)
 
 
 @라우터.get("/hotkeys")
-def 핫키설정조회(
-    current: dict = Depends(현재사용자가져오기),
+def get_hotkey_settings(
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """현재 사용자의 핫키 설정 조회."""
-    hotkeys = 핫키설정읽기(current.get("user_id", ""))
+    hotkeys = read_hotkey_settings(current.get("user_id", ""))
     return {"hotkeys": hotkeys}
 
 
 @라우터.put("/hotkeys")
-def 핫키설정저장처리(
+def save_hotkey_settings(
     요청: 핫키설정요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, str]:
     """핫키 설정 저장."""
-    return 핫키설정저장(current.get("user_id", ""), 요청.hotkeys)
+    return save_hotkey_settings_service(current.get("user_id", ""), 요청.hotkeys)
 
 
 @라우터.get("/domains")
-def 도메인목록조회(
-    _current: dict = Depends(현재사용자가져오기),
+def get_domain_list(
+    _current: dict = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
-    """도메인 목록 조회."""
-    return 도메인목록()
+    """도메인 list_tasks 조회."""
+    return list_domains_service()
 
 
 @라우터.get("/jiana-versions")
-def jiana버전목록조회(
-    _current: dict = Depends(현재사용자가져오기),
+def list_jiana_versions(
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """서버에 설치된 jiana 버전 목록 조회."""
-    return {"versions": jiana버전목록()}
+    """서버에 설치된 jiana 버전 list_tasks 조회."""
+    return {"versions": list_jiana_versions_service()}
 
 
 @라우터.get("/jiana-pref/{domain}")
-def 도메인jiana설정조회(
+def get_domain_jiana_settings(
     domain: str,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """도메인의 마지막 사용 jiana 버전 조회."""
-    version = 도메인jiana버전조회(domain)
+    version = get_domain_jiana_version(domain)
     return {"domain": domain, "jiana_version": version}
 
 
 @도메인관리라우터.get("/old-sources")
-def old도메인소스목록(
-    current: dict = Depends(현재사용자가져오기),
+def list_old_domain_sources(
+    current: dict = Depends(get_current_user),
 ) -> List[str]:
-    """old 영역 도메인 소스 목록 (super 전용)."""
-    _super권한확인(current)
-    return old도메인목록()
+    """old 영역 도메인 소스 list_tasks (super 전용)."""
+    _check_super(current)
+    return list_old_domains()
 
 
 @도메인관리라우터.get("/mysql-sources")
-def mysql도메인소스목록(
-    current: dict = Depends(현재사용자가져오기),
+def list_mysql_domain_sources(
+    current: dict = Depends(get_current_user),
 ) -> List[str]:
-    """MySQL DB에서 사전이 있는 도메인 소스 목록 (super 전용)."""
-    _super권한확인(current)
-    from services.dictionary_service import mysql도메인목록
-    return mysql도메인목록()
+    """MySQL DB에서 사전이 있는 도메인 소스 list_tasks (super 전용)."""
+    _check_super(current)
+    from services.dictionary_service import list_mysql_domains
+    return list_mysql_domains()
 
 
 @도메인관리라우터.post("", status_code=status.HTTP_201_CREATED)
-def 도메인추가처리(
+def add_domain_handler(
     요청: 도메인추가요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """도메인 추가 — 기존/old 소스에서 복사 + 사전 복사 옵션 (super 전용)."""
-    _super권한확인(current)
-    return 도메인추가(요청.name, 요청.base_source, 요청.base_name,
+    _check_super(current)
+    return add_domain_service(요청.name, 요청.base_source, 요청.base_name,
                      copy_dict_from=요청.copy_dict_from,
                      mysql_dict_from=요청.mysql_dict_from,
                      display_name=요청.display_name)
 
 
 @도메인관리라우터.get("/{name}/progress")
-def 도메인추가진행률조회(
+def get_domain_add_progress(
     name: str,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """도메인 복사 진행률 조회."""
-    진행 = 도메인추가진행률(name)
+    진행 = get_domain_add_progress_service(name)
     if 진행 is None:
         return {"status": "idle"}
     return 진행
 
 
 @도메인관리라우터.delete("/{name}")
-def 도메인삭제처리(
+def delete_domain_handler(
     name: str,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, str]:
     """도메인 삭제 (super 전용, 연결 중 차단)."""
-    _super권한확인(current)
+    _check_super(current)
     # 잔존 keyword_assignments 정리
     db.execute(text("DELETE FROM keyword_assignments WHERE domain=:dom"), {"dom": name})
     db.commit()
-    도메인삭제(name)
-    return {"message": f"도메인 삭제 완료: {name}"}
+    delete_domain_ws(name)
+    return {"message": f"도메인 삭제 complete: {name}"}
 
 
 @도메인관리라우터.put("/{name}/rename")
-def 도메인이름변경처리(
+def rename_domain_handler(
     name: str,
     요청: 도메인이름변경요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, str]:
     """도메인 이름 변경 (super 전용, 연결 중 차단)."""
-    _super권한확인(current)
-    return 도메인이름변경(name, 요청.new_name)
+    _check_super(current)
+    return rename_domain(name, 요청.new_name)
 
 
 # ─── 워크스페이스 CRUD ───
 
 @라우터.get("")
-def 워크스페이스목록조회(
-    _current: dict = Depends(현재사용자가져오기),
+def list_workspaces(
+    _current: dict = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
-    """워크스페이스 목록."""
-    return 워크스페이스목록()
+    """워크스페이스 list_tasks."""
+    return list_workspaces_service()
 
 
 @라우터.post("", status_code=status.HTTP_201_CREATED)
-def 워크스페이스추가(
+def add_workspace(
     요청: 워크스페이스생성요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 생성 (super 전용)."""
-    _super권한확인(current)
-    return 워크스페이스생성(요청.name, 요청.color)
+    _check_super(current)
+    return create_workspace(요청.name, 요청.color)
 
 
 # ─── /{name} 파라미터 경로 (반드시 리터럴 경로 뒤에) ───
 
 @라우터.delete("/{name}", status_code=status.HTTP_200_OK)
-def 워크스페이스제거(
+def remove_workspace(
     name: str,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, str]:
     """워크스페이스 삭제 (super 전용). USED 상태면 409 반환."""
-    _super권한확인(current)
-    워크스페이스삭제(name)
-    return {"message": f"워크스페이스 삭제 완료: {name}"}
+    _check_super(current)
+    delete_workspace(name)
+    return {"message": f"워크스페이스 삭제 complete: {name}"}
 
 
 @라우터.post("/{name}/connect")
-def 도메인연결처리(
+def link_domain_handler(
     name: str,
     요청: 도메인연결요청,
-    current: dict = Depends(현재사용자가져오기),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """도메인 연결."""
     이름 = current.get("name", "")
     아이디 = current.get("user_id", "")
     connected_by = f"{이름}({아이디})" if 이름 else 아이디
-    return 도메인연결(name, 요청.domain, connected_by, jiana_version=요청.jiana_version)
+    return link_domain(name, 요청.domain, connected_by, jiana_version=요청.jiana_version)
 
 
 @라우터.post("/{name}/cancel-connect")
-def 도메인연결취소(
+def unlink_domain(
     name: str,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """연결 중인 복사 작업 취소."""
-    return 연결취소(name)
+    return unlink_domain_service(name)
 
 
 @라우터.post("/{name}/release")
-def 워크스페이스해제처리(
+def release_workspace_handler(
     name: str,
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """워크스페이스 해제 + keyword_assignments 자동 초기화."""
-    from services.workspace_service import _상태읽기
-    상태 = _상태읽기()
+    """워크스페이스 해제 + keyword_assignments 자동 initialize."""
+    from services.workspace_service import _read_state
+    상태 = _read_state()
     도메인 = 상태.get(name, {}).get("domain")
     if 도메인:
-        # 프리징 데이터
+        # freeze_service 데이터
         db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
                    {"ws": name, "dom": 도메인})
-        # 전처리 실행 로그 (domain 매칭 + 빈 domain 레코드도 정리)
+        # 전처리 run_phase1_service 로그 (domain 매칭 + 빈 domain 레코드도 정리)
         db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL)"),
                    {"dom": 도메인})
         db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL"),
@@ -312,82 +312,82 @@ def 워크스페이스해제처리(
         db.commit()
         # 워크스페이스 사전 테이블 DROP
         try:
-            from models.dictionary import ws_사전테이블삭제
+            from models.dictionary import ws_drop_dict_table
             from core.database import 엔진
-            ws_사전테이블삭제(name, 도메인, 엔진)
+            ws_drop_dict_table(name, 도메인, 엔진)
         except Exception:
             pass  # 테이블 미존재 시 무시
-    return 워크스페이스해제(name)
+    return release_workspace(name)
 
 
 @라우터.put("/{name}/color")
-def 워크스페이스색상변경(
+def change_workspace_color(
     name: str,
     요청: 색상변경요청,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 테마 색상 변경."""
-    return 색상변경(name, 요청.color)
+    return change_color(name, 요청.color)
 
 
 @라우터.post("/{name}/phase/advance", response_model=WorkspacePhaseResponse)
-def 워크스페이스phase전이(
+def workspace_phase_forward(
     name: str,
     요청: PhaseAdvanceRequest,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 phase 순방향 전이."""
-    return phase전이(name, 요청.to)
+    return phase_forward(name, 요청.to)
 
 
 @라우터.post("/{name}/phase/revert", response_model=WorkspacePhaseResponse)
-def 워크스페이스phase역전이(
+def workspace_phase_backward(
     name: str,
     요청: PhaseAdvanceRequest,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 phase 역방향 전이."""
-    return phase역전이(name, 요청.to)
+    return phase_backward(name, 요청.to)
 
 
 @라우터.get("/{name}/phase")
-def 워크스페이스phase조회(
+def get_workspace_phase(
     name: str,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """현재 워크스페이스 phase 조회."""
-    return {"phase": phase조회(name)}
+    return {"phase": get_phase(name)}
 
 
 @라우터.get("/{name}/my-phase", response_model=MyPhaseResponse)
-def 사용자phase조회처리(
+def get_user_phase_handler(
     name: str,
     domain: str,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """현재 사용자의 myPhase 조회."""
-    return 사용자phase조회(db, name, domain, current.get("user_id", ""))
+    return get_user_phase(db, name, domain, current.get("user_id", ""))
 
 
 @라우터.put("/{name}/my-phase", response_model=MyPhaseResponse)
-def 사용자phase설정처리(
+def set_user_phase_handler(
     name: str,
     요청: MyPhaseRequest,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """사용자 myPhase 변경."""
-    return 사용자phase설정(db, name, 요청.domain, current.get("user_id", ""), 요청.phase)
+    return set_user_phase(db, name, 요청.domain, current.get("user_id", ""), 요청.phase)
 
 
 @라우터.get("/{name}/progress")
-def 복사진행률조회(
+def get_copy_progress(
     name: str,
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """도메인 복사 진행률 조회."""
-    진행 = 진행률조회(name)
+    진행 = get_progress(name)
     if 진행 is None:
         return {"status": "idle"}
     result: Dict[str, Any] = {"percent": 진행["percent"], "status": 진행["status"]}

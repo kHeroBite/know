@@ -9,15 +9,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, insert, update, delete, func, case, MetaData
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
-from models.dictionary import 사이트명검증, 사전테이블가져오기
+from models.dictionary import validate_site_name, get_dict_table
 
 DOMAIN_DIR = "/home/know/apps/know-ops/domain"
 
-# 사전 타입 허용 목록
+# 사전 타입 허용 list_tasks
 _허용사전타입 = {"udic", "cndic"}
 
 
-def 단어정규화(word: str) -> str:
+def normalize_word(word: str) -> str:
     """Java modifyWord() 동일 로직: 대문자 + BOM/쉼표/공백 제거."""
     if not word:
         return word
@@ -28,20 +28,20 @@ def 단어정규화(word: str) -> str:
     return result
 
 
-def _사전테이블(db: Session, site: str, dic_type: str):
+def _dict_table(db: Session, site: str, dic_type: str):
     """세션 바인드 엔진의 메타데이터로 사전 테이블 반환."""
     meta = MetaData()
-    return 사전테이블가져오기(site.upper(), dic_type, meta)
+    return get_dict_table(site.upper(), dic_type, meta)
 
 
-def _타입검증(dic_type: str) -> None:
+def _validate_type(dic_type: str) -> None:
     if dic_type not in _허용사전타입:
         raise HTTPException(status_code=400, detail=f"알 수 없는 사전 타입: {dic_type} (허용: {_허용사전타입})")
 
 
 # ─── UDIC / CNDIC ──────────────────────────────────────────────────
 
-def 사전목록조회(
+def get_dict_list(
     db: Session,
     site: str,
     dic_type: str,
@@ -49,15 +49,15 @@ def 사전목록조회(
     size: int = 50,
     search: Optional[str] = None,
 ) -> dict:
-    """사전 항목 목록 페이지네이션 조회 (udic/cndic)."""
-    _타입검증(dic_type)
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, dic_type)
+    """사전 항목 list_tasks 페이지네이션 조회 (udic/cndic)."""
+    _validate_type(dic_type)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, dic_type)
     offset = (page - 1) * size
 
     where_clause = []
     if search:
-        키워드 = 단어정규화(search)
+        키워드 = normalize_word(search)
         where_clause.append(tbl.c._WORD.like(f"%{키워드}%"))
 
     cnt_stmt = select(func.count()).select_from(tbl)
@@ -82,12 +82,12 @@ def 사전목록조회(
     return {"items": items, "total": total, "page": page, "size": size}
 
 
-def 사전항목추가(db: Session, site: str, dic_type: str, word: str, memo: Optional[str] = None, user_id: Optional[str] = None) -> dict:
-    """사전 항목 추가 (단어정규화 적용)."""
-    _타입검증(dic_type)
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, dic_type)
-    정규화단어 = 단어정규화(word)
+def add_dict_item_service(db: Session, site: str, dic_type: str, word: str, memo: Optional[str] = None, user_id: Optional[str] = None) -> dict:
+    """사전 항목 추가 (normalize_word 적용)."""
+    _validate_type(dic_type)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, dic_type)
+    정규화단어 = normalize_word(word)
 
     # 중복 확인
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == 정규화단어)).first()
@@ -99,12 +99,12 @@ def 사전항목추가(db: Session, site: str, dic_type: str, word: str, memo: O
     return {"word": 정규화단어, "memo": memo}
 
 
-def 사전항목수정(db: Session, site: str, dic_type: str, word: str, memo: Optional[str] = None) -> dict:
+def update_dict_item_service(db: Session, site: str, dic_type: str, word: str, memo: Optional[str] = None) -> dict:
     """사전 항목 메모 수정."""
-    _타입검증(dic_type)
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, dic_type)
-    정규화단어 = 단어정규화(word)
+    _validate_type(dic_type)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, dic_type)
+    정규화단어 = normalize_word(word)
 
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == 정규화단어)).first()
     if not 존재:
@@ -115,12 +115,12 @@ def 사전항목수정(db: Session, site: str, dic_type: str, word: str, memo: O
     return {"word": 정규화단어, "memo": memo}
 
 
-def 사전항목삭제(db: Session, site: str, dic_type: str, word: str) -> None:
+def delete_dict_item_service(db: Session, site: str, dic_type: str, word: str) -> None:
     """사전 항목 삭제."""
-    _타입검증(dic_type)
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, dic_type)
-    정규화단어 = 단어정규화(word)
+    _validate_type(dic_type)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, dic_type)
+    정규화단어 = normalize_word(word)
 
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == 정규화단어)).first()
     if not 존재:
@@ -130,7 +130,7 @@ def 사전항목삭제(db: Session, site: str, dic_type: str, word: str) -> None
     db.commit()
 
 
-def 일괄항목추가(
+def bulk_add_items(
     db: Session,
     site: str,
     dic_type: str,
@@ -138,13 +138,13 @@ def 일괄항목추가(
     user_id: Optional[str] = None,
 ) -> dict:
     """사전 항목 일괄 등록 (각 word 정규화 후 INSERT, 중복은 건너뜀)."""
-    _타입검증(dic_type)
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, dic_type)
+    _validate_type(dic_type)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, dic_type)
     성공 = 0
     건너뜀 = 0
     for item in items:
-        정규화단어 = 단어정규화(item.get("word", ""))
+        정규화단어 = normalize_word(item.get("word", ""))
         if not 정규화단어:
             건너뜀 += 1
             continue
@@ -163,17 +163,17 @@ def 일괄항목추가(
     return {"inserted": 성공, "skipped": 건너뜀}
 
 
-# ─── THESAURUS (_HEAD_WORD PK, _TAIL_WORD = 쉼표 구분 목록) ────────
+# ─── THESAURUS (_HEAD_WORD PK, _TAIL_WORD = 쉼표 구분 list_tasks) ────────
 
-def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50, search: Optional[str] = None) -> dict:
-    """유의어 목록 페이지네이션 조회."""
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, "thesaurus")
+def get_synonym_list(db: Session, site: str, page: int = 1, size: int = 50, search: Optional[str] = None) -> dict:
+    """유의어 list_tasks 페이지네이션 조회."""
+    validate_site_name(site)
+    tbl = _dict_table(db, site, "thesaurus")
     offset = (page - 1) * size
 
     where_clause = []
     if search:
-        키워드 = 단어정규화(search)
+        키워드 = normalize_word(search)
         where_clause.append(tbl.c._HEAD_WORD.like(f"%{키워드}%"))
 
     cnt_stmt = select(func.count()).select_from(tbl)
@@ -198,11 +198,11 @@ def 유의어목록조회(db: Session, site: str, page: int = 1, size: int = 50,
     return {"items": items, "total": total, "page": page, "size": size}
 
 
-def 유의어추가(db: Session, site: str, head_word: str, tail_word: str, memo: Optional[str] = None, user_id: Optional[str] = None) -> dict:
+def add_synonym_service(db: Session, site: str, head_word: str, tail_word: str, memo: Optional[str] = None, user_id: Optional[str] = None) -> dict:
     """유의어 추가."""
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, "thesaurus")
-    정규화head = 단어정규화(head_word)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, "thesaurus")
+    정규화head = normalize_word(head_word)
     존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == 정규화head)).first()
     if 존재:
         raise HTTPException(status_code=400, detail=f"이미 존재하는 유의어 헤드: {정규화head}")
@@ -211,11 +211,11 @@ def 유의어추가(db: Session, site: str, head_word: str, tail_word: str, memo
     return {"head_word": 정규화head, "tail_word": tail_word, "memo": memo}
 
 
-def 유의어수정(db: Session, site: str, head_word: str, tail_word: str, memo: Optional[str] = None) -> dict:
+def update_synonym_service(db: Session, site: str, head_word: str, tail_word: str, memo: Optional[str] = None) -> dict:
     """유의어 수정."""
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, "thesaurus")
-    정규화head = 단어정규화(head_word)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, "thesaurus")
+    정규화head = normalize_word(head_word)
     존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == 정규화head)).first()
     if not 존재:
         raise HTTPException(status_code=404, detail=f"유의어를 찾을 수 없음: {정규화head}")
@@ -224,11 +224,11 @@ def 유의어수정(db: Session, site: str, head_word: str, tail_word: str, memo
     return {"head_word": 정규화head, "tail_word": tail_word, "memo": memo}
 
 
-def 유의어삭제(db: Session, site: str, head_word: str) -> None:
+def delete_synonym_service(db: Session, site: str, head_word: str) -> None:
     """유의어 삭제."""
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, "thesaurus")
-    정규화head = 단어정규화(head_word)
+    validate_site_name(site)
+    tbl = _dict_table(db, site, "thesaurus")
+    정규화head = normalize_word(head_word)
     존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == 정규화head)).first()
     if not 존재:
         raise HTTPException(status_code=404, detail=f"유의어를 찾을 수 없음: {정규화head}")
@@ -236,14 +236,14 @@ def 유의어삭제(db: Session, site: str, head_word: str) -> None:
     db.commit()
 
 
-def 유의어일괄추가(db: Session, site: str, items: List[dict], user_id: Optional[str] = None) -> dict:
+def bulk_add_synonyms_service(db: Session, site: str, items: List[dict], user_id: Optional[str] = None) -> dict:
     """유의어 일괄 등록."""
-    사이트명검증(site)
-    tbl = _사전테이블(db, site, "thesaurus")
+    validate_site_name(site)
+    tbl = _dict_table(db, site, "thesaurus")
     성공 = 0
     건너뜀 = 0
     for item in items:
-        정규화head = 단어정규화(item.get("head_word", ""))
+        정규화head = normalize_word(item.get("head_word", ""))
         if not 정규화head:
             건너뜀 += 1
             continue
@@ -265,14 +265,14 @@ def 유의어일괄추가(db: Session, site: str, items: List[dict], user_id: Op
 
 # ─── 파일에서 사전 임포트 ─────────────────────────────────────────
 
-def _사전파일찾기(도메인경로: str, patterns: List[str], 추가경로: Optional[List[str]] = None) -> Optional[str]:
+def _find_dict_file(도메인경로: str, patterns: List[str], 추가경로: Optional[List[str]] = None) -> Optional[str]:
     """도메인 디렉토리에서 패턴에 맞는 사전 파일 찾기. 추가경로도 탐색."""
-    탐색경로목록 = [도메인경로]
+    탐색경로list_tasks = [도메인경로]
     if 추가경로:
-        탐색경로목록.extend(추가경로)
+        탐색경로list_tasks.extend(추가경로)
     # 패턴 우선순위가 경로보다 높음 (quasisynonym이 addedsyn보다 우선)
     for pattern in patterns:
-        for 경로 in 탐색경로목록:
+        for 경로 in 탐색경로list_tasks:
             if not os.path.isdir(경로):
                 continue
             # 루트에서 먼저 탐색
@@ -286,20 +286,20 @@ def _사전파일찾기(도메인경로: str, patterns: List[str], 추가경로:
     return None
 
 
-def _파일읽기(파일경로: str) -> List[str]:
-    """파일을 읽어 줄 목록 반환 (빈줄 제거, BOM/CR 처리)."""
-    줄목록 = []
+def _read_file(파일경로: str) -> List[str]:
+    """파일을 읽어 줄 list_tasks 반환 (빈줄 제거, BOM/CR 처리)."""
+    줄list_tasks = []
     for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
         try:
             with open(파일경로, "r", encoding=enc) as f:
                 for line in f:
                     줄 = line.rstrip("\r\n").strip()
                     if 줄:
-                        줄목록.append(줄)
-            return 줄목록
+                        줄list_tasks.append(줄)
+            return 줄list_tasks
         except (UnicodeDecodeError, UnicodeError):
             continue
-    return 줄목록
+    return 줄list_tasks
 
 
 # ─── 파일 건수 미리보기 ──────────────────────────────────────────
@@ -311,21 +311,21 @@ _사전파일패턴 = {
 }
 
 
-def _추가탐색경로(site: str) -> List[str]:
-    """사이트별 추가 탐색 경로 목록 반환."""
+def _extra_search_paths(site: str) -> List[str]:
+    """사이트별 추가 탐색 경로 list_tasks 반환."""
     db경로 = f"/home/know/apps/data/{site.lower()}_db"
     return [db경로] if os.path.isdir(db경로) else []
 
 
-def 사전파일건수미리보기(site: str) -> dict:
+def preview_dict_file_count(site: str) -> dict:
     """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
-    추가경로 = _추가탐색경로(site)
+    추가경로 = _extra_search_paths(site)
     if not os.path.isdir(도메인경로) and not 추가경로:
         return 결과
     for dic_type, patterns in _사전파일패턴.items():
-        파일경로 = _사전파일찾기(도메인경로, patterns, 추가경로=추가경로)
+        파일경로 = _find_dict_file(도메인경로, patterns, 추가경로=추가경로)
         if 파일경로 and os.path.isfile(파일경로):
             try:
                 with open(파일경로, 'rb') as f:
@@ -340,13 +340,13 @@ def 사전파일건수미리보기(site: str) -> dict:
 _임포트진행률: dict = {}
 
 
-def 비동기파일임포트시작(site: str, user_id: str = None,
+def start_async_file_import(site: str, user_id: str = None,
                       import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True,
                       mode: str = "create") -> str:
     """백그라운드 스레드에서 임포트 시작. run_id 반환."""
     import uuid as uuid_mod
     run_id = uuid_mod.uuid4().hex[:8]
-    미리보기 = 사전파일건수미리보기(site)
+    미리보기 = preview_dict_file_count(site)
     전체건수 = 0
     if import_udic:
         전체건수 += 미리보기.get("udic", 0)
@@ -359,11 +359,11 @@ def 비동기파일임포트시작(site: str, user_id: str = None,
         "percent": 0, "stage": "preparing", "result": None, "run_id": run_id,
     }
 
-    def _작업():
+    def _task():
         from core.database import 세션팩토리
         try:
             db = 세션팩토리()
-            결과 = _동기파일임포트(db, site, user_id=user_id, progress_site=site,
+            결과 = _sync_file_import(db, site, user_id=user_id, progress_site=site,
                               import_udic=import_udic, import_cndic=import_cndic, import_thesaurus=import_thesaurus,
                               mode=mode)
             _임포트진행률[site]["status"] = "done"
@@ -374,16 +374,16 @@ def 비동기파일임포트시작(site: str, user_id: str = None,
             _임포트진행률[site]["status"] = "error"
             _임포트진행률[site]["result"] = {"error": str(e)}
 
-    threading.Thread(target=_작업, daemon=True).start()
+    threading.Thread(target=_task, daemon=True).start()
     return run_id
 
 
-def 임포트진행률조회(site: str) -> dict:
-    """진행률 조회. 완료/오류 시 해당 결과도 포함."""
+def get_import_progress_service(site: str) -> dict:
+    """진행률 조회. complete/오류 시 해당 결과도 포함."""
     return _임포트진행률.get(site, {"status": "idle"})
 
 
-def _진행률갱신(progress_site: str, current: int, stage: str = None):
+def _update_progress(progress_site: str, current: int, stage: str = None):
     """진행률 딕셔너리 갱신 헬퍼."""
     진행 = _임포트진행률.get(progress_site)
     if not 진행:
@@ -394,7 +394,7 @@ def _진행률갱신(progress_site: str, current: int, stage: str = None):
     진행["percent"] = int(current / 진행["total"] * 100) if 진행["total"] > 0 else 0
 
 
-def _udic_cndic_파일임포트(
+def _import_udic_cndic_file(
     db: Session, site: str, dic_type: str, 파일경로: str,
     user_id: Optional[str] = None,
     progress_site: Optional[str] = None, progress_offset: int = 0,
@@ -402,18 +402,18 @@ def _udic_cndic_파일임포트(
 ) -> dict:
     """udic/cndic .ks 파일을 읽어 DB에 INSERT.
     mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE)."""
-    tbl = _사전테이블(db, site, dic_type)
+    tbl = _dict_table(db, site, dic_type)
 
     if mode == "create":
         db.execute(delete(tbl))
 
-    줄목록 = _파일읽기(파일경로)
+    줄list_tasks = _read_file(파일경로)
     삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
     중복set: set = set()
     처리수 = 0
-    for 줄 in 줄목록:
+    for 줄 in 줄list_tasks:
         parts = 줄.split("\t", 1)
-        word = 단어정규화(parts[0].strip())
+        word = normalize_word(parts[0].strip())
         memo = parts[1].strip() if len(parts) > 1 else None
         if not word or word in 중복set:
             continue
@@ -451,14 +451,14 @@ def _udic_cndic_파일임포트(
 
         처리수 += 1
         if progress_site and 처리수 % 1000 == 0:
-            _진행률갱신(progress_site, progress_offset + 처리수)
+            _update_progress(progress_site, progress_offset + 처리수)
     if progress_site:
-        _진행률갱신(progress_site, progress_offset + 처리수)
+        _update_progress(progress_site, progress_offset + 처리수)
     db.commit()
     return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
 
-def _thesaurus_파일임포트(
+def _import_thesaurus_file(
     db: Session, site: str, 파일경로: str,
     user_id: Optional[str] = None,
     progress_site: Optional[str] = None, progress_offset: int = 0,
@@ -471,24 +471,24 @@ def _thesaurus_파일임포트(
     1) 탭 구분: head_word\\ttail_word[\\tmemo]
     2) 그룹 형식: 빈줄로 구분된 단어 그룹 (첫 단어=head, 나머지=tail 쉼표 결합)
     """
-    tbl = _사전테이블(db, site, "thesaurus")
+    tbl = _dict_table(db, site, "thesaurus")
 
     if mode == "create":
         db.execute(delete(tbl))
 
-    빈줄포함목록 = []
+    빈줄포함list_tasks = []
     for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
         try:
             with open(파일경로, "r", encoding=enc) as f:
                 for line in f:
                     stripped = line.rstrip("\r\n")
-                    빈줄포함목록.append(stripped.strip())
+                    빈줄포함list_tasks.append(stripped.strip())
             break
         except (UnicodeDecodeError, UnicodeError):
             continue
 
     # 형식 감지 (첫 10줄 기준)
-    비공백줄 = [l for l in 빈줄포함목록 if l]
+    비공백줄 = [l for l in 빈줄포함list_tasks if l]
     탭형식 = any("\t" in l for l in 비공백줄[:10])
     쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
 
@@ -496,7 +496,7 @@ def _thesaurus_파일임포트(
     중복set: set = set()
     처리수 = 0
 
-    def _thesaurus_행처리(head: str, tail: str, memo: Optional[str] = None):
+    def _process_thesaurus_row(head: str, tail: str, memo: Optional[str] = None):
         nonlocal 삽입수, 업데이트수, 스킵수, 처리수
         if mode == "create":
             db.execute(insert(tbl).values(
@@ -529,38 +529,38 @@ def _thesaurus_파일임포트(
                 삽입수 += 1
         처리수 += 1
         if progress_site and 처리수 % 1000 == 0:
-            _진행률갱신(progress_site, progress_offset + 처리수)
+            _update_progress(progress_site, progress_offset + 처리수)
 
     if 쉼표형식:
         # 쉼표 구분: 대표어,유의어1,유의어2,... (quasisynonym 형식)
         for 줄 in 비공백줄:
             parts = 줄.split(",")
-            head = 단어정규화(parts[0].strip())
+            head = normalize_word(parts[0].strip())
             tail_parts = [p.strip() for p in parts[1:] if p.strip()]
             tail = ",".join(tail_parts)
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            _thesaurus_행처리(head, tail)
+            _process_thesaurus_row(head, tail)
     elif 탭형식:
         for 줄 in 비공백줄:
             parts = 줄.split("\t")
             if len(parts) < 2:
                 continue
-            head = 단어정규화(parts[0].strip())
+            head = normalize_word(parts[0].strip())
             tail = parts[1].strip()
             memo = parts[2].strip() if len(parts) > 2 else None
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            _thesaurus_행처리(head, tail, memo)
+            _process_thesaurus_row(head, tail, memo)
     else:
         # 그룹 형식: 빈줄로 구분
-        빈줄있음 = any(l == "" for l in 빈줄포함목록)
+        빈줄있음 = any(l == "" for l in 빈줄포함list_tasks)
         if 빈줄있음:
             groups: List[List[str]] = []
             현재그룹: List[str] = []
-            for 줄 in 빈줄포함목록:
+            for 줄 in 빈줄포함list_tasks:
                 if 줄:
                     현재그룹.append(줄)
                 else:
@@ -570,28 +570,28 @@ def _thesaurus_파일임포트(
             if 현재그룹:
                 groups.append(현재그룹)
             for grp in groups:
-                head = 단어정규화(grp[0])
-                tail_words = [단어정규화(w) for w in grp[1:] if w.strip()]
+                head = normalize_word(grp[0])
+                tail_words = [normalize_word(w) for w in grp[1:] if w.strip()]
                 if not head or head in 중복set:
                     continue
                 중복set.add(head)
-                _thesaurus_행처리(head, ",".join(tail_words) if tail_words else "")
+                _process_thesaurus_row(head, ",".join(tail_words) if tail_words else "")
         else:
             # 빈줄 없는 그룹 형식: 각 단어를 개별 head_word로 등록
             for 줄 in 비공백줄:
-                word = 단어정규화(줄)
+                word = normalize_word(줄)
                 if not word or word in 중복set:
                     continue
                 중복set.add(word)
-                _thesaurus_행처리(word, "")
+                _process_thesaurus_row(word, "")
 
     if progress_site:
-        _진행률갱신(progress_site, progress_offset + 처리수)
+        _update_progress(progress_site, progress_offset + 처리수)
     db.commit()
     return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
 
-def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None,
+def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None,
                    import_udic: bool = True, import_cndic: bool = True, import_thesaurus: bool = True,
                    mode: str = "create") -> dict:
     """도메인 디렉토리에서 사전 파일을 읽어 DB에 임포트.
@@ -599,9 +599,9 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
     mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE).
     반환: {"udic": {...}, "cndic": {...}, "thesaurus": {...}}
     """
-    사이트명검증(site)
+    validate_site_name(site)
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
-    추가경로 = _추가탐색경로(site)
+    추가경로 = _extra_search_paths(site)
     if not os.path.isdir(도메인경로) and not 추가경로:
         raise HTTPException(status_code=404, detail=f"도메인 디렉토리를 찾을 수 없음: {site}")
 
@@ -612,47 +612,47 @@ def _동기파일임포트(db: Session, site: str, user_id: Optional[str] = None
     # UDIC: user.ks 또는 user*.ks
     if import_udic:
         if progress_site:
-            _진행률갱신(progress_site, 누적, "udic")
-        udic파일 = _사전파일찾기(도메인경로, ["user.ks", "user*.ks"], 추가경로=추가경로)
+            _update_progress(progress_site, 누적, "udic")
+        udic파일 = _find_dict_file(도메인경로, ["user.ks", "user*.ks"], 추가경로=추가경로)
         if udic파일:
-            결과["udic"] = _udic_cndic_파일임포트(db, site, "udic", udic파일, user_id, progress_site, 누적, mode=mode)
+            결과["udic"] = _import_udic_cndic_file(db, site, "udic", udic파일, user_id, progress_site, 누적, mode=mode)
             누적 += 결과["udic"]["inserted"] + 결과["udic"]["updated"] + 결과["udic"]["skipped"]
 
     # CNDIC: cnlist.ks 또는 cnlist*.ks
     if import_cndic:
         if progress_site:
-            _진행률갱신(progress_site, 누적, "cndic")
-        cndic파일 = _사전파일찾기(도메인경로, ["cnlist.ks", "cnlist*.ks"], 추가경로=추가경로)
+            _update_progress(progress_site, 누적, "cndic")
+        cndic파일 = _find_dict_file(도메인경로, ["cnlist.ks", "cnlist*.ks"], 추가경로=추가경로)
         if cndic파일:
-            결과["cndic"] = _udic_cndic_파일임포트(db, site, "cndic", cndic파일, user_id, progress_site, 누적, mode=mode)
+            결과["cndic"] = _import_udic_cndic_file(db, site, "cndic", cndic파일, user_id, progress_site, 누적, mode=mode)
             누적 += 결과["cndic"]["inserted"] + 결과["cndic"]["updated"] + 결과["cndic"]["skipped"]
 
     # THESAURUS: quasisynonym 또는 addedsyn
     if import_thesaurus:
         if progress_site:
-            _진행률갱신(progress_site, 누적, "thesaurus")
-        thesaurus파일 = _사전파일찾기(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
+            _update_progress(progress_site, 누적, "thesaurus")
+        thesaurus파일 = _find_dict_file(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
         if thesaurus파일:
-            결과["thesaurus"] = _thesaurus_파일임포트(db, site, thesaurus파일, user_id, progress_site, 누적, mode=mode)
+            결과["thesaurus"] = _import_thesaurus_file(db, site, thesaurus파일, user_id, progress_site, 누적, mode=mode)
 
     return 결과
 
 
-def 파일에서사전임포트(db: Session, site: str, user_id: Optional[str] = None) -> dict:
+def import_dict_from_file(db: Session, site: str, user_id: Optional[str] = None) -> dict:
     """동기 임포트 래퍼 (기존 호환)."""
-    return _동기파일임포트(db, site, user_id=user_id)
+    return _sync_file_import(db, site, user_id=user_id)
 
 
 # ─── 도메인 사전 복사 ─────────────────────────────────────────────
 
-def 도메인사전복사(db: Session, source_site: str, target_site: str) -> dict:
+def copy_domain_dict(db: Session, source_site: str, target_site: str) -> dict:
     """기존 SQLite 도메인의 사전 3종(UDIC/CNDIC/THESAURUS)을 새 도메인으로 복사."""
-    사이트명검증(source_site)
-    사이트명검증(target_site)
+    validate_site_name(source_site)
+    validate_site_name(target_site)
     결과 = {}
     for dic_type in ("udic", "cndic", "thesaurus"):
-        src_tbl = _사전테이블(db, source_site, dic_type)
-        tgt_tbl = _사전테이블(db, target_site, dic_type)
+        src_tbl = _dict_table(db, source_site, dic_type)
+        tgt_tbl = _dict_table(db, target_site, dic_type)
         db.execute(delete(tgt_tbl))
         rows = db.execute(select(src_tbl)).mappings().all()
         if dic_type in ("udic", "cndic"):
@@ -672,8 +672,8 @@ def 도메인사전복사(db: Session, source_site: str, target_site: str) -> di
     return 결과
 
 
-def mysql도메인목록() -> list:
-    """MySQL know_mng DB에서 사전 테이블이 있는 도메인명 목록 반환."""
+def list_mysql_domains() -> list:
+    """MySQL know_mng DB에서 사전 테이블이 있는 도메인명 list_tasks 반환."""
     import pymysql
     try:
         conn = pymysql.connect(
@@ -693,12 +693,12 @@ def mysql도메인목록() -> list:
         return []
 
 
-def mysql에서사전마이그레이션(target_site: str, mysql_site: str) -> dict:
+def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
     """MySQL의 사전 3종(UDIC/CNDIC/THESAURUS)을 SQLite 새 도메인으로 마이그레이션."""
     import pymysql
     from core.database import 세션팩토리
 
-    사이트명검증(target_site)
+    validate_site_name(target_site)
 
     mysql_conn = pymysql.connect(
         host="localhost", user="root", password="@!roqkftjqj#",
@@ -710,7 +710,7 @@ def mysql에서사전마이그레이션(target_site: str, mysql_site: str) -> di
     try:
         for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS")]:
             mysql_tbl = f"{mysql_site}{suffix}"
-            tgt_tbl = _사전테이블(db, target_site, dic_type)
+            tgt_tbl = _dict_table(db, target_site, dic_type)
 
             try:
                 cur = mysql_conn.cursor()

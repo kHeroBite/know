@@ -9,7 +9,7 @@ from fastapi import APIRouter, UploadFile, File, Query, WebSocket, WebSocketDisc
 from typing import Optional
 from pydantic import BaseModel
 
-from api.auth import 현재사용자가져오기
+from api.auth import get_current_user
 
 라우터 = APIRouter()
 ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
@@ -40,14 +40,14 @@ class Phase1실행요청(BaseModel):
     count_value: int = 5         # both 모드: 최소 N회
 
 @라우터.get("/preprocess/files/{folder}")
-async def 파일목록(folder: str, workspace: str = Query("")):
+async def list_phase1_files(folder: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일목록(folder, workspace)
+    return await Phase1서비스.list_phase1_files(folder, workspace)
 
 @라우터.post("/preprocess/files/{folder}")
-async def 파일업로드(folder: str, file: UploadFile = File(...), workspace: str = Query("")):
+async def upload_file_service(folder: str, file: UploadFile = File(...), workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     safe_name = os.path.basename(file.filename or "")
@@ -59,28 +59,28 @@ async def 파일업로드(folder: str, file: UploadFile = File(...), workspace: 
         raise HTTPException(status_code=422, detail=f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
     logger.info(f"파일 업로드: name={safe_name}, size={len(content)}, content_type={ct}, workspace={workspace}")
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일저장(folder, safe_name, content, workspace)
+    return await Phase1서비스.save_file(folder, safe_name, content, workspace)
 
 @라우터.delete("/preprocess/files/{folder}/{filename}")
-async def 파일삭제(folder: str, filename: str, workspace: str = Query("")):
+async def delete_phase1_file(folder: str, filename: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
     safe_name = os.path.basename(filename)
     from services.phase1_service import Phase1서비스
-    return await Phase1서비스.파일삭제(folder, safe_name, workspace)
+    return await Phase1서비스.delete_phase1_file(folder, safe_name, workspace)
 
 @라우터.post("/preprocess/run")
-async def 실행시작(요청: Phase1실행요청, background_tasks: BackgroundTasks):
+async def start_execution(요청: Phase1실행요청, background_tasks: BackgroundTasks):
     if 요청.category not in ALLOWED_FOLDERS:
         raise HTTPException(status_code=422, detail=f"카테고리 오류: {요청.category}")
     run_id = str(uuid.uuid4())
     from services.phase1_service import Phase1서비스
-    await Phase1서비스.실행DB등록(run_id, 요청)
-    background_tasks.add_task(Phase1서비스.실행, run_id, 요청)
+    await Phase1서비스.register_execution_db(run_id, 요청)
+    background_tasks.add_task(Phase1서비스.run_phase1_service, run_id, 요청)
     return {"run_id": run_id}
 
 @라우터.get("/preprocess/view-file")
-async def 파일보기(path: str = Query("")):
+async def view_file(path: str = Query("")):
     """서버 파일 내용 읽기 (work 디렉토리 내 파일만)"""
     if not path or "/work/" not in path:
         raise HTTPException(status_code=400, detail="work 디렉토리 파일만 조회 가능")
@@ -93,7 +93,7 @@ async def 파일보기(path: str = Query("")):
 
 
 @라우터.get("/preprocess/step-status")
-async def 단계상태확인(workspace: str = Query("")):
+async def check_step_status(workspace: str = Query("")):
     """각 단계별 결과 파일 존재 여부 반환."""
     WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
     work_dir = os.path.join(WORKSPACE_BASE, workspace, "build", "work")
@@ -107,8 +107,8 @@ async def 단계상태확인(workspace: str = Query("")):
 
 
 @라우터.get("/preprocess/logs/{run_id}")
-async def 실행로그조회(run_id: str):
-    """과거 실행 로그 DB에서 조회"""
+async def get_execution_log(run_id: str):
+    """과거 run_phase1_service 로그 DB에서 조회"""
     from core.database import 세션팩토리
     from sqlalchemy import text
     db = 세션팩토리()
@@ -127,8 +127,8 @@ async def 실행로그조회(run_id: str):
 
 
 @라우터.get("/preprocess/latest-run")
-async def 최근실행조회(workspace: str = Query("")):
-    """워크스페이스의 가장 최근 실행 정보 조회"""
+async def get_recent_execution(workspace: str = Query("")):
+    """워크스페이스의 가장 최근 run_phase1_service 정보 조회"""
     from core.database import 세션팩토리
     from sqlalchemy import text
     db = 세션팩토리()

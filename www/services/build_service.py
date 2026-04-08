@@ -18,16 +18,16 @@ DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
 DICT_BACKUP_DIR = "/home/know/dict_backup"
 
 
-def ws_사전_파일export(db, workspace: str, domain: str, jiana_home: str) -> dict:
+def ws_export_dict_file(db, workspace: str, domain: str, jiana_home: str) -> dict:
     """WS_ 사전 DB의 UDIC/CNDIC 데이터를 jiana txt_resrc 파일로 export.
 
     udic → txt_resrc/udic/user.ks
     cndic → txt_resrc/cndic/cnlist.ks
     """
-    from models.dictionary import ws_사전사이트명
+    from models.dictionary import ws_dict_site_name
     from sqlalchemy import text
 
-    site = ws_사전사이트명(workspace, domain)
+    site = ws_dict_site_name(workspace, domain)
     결과 = {}
 
     # UDIC → user.ks
@@ -67,7 +67,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 빌드 시작
     # ──────────────────────────────────────────────
-    def 빌드시작(
+    def start_build_service(
         self,
         db: Session,
         background_tasks: BackgroundTasks,
@@ -79,7 +79,7 @@ class BuildService:
         """사전 빌드 시작 (백그라운드 태스크)
 
         이미 빌드 중이면 409 반환.
-        build_history 레코드 생성 후 background task로 실행.
+        build_history 레코드 생성 후 background task로 run_phase1_service.
         workspace가 있으면 ant dic 전 thesaurus export 수행.
         """
         실행중 = (
@@ -118,7 +118,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 빌드 상태 조회
     # ──────────────────────────────────────────────
-    def 빌드상태(self, db: Session, domain: str) -> dict:
+    def get_build_status_service(self, db: Session, domain: str) -> dict:
         """최신 BuildHistory 조회"""
         bh = (
             db.query(BuildHistory)
@@ -135,7 +135,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 빌드 이력 (페이지네이션)
     # ──────────────────────────────────────────────
-    def 빌드이력(
+    def get_build_history_service(
         self,
         db: Session,
         domain: str,
@@ -175,7 +175,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 전체 빌드 이력 (도메인 통합)
     # ──────────────────────────────────────────────
-    def 전체빌드이력(self, db: Session, size: int = 50) -> dict:
+    def get_all_build_history_service(self, db: Session, size: int = 50) -> dict:
         """모든 도메인의 빌드 이력 통합 조회 (SQLite 직접)."""
         import sqlite3
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "know.db")
@@ -212,7 +212,7 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 사전 동기화
     # ──────────────────────────────────────────────
-    def 사전동기화(self, db: Session, domain: str) -> dict:
+    def sync_dict_service(self, db: Session, domain: str) -> dict:
         """사전 파일 동기화 (rsync 또는 cp fallback)"""
         src = os.path.join(DICT_BACKUP_DIR, domain)
         dst = os.path.join(DEFAULT_JIANA_HOME, "dic")
@@ -235,11 +235,11 @@ class BuildService:
             if result.returncode != 0:
                 raise RuntimeError(f"rsync 실패: {result.stderr}")
 
-            logger.info("사전 동기화 완료: %s → %s", src, dst)
+            logger.info("사전 동기화 complete: %s → %s", src, dst)
             return {
                 "domain": domain,
                 "status": "ok",
-                "message": f"사전 동기화 완료: {src} → {dst}",
+                "message": f"사전 동기화 complete: {src} → {dst}",
                 "output": result.stdout[:500] if result.stdout else "",
             }
         except FileNotFoundError:
@@ -250,17 +250,17 @@ class BuildService:
             return {
                 "domain": domain,
                 "status": "ok",
-                "message": f"사전 동기화 완료 (cp): {src} → {dst}",
+                "message": f"사전 동기화 complete (cp): {src} → {dst}",
             }
         except Exception as exc:
             logger.error("사전 동기화 실패: %s", exc)
             raise HTTPException(status_code=500, detail=f"사전 동기화 오류: {exc}")
 
     # ──────────────────────────────────────────────
-    # 사전 초기화
+    # 사전 initialize
     # ──────────────────────────────────────────────
-    def 사전초기화(self, db: Session, domain: str) -> dict:
-        """사전 파일 초기화 (dic/ 디렉토리 비우기)"""
+    def reset_dict_service(self, db: Session, domain: str) -> dict:
+        """사전 파일 initialize (dic/ 디렉토리 비우기)"""
         dic_dir = os.path.join(DEFAULT_JIANA_HOME, "dic")
 
         if not os.path.isdir(dic_dir):
@@ -280,16 +280,16 @@ class BuildService:
                     shutil.rmtree(fpath)
                     removed.append(fname + "/")
 
-            logger.info("사전 초기화 완료: domain=%s, 제거=%d건", domain, len(removed))
+            logger.info("사전 initialize complete: domain=%s, 제거=%d건", domain, len(removed))
             return {
                 "domain": domain,
                 "status": "ok",
-                "message": f"사전 초기화 완료. {len(removed)}개 항목 제거.",
+                "message": f"사전 initialize complete. {len(removed)}개 항목 제거.",
                 "removed_count": len(removed),
             }
         except Exception as exc:
-            logger.error("사전 초기화 실패: %s", exc)
-            raise HTTPException(status_code=500, detail=f"사전 초기화 오류: {exc}")
+            logger.error("사전 initialize 실패: %s", exc)
+            raise HTTPException(status_code=500, detail=f"사전 initialize 오류: {exc}")
 
 
 # ──────────────────────────────────────────────────────────
@@ -308,7 +308,7 @@ def _bh_to_dict(bh: BuildHistory) -> dict:
         "build_type": bh.build_type,
         "status": bh.status,
         "row_count": bh.entry_count,          # entry_count → row_count (프론트 스펙)
-        "prev_row_count": None,               # 빌드이력() 에서 채움
+        "prev_row_count": None,               # get_build_history_service() 에서 채움
         "started_at": bh.started_at.isoformat() if bh.started_at else None,
         "completed_at": bh.completed_at.isoformat() if bh.completed_at else None,
         "started_by": bh.started_by,
@@ -320,7 +320,7 @@ def _bh_to_dict(bh: BuildHistory) -> dict:
 
 
 async def _run_build_background(build_history_id: int, domain: str, jiana_home: str = None, workspace: str = None):
-    """BackgroundTask로 실행되는 빌드 래퍼 (스레드 풀에서 실행)"""
+    """BackgroundTask로 실행되는 빌드 래퍼 (스레드 풀에서 run_phase1_service)"""
     import asyncio
     try:
         from pipeline.build_wrapper import run_build

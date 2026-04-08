@@ -3,12 +3,12 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, text, MetaData
 from models.domain import 도메인테이블
-from models.dictionary import 사이트명검증, 사전테이블가져오기
+from models.dictionary import validate_site_name, get_dict_table
 from models.account import 계정테이블
 from core.database import 엔진
 
 
-def _테이블존재확인(db: Session, table_name: str) -> bool:
+def _check_table_exists(db: Session, table_name: str) -> bool:
     """테이블 존재 여부 확인 (sqlite_master)."""
     try:
         result = db.execute(
@@ -20,7 +20,7 @@ def _테이블존재확인(db: Session, table_name: str) -> bool:
         return False
 
 
-def _사전카운트(db: Session, site: str, dic_type: str) -> int:
+def _count_dict(db: Session, site: str, dic_type: str) -> int:
     """특정 사전 타입의 항목 수 반환. 테이블 미존재 시 -1."""
     suffix_map = {
         "udic": "_UDIC",
@@ -29,36 +29,36 @@ def _사전카운트(db: Session, site: str, dic_type: str) -> int:
         "category": "_CATEGORY",
     }
     table_name = f"{site.upper()}{suffix_map[dic_type]}"
-    if not _테이블존재확인(db, table_name):
+    if not _check_table_exists(db, table_name):
         return -1
     try:
         meta = MetaData()
-        tbl = 사전테이블가져오기(site.upper(), dic_type, meta)
+        tbl = get_dict_table(site.upper(), dic_type, meta)
         return db.execute(select(func.count()).select_from(tbl)).scalar() or 0
     except Exception:
         return -1
 
 
-def 도메인별사전통계(db: Session, site: str) -> dict:
+def get_domain_dict_stats(db: Session, site: str) -> dict:
     """사이트의 각 사전 유형별 항목 수 반환."""
-    사이트명검증(site)
+    validate_site_name(site)
     return {
         "site": site.upper(),
-        "udic": _사전카운트(db, site, "udic"),
-        "cndic": _사전카운트(db, site, "cndic"),
-        "thesaurus": _사전카운트(db, site, "thesaurus"),
-        "category": _사전카운트(db, site, "category"),
+        "udic": _count_dict(db, site, "udic"),
+        "cndic": _count_dict(db, site, "cndic"),
+        "thesaurus": _count_dict(db, site, "thesaurus"),
+        "category": _count_dict(db, site, "category"),
     }
 
 
-def 전체도메인통계(db: Session) -> List[dict]:
+def get_all_domain_stats(db: Session) -> List[dict]:
     """모든 도메인의 사전 현황 반환."""
     rows = db.execute(select(도메인테이블.c._SITE)).scalars().all()
-    return [도메인별사전통계(db, site) for site in rows]
+    return [get_domain_dict_stats(db, site) for site in rows]
 
 
-def LLM사용통계조회(year: int, month: int) -> dict:
-    """연월별 LLM 사용 통계: 사용자별 + 월별 집계."""
+def get_llm_usage_stats_service(year: int, month: int) -> dict:
+    """연월별 LLM 사용 get_stats: 사용자별 + 월별 집계."""
     with 엔진.connect() as conn:
         # 사용자별 (특정 년월)
         user_rows = conn.execute(text("""
@@ -90,7 +90,7 @@ def LLM사용통계조회(year: int, month: int) -> dict:
     }
 
 
-def LLM월별사용자추이(mode: str = "monthly", start: str = "", end: str = "") -> dict:
+def get_llm_monthly_trend(mode: str = "monthly", start: str = "", end: str = "") -> dict:
     """기간별 사용자+모델별 LLM 사용 추이. mode: daily/monthly."""
     from datetime import datetime, timedelta
 
@@ -160,7 +160,7 @@ def LLM월별사용자추이(mode: str = "monthly", start: str = "", end: str = 
         name = name_map.get(uid)
         user_label[uid] = f"{name}({uid})" if name else uid
 
-    # 모델 목록
+    # 모델 list_tasks
     models = sorted(set(r.model for r in model_rows if r.model))
 
     # 사용자별 피벗

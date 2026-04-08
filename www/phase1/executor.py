@@ -17,7 +17,7 @@ PHASE1_STEPS = {
     0: {"name": "파일선택",   "type": "noop"},
     1: {"name": "키워드추출", "type": "python", "func": "extract"},
     2: {"name": "정제",       "type": "python", "func": "refine"},
-    6: {"name": "프리징",     "type": "python", "func": "freeze"},
+    6: {"name": "freeze_service",     "type": "python", "func": "freeze"},
 }
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def _ensure_know_ops_path() -> None:
         sys.path.insert(0, KNOW_OPS_SRC)
 
 
-def _make_설정(workspace_dir: str):
+def _make_config(workspace_dir: str):
     """workspace 경로 기반 know-ops 설정 생성. jiana는 workspace/jiana/ 하위 사용."""
     _ensure_know_ops_path()
     from know.core.config import 설정
@@ -101,7 +101,7 @@ def _sync_extract(file_path: str, domain: str, workspace_dir: str, filter_mode: 
     from know.pipeline.추출.키워드추출기 import 키워드추출기
     from collections import Counter
 
-    설정값 = _make_설정(workspace_dir)
+    설정값 = _make_config(workspace_dir)
     추출기 = 키워드추출기(설정=설정값)
     ws = Path(workspace_dir)
     os.makedirs(ws / "build" / "work", exist_ok=True)
@@ -176,7 +176,7 @@ def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
     """정제: work/keywords.txt → work/refine.txt (원본 순서 유지)"""
     _ensure_know_ops_path()
     from know.pipeline.정제.검색로그정제기 import 검색로그정제기
-    설정값 = _make_설정(workspace_dir)
+    설정값 = _make_config(workspace_dir)
     정제기 = 검색로그정제기(설정값=설정값)
     ws = Path(workspace_dir)
     os.makedirs(ws / "build" / "work", exist_ok=True)
@@ -198,11 +198,11 @@ def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
 
 
 def _sync_analyze(file_path: str, domain: str, workspace_dir: str) -> str:
-    """형태소분석: work/refine.txt → work/analyzed.txt"""
+    """analyze_morpheme: work/refine.txt → work/analyzed.txt"""
     _ensure_know_ops_path()
-    from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼
-    설정값 = _make_설정(workspace_dir)
-    래퍼 = 형태소분석래퍼(설정값=설정값)
+    from know.pipeline.분석.analyze_morpheme래퍼 import analyze_morpheme래퍼
+    설정값 = _make_config(workspace_dir)
+    래퍼 = analyze_morpheme래퍼(설정값=설정값)
     ws = Path(workspace_dir)
     os.makedirs(ws / "build" / "work", exist_ok=True)
     입력 = ws / "build" / "work" / "refine.txt"
@@ -237,14 +237,14 @@ def _sync_convert(file_path: str, workspace_dir: str = "") -> str:
     return f"{최종출력} ({cnt}건, 형태소:{형태소} 복합어:{복합어})"
 
 
-def _db_thesaurus를파일로내보내기(workspace: str, domain: str, 출력파일: Path) -> int:
+def _export_db_thesaurus_to_file(workspace: str, domain: str, 출력파일: Path) -> int:
     """DB thesaurus 테이블을 synonym_full_v2.txt(CSV) 형식으로 내보내기."""
     from core.database import 세션팩토리
     from sqlalchemy import text
-    from models.dictionary import ws_사전사이트명
+    from models.dictionary import ws_dict_site_name
     db = 세션팩토리()
     try:
-        site = ws_사전사이트명(workspace, domain)
+        site = ws_dict_site_name(workspace, domain)
         rows = db.execute(text(f"SELECT _HEAD_WORD, _TAIL_WORD FROM {site}_THESAURUS")).fetchall()
         cnt = 0
         with open(출력파일, "w", encoding="utf-8") as f:
@@ -264,8 +264,8 @@ def _db_thesaurus를파일로내보내기(workspace: str, domain: str, 출력파
 
 
 def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
-    """유사어체크: work/transform.txt → work/synonym.txt"""
-    from phase1.synonym_checker import 유사어체크
+    """check_synonyms: work/transform.txt → work/synonym.txt"""
+    from phase1.synonym_checker import check_synonyms
     ws = Path(workspace_dir)
     ws_name = ws.name
     work_dir = ws / "build" / "work"
@@ -288,12 +288,12 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
     # 파일 사전이 없으면 DB thesaurus에서 자동 내보내기
     if syn_path == Path("/dev/null"):
         db_syn_path = ws / "synonym_full_v2.txt"
-        cnt = _db_thesaurus를파일로내보내기(ws_name, domain, db_syn_path)
+        cnt = _export_db_thesaurus_to_file(ws_name, domain, db_syn_path)
         if cnt > 0:
             syn_path = db_syn_path
-            logger.info(f"DB thesaurus → {db_syn_path} 내보내기 완료: {cnt}건")
-    설정값 = _make_설정(workspace_dir)
-    result = 유사어체크(입력, syn_path, 출력, 설정값=설정값)
+            logger.info(f"DB thesaurus → {db_syn_path} 내보내기 complete: {cnt}건")
+    설정값 = _make_config(workspace_dir)
+    result = check_synonyms(입력, syn_path, 출력, 설정값=설정값)
     import re
     with open(출력, encoding='utf-8', errors='replace') as f:
         content = f.read()
@@ -303,13 +303,13 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
 
 
 def _sync_freeze(domain: str, workspace_dir: str) -> str:
-    """프리징: synonym.txt → keyword_assignments DB INSERT"""
+    """freeze_service: synonym.txt → keyword_assignments DB INSERT"""
     from core.database import 세션팩토리
-    from services.assignment_service import 프리징
+    from services.assignment_service import freeze_service
     ws_name = Path(workspace_dir).name  # "A", "B" 등
     db = 세션팩토리()
     try:
-        result = 프리징(db, ws_name, domain)
+        result = freeze_service(db, ws_name, domain)
         return f"{result['total']}건"
     finally:
         db.close()
@@ -322,27 +322,27 @@ async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_
     if func == "extract":
         result = await loop.run_in_executor(None, lambda: _sync_extract(file_path, domain, workspace_dir, filter_mode, filter_value, sort_by, rank_value, count_value))
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"추출 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"추출 complete: {result}", "running", elapsed)
     elif func == "refine":
         result = await loop.run_in_executor(None, _sync_refine, file_path, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"정제 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"정제 complete: {result}", "running", elapsed)
     elif func == "analyze":
         result = await loop.run_in_executor(None, _sync_analyze, file_path, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"분석 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"분석 complete: {result}", "running", elapsed)
     elif func == "convert":
         result = await loop.run_in_executor(None, _sync_convert, file_path, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"변환 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"변환 complete: {result}", "running", elapsed)
     elif func == "synonym":
         result = await loop.run_in_executor(None, _sync_synonym, file_path, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"유사어체크 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"check_synonyms complete: {result}", "running", elapsed)
     elif func == "freeze":
         result = await loop.run_in_executor(None, _sync_freeze, domain, workspace_dir)
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-        _publish_phase1(run_id, step_num, step["name"], 100, f"프리징 완료: {result}", "running", elapsed)
+        _publish_phase1(run_id, step_num, step["name"], 100, f"freeze_service complete: {result}", "running", elapsed)
 
 
 def _sync_register(domain: str, file_path: str) -> int:
@@ -377,19 +377,19 @@ def _sync_register(domain: str, file_path: str) -> int:
 
 
 async def _run_register(run_id: str, step_num: int, step: dict, domain: str, file_path: str) -> None:
-    """등록 단계 — run_in_executor로 동기 DB 작업 실행"""
+    """등록 단계 — run_in_executor로 동기 DB 작업 run_phase1_service"""
     loop = asyncio.get_event_loop()
     count = await loop.run_in_executor(None, _sync_register, domain, file_path)
     elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-    _publish_phase1(run_id, step_num, step["name"], 100, f"등록 완료: {count}건", "running", elapsed)
+    _publish_phase1(run_id, step_num, step["name"], 100, f"등록 complete: {count}건", "running", elapsed)
 
 
-async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
-    """Phase 1 전체 파이프라인 실행 — 단계별 순차 실행"""
+async def run_phase1(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
+    """Phase 1 전체 파이프라인 run_phase1_service — 단계별 순차 run_phase1_service"""
     workspace_dir = f"{WORKSPACE_BASE}/{workspace}"
     total_start = time.time()
 
-    # 전체실행(start_step=1) 시 work 폴더 초기화
+    # 전체run_phase1_service(start_step=1) 시 work 폴더 initialize
     if start_step <= 1:
         work_dir = os.path.join(workspace_dir, "build", "work")
         if os.path.isdir(work_dir):
@@ -402,7 +402,7 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
             continue
 
         if step["type"] == "noop":
-            _publish_phase1(run_id, step_num, step["name"], 100, "파일 확인 완료", "completed")
+            _publish_phase1(run_id, step_num, step["name"], 100, "파일 확인 complete", "completed")
             continue
 
         _step_start_times[f"{run_id}_{step_num}"] = time.time()
@@ -413,7 +413,7 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
             elif step["type"] == "db":
                 await _run_register(run_id, step_num, step, domain, file_path)
             elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
-            _publish_phase1(run_id, step_num, step["name"], 100, "완료", "completed", elapsed)
+            _publish_phase1(run_id, step_num, step["name"], 100, "complete", "completed", elapsed)
         except Exception as e:
             elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
             _publish_phase1(run_id, step_num, step["name"], -1, str(e), "failed", elapsed)
@@ -421,6 +421,6 @@ async def phase1_실행(run_id: str, domain: str, file_path: str, start_step: in
         finally:
             _step_start_times.pop(f"{run_id}_{step_num}", None)
 
-    # 전체 완료 시그널
+    # 전체 complete 시그널
     total_elapsed = time.time() - total_start
-    _publish_phase1(run_id, -1, "전체", 100, f"파이프라인 완료 ({round(total_elapsed, 1)}초)", "completed", total_elapsed)
+    _publish_phase1(run_id, -1, "전체", 100, f"파이프라인 complete ({round(total_elapsed, 1)}초)", "completed", total_elapsed)

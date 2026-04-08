@@ -1,12 +1,12 @@
-"""know-api SQLite DB 초기화 스크립트.
+"""know-api SQLite DB initialize 스크립트.
 
-실행: cd know-api && python init_db.py
+run_phase1_service: cd know-api && python init_db.py
 결과: know.db 파일 생성 + 전체 테이블 + 시드 데이터
 
 CLI:
-  python3 init_db.py                              # DB 초기화
-  python3 init_db.py --reset-password admin        # 비밀번호를 1111로 초기화
-  python3 init_db.py --reset-password admin newpw  # 지정 비밀번호로 초기화
+  python3 init_db.py                              # DB initialize
+  python3 init_db.py --reset-password admin        # 비밀번호를 1111로 initialize
+  python3 init_db.py --reset-password admin newpw  # 지정 비밀번호로 initialize
   python3 init_db.py --import EPOST udic /path/to/file.txt  # 사전 파일 임포트
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from datetime import datetime
 from sqlalchemy import text, inspect
 from core.database import 엔진, Base, 세션팩토리
-from core.security import 비밀번호해시
+from core.security import hash_password
 
 # ORM 기반 모델 import (Base.metadata에 등록됨)
 from models.pipeline import PipelineHistory, PipelineStageLog, TaskAssignment, BuildHistory, AuditLog
@@ -28,10 +28,10 @@ from models.pipeline import PipelineHistory, PipelineStageLog, TaskAssignment, B
 # Table 기반 모델 import
 from models.account import 계정테이블, 메타데이터 as 계정메타
 from models.domain import 도메인테이블, 메타데이터 as 도메인메타
-from models.dictionary import 사전테이블가져오기, MetaData
+from models.dictionary import get_dict_table, MetaData
 
 
-def 테이블생성():
+def create_tables():
     """모든 테이블 생성."""
     print("=== 테이블 생성 시작 ===")
     
@@ -76,7 +76,7 @@ def 테이블생성():
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_logs_run ON phase1_logs(run_id)"))
         
-        # 4. keyword_assignments (데이터 할당)
+        # 4. keyword_assignments (데이터 assign)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS keyword_assignments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,17 +172,17 @@ def 테이블생성():
     print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log 테이블 생성")
 
 
-def 도메인사전테이블생성(도메인목록: list[str]):
+def create_domain_dict_tables(list_domains_service: list[str]):
     """각 도메인에 대해 4개 사전 테이블 생성 (UDIC, CNDIC, THESAURUS, CATEGORY)."""
-    for site in 도메인목록:
+    for site in list_domains_service:
         meta = MetaData()
         for dic_type in ("udic", "cndic", "thesaurus", "category"):
-            사전테이블가져오기(site, dic_type, meta)
+            get_dict_table(site, dic_type, meta)
         meta.create_all(엔진)
         print(f"  [OK] {site} 사전 테이블 4개 생성")
 
 
-def 시드데이터():
+def seed_data():
     """초기 데이터 삽입."""
     db = 세션팩토리()
     try:
@@ -194,7 +194,7 @@ def 시드데이터():
             db.execute(계정테이블.insert().values(
                 _USER_ID="admin",
                 _NAME="관리자",
-                _PASSWORD=비밀번호해시("1111"),
+                _PASSWORD=hash_password("1111"),
                 _AUTH="A",
                 _CREATED=datetime.now(),
                 _UPDATED=datetime.now(),
@@ -204,12 +204,12 @@ def 시드데이터():
             print("  [SKIP] admin 계정 이미 존재")
         
         # 2. 도메인 3개
-        도메인목록 = [
+        list_domains_service = [
             {"site": "EPOST", "memo": "epost 도메인"},
             {"site": "MALL", "memo": "mall 도메인"},
             {"site": "QQ", "memo": "qq 도메인"},
         ]
-        for d in 도메인목록:
+        for d in list_domains_service:
             기존 = db.execute(
                 도메인테이블.select().where(도메인테이블.c._SITE == d["site"])
             ).first()
@@ -232,8 +232,8 @@ def 시드데이터():
         db.close()
 
 
-def 비밀번호리셋(user_id: str, new_password: str = "1111"):
-    """계정 비밀번호를 지정 값으로 초기화."""
+def reset_password_db(user_id: str, new_password: str = "1111"):
+    """계정 비밀번호를 지정 값으로 initialize."""
     db = 세션팩토리()
     try:
         row = db.execute(
@@ -244,31 +244,31 @@ def 비밀번호리셋(user_id: str, new_password: str = "1111"):
             sys.exit(1)
         from sqlalchemy import update
         db.execute(update(계정테이블).where(계정테이블.c._USER_ID == user_id).values(
-            _PASSWORD=비밀번호해시(new_password),
+            _PASSWORD=hash_password(new_password),
             _UPDATED=datetime.now(),
         ))
         db.commit()
-        print(f"  [OK] '{user_id}' 비밀번호 초기화 완료 → '{new_password}'")
+        print(f"  [OK] '{user_id}' 비밀번호 initialize complete → '{new_password}'")
     except Exception as e:
         db.rollback()
-        print(f"  [ERROR] 비밀번호 초기화 실패: {e}")
+        print(f"  [ERROR] 비밀번호 initialize 실패: {e}")
         raise
     finally:
         db.close()
 
 
-def 사전임포트(도메인: str, 사전타입: str, 파일경로: str):
+def import_dict(도메인: str, 사전타입: str, 파일경로: str):
     """사전 파일을 읽어 DB에 INSERT (중복 스킵)."""
     if not os.path.exists(파일경로):
         print(f"  [ERROR] 파일을 찾을 수 없음: {파일경로}")
         sys.exit(1)
 
     meta = MetaData()
-    테이블 = 사전테이블가져오기(도메인, 사전타입, meta)
+    테이블 = get_dict_table(도메인, 사전타입, meta)
     # 테이블이 존재하는지 확인
     inspector = inspect(엔진)
     if 테이블.name not in inspector.get_table_names():
-        print(f"  [ERROR] 테이블이 존재하지 않음: {테이블.name} (먼저 init_db.py로 DB 초기화 필요)")
+        print(f"  [ERROR] 테이블이 존재하지 않음: {테이블.name} (먼저 init_db.py로 DB initialize 필요)")
         sys.exit(1)
 
     db = 세션팩토리()
@@ -346,7 +346,7 @@ def 사전임포트(도메인: str, 사전타입: str, 파일경로: str):
                     삽입수 += 1
 
         db.commit()
-        print(f"  [OK] {도메인}/{사전타입} 임포트 완료: {삽입수}건 삽입, {스킵수}건 스킵 (중복)")
+        print(f"  [OK] {도메인}/{사전타입} 임포트 complete: {삽입수}건 삽입, {스킵수}건 스킵 (중복)")
     except Exception as e:
         db.rollback()
         print(f"  [ERROR] 임포트 실패: {e}")
@@ -356,9 +356,9 @@ def 사전임포트(도메인: str, 사전타입: str, 파일경로: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="know-api DB 초기화 및 관리 도구")
+    parser = argparse.ArgumentParser(description="know-api DB initialize 및 관리 도구")
     parser.add_argument("--reset-password", nargs="+", metavar=("USER_ID", "NEW_PW"),
-                        help="계정 비밀번호 초기화 (기본: 1111)")
+                        help="계정 비밀번호 initialize (기본: 1111)")
     parser.add_argument("--import", nargs=3, metavar=("DOMAIN", "DIC_TYPE", "FILE"),
                         dest="import_dict",
                         help="사전 파일 임포트 (예: --import EPOST udic /path/to/file.txt)")
@@ -368,18 +368,18 @@ def main():
     if args.reset_password:
         user_id = args.reset_password[0]
         new_pw = args.reset_password[1] if len(args.reset_password) > 1 else "1111"
-        print(f"=== 비밀번호 초기화: {user_id} ===")
-        비밀번호리셋(user_id, new_pw)
+        print(f"=== 비밀번호 initialize: {user_id} ===")
+        reset_password_db(user_id, new_pw)
         return
 
     # --import 처리
     if args.import_dict:
         도메인, 사전타입, 파일경로 = args.import_dict
         print(f"=== 사전 임포트: {도메인}/{사전타입} ← {파일경로} ===")
-        사전임포트(도메인, 사전타입, 파일경로)
+        import_dict(도메인, 사전타입, 파일경로)
         return
 
-    # 기본: DB 초기화
+    # 기본: DB initialize
     db_path = os.path.join(os.path.dirname(__file__), "know.db")
     신규 = not os.path.exists(db_path)
     
@@ -388,23 +388,23 @@ def main():
     print()
     
     # 테이블 생성
-    테이블생성()
+    create_tables()
     print()
     
     # 도메인 사전 테이블 생성 (3도메인 × 4테이블 = 12개)
     print("=== 도메인 사전 테이블 생성 ===")
-    도메인사전테이블생성(["EPOST", "MALL", "QQ"])
+    create_domain_dict_tables(["EPOST", "MALL", "QQ"])
     print()
     
     # 시드 데이터
     print("=== 시드 데이터 삽입 ===")
-    시드데이터()
+    seed_data()
     print()
     
     # 결과 확인
     inspector = inspect(엔진)
     전체테이블 = inspector.get_table_names()
-    print(f"=== 완료: 총 {len(전체테이블)}개 테이블 ===")
+    print(f"=== complete: 총 {len(전체테이블)}개 테이블 ===")
     for t in sorted(전체테이블):
         print(f"  - {t}")
 

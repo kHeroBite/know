@@ -6,8 +6,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from api.auth import 현재사용자가져오기
-from core.database import DB세션
+from api.auth import get_current_user
+from core.database import db_session
 from services.build_service import build_service
 
 라우터 = APIRouter(prefix="/api/build", tags=["빌드"])
@@ -18,34 +18,34 @@ from services.build_service import build_service
 # ──────────────────────────────────────────────
 
 @라우터.post("/{domain}")
-def 빌드시작(
+def start_build_service(
     domain: str,
     background_tasks: BackgroundTasks,
     workspace: str = Query(default=""),
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
-    """사전 빌드 시작 (백그라운드 실행). 워크스페이스의 jiana 폴더 자동 사용."""
+    """사전 빌드 시작 (백그라운드 run_phase1_service). 워크스페이스의 jiana 폴더 자동 사용."""
     from fastapi import HTTPException
-    from services.workspace_service import jiana홈경로
-    from services.build_service import ws_사전_파일export
+    from services.workspace_service import get_jiana_home_path
+    from services.build_service import ws_export_dict_file
     triggered_by = current_user.get("id") or current_user.get("user_id")
     jiana_home = None
     if workspace:
-        jiana_home = jiana홈경로(workspace)
+        jiana_home = get_jiana_home_path(workspace)
         if not os.path.isdir(jiana_home):
             raise HTTPException(400, detail=f"워크스페이스 jiana 경로 없음: {jiana_home}")
         # 빌드 전 WS_ 사전 DB → txt_resrc 파일 export
-        ws_사전_파일export(db, workspace, domain, jiana_home)
-    return build_service.빌드시작(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home, workspace=workspace or None)
+        ws_export_dict_file(db, workspace, domain, jiana_home)
+    return build_service.start_build_service(db, background_tasks, domain, triggered_by=triggered_by, jiana_home=jiana_home, workspace=workspace or None)
 
 
 @라우터.get("/{build_id}/download/{filename}")
-def 빌드파일다운로드(
+def download_build_file(
     build_id: int,
     filename: str,
     token: str = Query(default=""),
-    db: Session = Depends(DB세션),
+    db: Session = Depends(db_session),
 ):
     """빌드 결과 파일 다운로드 (data.tar, synonym.UTF-8). 토큰은 쿼리파라미터로 전달."""
     from fastapi import HTTPException
@@ -53,8 +53,8 @@ def 빌드파일다운로드(
     # 토큰 검증 (쿼리 파라미터)
     if not token:
         raise HTTPException(401, detail="토큰이 필요합니다")
-    from core.security import 토큰검증
-    if not 토큰검증(token):
+    from core.security import verify_token
+    if not verify_token(token):
         raise HTTPException(401, detail="유효하지 않은 토큰")
     bh = db.query(BuildHistory).filter_by(id=build_id).first()
     if not bh or bh.status != "completed":
@@ -73,18 +73,18 @@ def 빌드파일다운로드(
 
 
 @라우터.get("/jiana-versions")
-def jiana버전목록_레거시(
-    current_user: dict = Depends(현재사용자가져오기),
+def list_jiana_versions_legacy(
+    current_user: dict = Depends(get_current_user),
 ):
-    """jiana 폴더 목록 조회 (레거시 — /workspaces/jiana-versions 사용 권장)"""
-    from services.workspace_service import jiana버전목록 as _jiana목록
+    """jiana 폴더 list_tasks 조회 (레거시 — /workspaces/jiana-versions 사용 권장)"""
+    from services.workspace_service import list_jiana_versions_service as _jiana목록
     return {"versions": _jiana목록()}
 
 
 @라우터.post("/{domain}/cancel")
-def 빌드취소(
+def cancel_build(
     domain: str,
-    current_user: dict = Depends(현재사용자가져오기),
+    current_user: dict = Depends(get_current_user),
 ):
     """진행 중인 빌드 취소"""
     from pipeline.build_wrapper import cancel_build
@@ -95,10 +95,10 @@ def 빌드취소(
 
 
 @라우터.delete("/{domain}/history")
-def 빌드이력삭제(
+def delete_build_history(
     domain: str,
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
     """도메인 빌드 이력 전체 삭제"""
     from sqlalchemy import text
@@ -108,18 +108,18 @@ def 빌드이력삭제(
 
 
 @라우터.get("/{domain}/status")
-def 빌드상태조회(
+def get_build_status(
     domain: str,
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
     """현재 빌드 상태 (최신 BuildHistory)"""
-    return build_service.빌드상태(db, domain)
+    return build_service.get_build_status_service(db, domain)
 
 
 @라우터.get("/history-all")
-def 전체빌드이력(
-    current_user: dict = Depends(현재사용자가져오기),
+def get_all_build_history_service(
+    current_user: dict = Depends(get_current_user),
 ):
     """전체 도메인 빌드 이력 통합 조회 (SQLite 직접)"""
     import sqlite3
@@ -170,15 +170,15 @@ def 전체빌드이력(
 
 
 @라우터.get("/{domain}/history")
-def 빌드이력조회(
+def get_build_history(
     domain: str,
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
     """빌드 이력 페이지네이션"""
-    return build_service.빌드이력(db, domain, page=page, size=size)
+    return build_service.get_build_history_service(db, domain, page=page, size=size)
 
 
 # ──────────────────────────────────────────────
@@ -186,20 +186,20 @@ def 빌드이력조회(
 # ──────────────────────────────────────────────
 
 @라우터.post("/api/dictionaries/{domain}/sync")
-def 사전동기화(
+def sync_dict_service(
     domain: str,
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
     """사전 파일 동기화"""
-    return build_service.사전동기화(db, domain)
+    return build_service.sync_dict_service(db, domain)
 
 
 @라우터.post("/api/dictionaries/{domain}/init")
-def 사전초기화(
+def reset_dict_service(
     domain: str,
-    current_user: dict = Depends(현재사용자가져오기),
-    db: Session = Depends(DB세션),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
 ):
-    """사전 파일 초기화"""
-    return build_service.사전초기화(db, domain)
+    """사전 파일 initialize"""
+    return build_service.reset_dict_service(db, domain)

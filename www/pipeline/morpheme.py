@@ -3,7 +3,7 @@
 실제 스크립트 경로: /home/know/jiana1.5.12/cotton_test.sh
   - JIANA_HOME=/home/know/jiana1.5.12/
   - JAVA_HOME=/home/know/jdk1.7.0_80
-  - 실행: cotton_test.sh {입력파일} {출력파일}
+  - run_phase1_service: cotton_test.sh {입력파일} {출력파일}
 
 타임아웃: 30분 (asyncio.wait_for)
 stdout/stderr 스트리밍: 100자 단위로 Redis pub/sub 전송
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_COTTON_TEST_SH = "/home/know/jiana1.5.12/cotton_test.sh"
 MORPHEME_OUTPUT_DIR = "/home/know/apps/know-api/uploads/morpheme"
 
-# 형태소분석 타임아웃: 30분
+# analyze_morpheme 타임아웃: 30분
 MORPHEME_TIMEOUT = 1800
 
 
 class MorphemeError(Exception):
-    """형태소분석 실행 오류"""
+    """analyze_morpheme run_phase1_service 오류"""
     def __init__(self, message: str, returncode: int = -1, stderr: str = ""):
         super().__init__(message)
         self.returncode = returncode
@@ -38,22 +38,22 @@ async def run_morpheme(
     script_path: str = DEFAULT_COTTON_TEST_SH,
     timeout: int = MORPHEME_TIMEOUT,
 ) -> Dict[str, Any]:
-    """cotton_test.sh를 asyncio subprocess로 실행
+    """cotton_test.sh를 asyncio subprocess로 run_phase1_service
 
     Args:
-        input_file: 정제된 키워드 목록 파일 경로
+        input_file: 정제된 키워드 list_tasks 파일 경로
         pipeline_id: 파이프라인 ID (Redis 채널 및 출력 파일명에 사용)
         script_path: cotton_test.sh 경로 (기본값: 서버 실제 경로)
-        timeout: 실행 타임아웃 초 (기본: 1800초 = 30분)
+        timeout: run_phase1_service 타임아웃 초 (기본: 1800초 = 30분)
 
     Returns:
         dict:
-            output_file  - 형태소분석 결과 파일 경로
-            log          - 실행 로그 전체
+            output_file  - analyze_morpheme 결과 파일 경로
+            log          - run_phase1_service 로그 전체
             returncode   - 프로세스 종료 코드
 
     Raises:
-        MorphemeError: 스크립트 실행 실패 또는 타임아웃
+        MorphemeError: 스크립트 run_phase1_service 실패 또는 타임아웃
     """
     os.makedirs(MORPHEME_OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(MORPHEME_OUTPUT_DIR, f"morpheme_{pipeline_id}.txt")
@@ -64,7 +64,7 @@ async def run_morpheme(
         raise MorphemeError(f"입력 파일 없음: {input_file}")
 
     cmd_args = ["bash", script_path, input_file, output_file]
-    logger.info("형태소분석 실행: %s", " ".join(cmd_args))
+    logger.info("analyze_morpheme run_phase1_service: %s", " ".join(cmd_args))
 
     try:
         result = await asyncio.wait_for(
@@ -73,7 +73,7 @@ async def run_morpheme(
         )
     except asyncio.TimeoutError:
         raise MorphemeError(
-            f"형태소분석 타임아웃 ({timeout}초 초과)",
+            f"analyze_morpheme 타임아웃 ({timeout}초 초과)",
             returncode=-1,
         )
 
@@ -84,7 +84,7 @@ async def run_morpheme(
             stderr=result.get("stderr", ""),
         )
 
-    logger.info("형태소분석 완료: output=%s", output_file)
+    logger.info("analyze_morpheme complete: output=%s", output_file)
     return {
         "output_file": output_file,
         "log": result["log"],
@@ -93,7 +93,7 @@ async def run_morpheme(
 
 
 async def _run_with_streaming(cmd_args: list, pipeline_id: int) -> Dict[str, Any]:
-    """subprocess 실행 + stdout/stderr 스트리밍 (100자 단위 Redis 발행)"""
+    """subprocess run_phase1_service + stdout/stderr 스트리밍 (100자 단위 Redis 발행)"""
     proc = await asyncio.create_subprocess_exec(
         *cmd_args,
         stdout=asyncio.subprocess.PIPE,
@@ -148,7 +148,7 @@ def _publish_log(pipeline_id: int, stage: str, text: str):
 
 
 # ─────────────────────────────────────────────
-# 단독 실행 테스트
+# 단독 run_phase1_service 테스트
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     import sys
@@ -159,4 +159,4 @@ if __name__ == "__main__":
     _input_file = sys.argv[1]
     _pid = int(sys.argv[2])
     result = asyncio.run(run_morpheme(_input_file, _pid))
-    print(f"완료: {result}")
+    print(f"complete: {result}")

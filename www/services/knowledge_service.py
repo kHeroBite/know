@@ -16,20 +16,20 @@ from models.pipeline import TaskAssignment
 logger = logging.getLogger(__name__)
 _UPLOAD_DIR = "/home/know/apps/know-api/uploads/"
 
-# 파일업로드 시 미리보기 행 수
+# upload_file_service 시 미리보기 행 수
 _PREVIEW_ROWS = 5
 
 
 class KnowledgeService:
-    def _업로드디렉토리확인(self, upload_dir: str) -> None:
+    def _check_upload_dir(self, upload_dir: str) -> None:
         os.makedirs(upload_dir, exist_ok=True)
 
-    def _csv파일파싱(self, 저장경로: str) -> tuple:
+    def _parse_csv_file(self, 저장경로: str) -> tuple:
         """CSV 파일을 파싱하여 (row_count, removed_count, preview) 반환.
 
         - row_count: 유효 데이터 행 수 (헤더 제외, 빈 행 제외)
         - removed_count: 빈 행(모든 컬럼이 비어있는 행) 수
-        - preview: 상위 _PREVIEW_ROWS 개 행의 dict 목록
+        - preview: 상위 _PREVIEW_ROWS 개 행의 dict list_tasks
         """
         try:
             with open(저장경로, "r", encoding="utf-8-sig", errors="replace") as f:
@@ -52,7 +52,7 @@ class KnowledgeService:
                 미리보기.append(dict(row))
         return 유효행수, 제거행수, 미리보기
 
-    async def 파일업로드(self, file: UploadFile, upload_dir: str = _UPLOAD_DIR) -> dict:
+    async def upload_file_service(self, file: UploadFile, upload_dir: str = _UPLOAD_DIR) -> dict:
         """aiofiles 비동기 저장 + UUID prefix로 파일명 충돌 방지.
 
         반환 형식 (프론트엔드 스펙):
@@ -61,7 +61,7 @@ class KnowledgeService:
           removed_count: int (제거된 빈 행 수)
           preview: list (상위 5행 미리보기)
         """
-        self._업로드디렉토리확인(upload_dir)
+        self._check_upload_dir(upload_dir)
         원본파일명 = file.filename or "upload"
         uuid_hex = uuid.uuid4().hex
         저장파일명 = f"{uuid_hex}_{원본파일명}"
@@ -82,7 +82,7 @@ class KnowledgeService:
         # CSV 파일인 경우 파싱하여 row_count/removed_count/preview 계산
         lower_name = 원본파일명.lower()
         if lower_name.endswith(".csv"):
-            row_count, removed_count, preview = self._csv파일파싱(저장경로)
+            row_count, removed_count, preview = self._parse_csv_file(저장경로)
         else:
             # Excel 등 비CSV: 크기 정보만 기록하고 placeholder 반환
             파일크기 = os.path.getsize(저장경로)
@@ -95,7 +95,7 @@ class KnowledgeService:
         file_id = int(uuid_hex[:8], 16)
 
         logger.info(
-            "파일업로드 완료: %s → file_id=%d, row_count=%d, removed_count=%d",
+            "upload_file_service complete: %s → file_id=%d, row_count=%d, removed_count=%d",
             원본파일명, file_id, row_count, removed_count,
         )
         return {
@@ -109,23 +109,23 @@ class KnowledgeService:
             "saved_path": 저장경로,
         }
 
-    def 작업분배(self, db: Session, pipeline_id: int, assignments: List[dict]) -> dict:
+    def distribute_tasks_service(self, db: Session, pipeline_id: int, assignments: List[dict]) -> dict:
         """TaskAssignment 복수 생성"""
         if not assignments:
             raise HTTPException(status_code=400, detail="분배 항목이 없습니다.")
-        생성목록 = []
+        생성list_tasks = []
         for 항목 in assignments:
             item_start = 항목.get("item_start", 0); item_end = 항목.get("item_end", 0)
             item_count = item_end - item_start + 1 if item_end >= item_start else 0
             if item_count <= 0:
                 raise HTTPException(status_code=400, detail=f"item_start({item_start}) > item_end({item_end}) 오류")
             task = TaskAssignment(pipeline_id=pipeline_id, assignee_id=항목.get("assignee_id"), item_start=item_start, item_end=item_end, item_count=item_count, status="assigned")
-            db.add(task); 생성목록.append(task)
+            db.add(task); 생성list_tasks.append(task)
         db.commit()
-        for t in 생성목록: db.refresh(t)
-        return {"pipeline_id": pipeline_id, "created": len(생성목록), "assignments": [{"task_id": t.id, "assignee_id": t.assignee_id, "item_start": t.item_start, "item_end": t.item_end, "item_count": t.item_count, "status": t.status} for t in 생성목록]}
+        for t in 생성list_tasks: db.refresh(t)
+        return {"pipeline_id": pipeline_id, "created": len(생성list_tasks), "assignments": [{"task_id": t.id, "assignee_id": t.assignee_id, "item_start": t.item_start, "item_end": t.item_end, "item_count": t.item_count, "status": t.status} for t in 생성list_tasks]}
 
-    def 내작업목록(self, db: Session, user_id: int, page: int = 1, size: int = 20) -> dict:
+    def get_my_task_list(self, db: Session, user_id: int, page: int = 1, size: int = 20) -> dict:
         """TaskAssignment 페이지네이션"""
         if page < 1: page = 1
         if size < 1 or size > 100: size = 20

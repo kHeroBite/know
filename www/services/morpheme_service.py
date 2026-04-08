@@ -1,4 +1,4 @@
-"""단일 키워드 형태소분석 서비스 — jiana Java 직접 호출"""
+"""단일 키워드 analyze_morpheme 서비스 — jiana Java 직접 호출"""
 import logging
 import os
 import shutil
@@ -15,13 +15,13 @@ JAVA_HOME = "/home/know/jdk1.7.0_80"
 MORPHEME_TIMEOUT = 30  # 단일 키워드이므로 30초 충분
 
 
-def 형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: Optional[str] = None) -> dict:
-    """단일 키워드를 jiana Java 직접 호출로 형태소분석.
+def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Optional[str] = None) -> dict:
+    """단일 키워드를 jiana Java 직접 호출로 analyze_morpheme.
 
     Args:
-        keyword: 분석할 키워드 문자열
+        keyword: 분析할 키워드 문자열
         domain: 도메인 (현재 미사용, 향후 사전 컨텍스트 연동용)
-        jiana_home: jiana 홈 경로 (None이면 기본값 사용)
+        jiana_home: jiana 홈 경로 (None이면 오류)
 
     Returns:
         {"keyword": str, "result": str, "tokens": list[str]}
@@ -29,7 +29,9 @@ def 형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: Opti
     if not keyword or not keyword.strip():
         return {"keyword": keyword, "result": "", "tokens": []}
 
-    jh = jiana_home or DEFAULT_JIANA_HOME
+    if not jiana_home:
+        raise ValueError("jiana_home 경로가 없습니다. workspace에 jiana/ 디렉토리가 필요합니다.")
+    jh = jiana_home
     lib_path = f"{jh}/lib"
     classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
 
@@ -66,7 +68,7 @@ def 형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: Opti
                 logger.warning("jiana 실패 (rc=%d): %s", proc.returncode, stderr_txt)
                 return {
                     "keyword": keyword,
-                    "result": f"분석 실패: {stderr_txt[:200]}",
+                    "result": f"분析 실패: {stderr_txt[:200]}",
                     "tokens": [],
                 }
 
@@ -84,30 +86,30 @@ def 형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: Opti
             }
 
         except subprocess.TimeoutExpired:
-            logger.error("형태소분석 타임아웃 (%d초): %s", MORPHEME_TIMEOUT, keyword)
+            logger.error("analyze_morpheme 타임아웃 (%d초): %s", MORPHEME_TIMEOUT, keyword)
             return {
                 "keyword": keyword,
-                "result": f"분석 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
+                "result": f"분析 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
                 "tokens": [],
             }
         except FileNotFoundError:
-            logger.error("java 실행 파일 없음: %s", JAVA_HOME)
+            logger.error("java run_phase1_service 파일 없음: %s", JAVA_HOME)
             return {
                 "keyword": keyword,
-                "result": f"Java 실행 파일 없음: {JAVA_HOME}/bin/java",
+                "result": f"Java run_phase1_service 파일 없음: {JAVA_HOME}/bin/java",
                 "tokens": [],
             }
         except Exception as e:
-            logger.exception("형태소분석 예외: %s", e)
+            logger.exception("analyze_morpheme 예외: %s", e)
             return {
                 "keyword": keyword,
-                "result": f"분석 오류: {str(e)[:200]}",
+                "result": f"분析 오류: {str(e)[:200]}",
                 "tokens": [],
             }
 
 
-def 풀형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: Optional[str] = None) -> dict:
-    """FullTest 기반 형태소분석 — 품사태그 포함.
+def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home: Optional[str] = None) -> dict:
+    """FullTest 기반 analyze_morpheme — 품사태그 포함.
 
     Returns:
         {"keyword": str, "result": str, "tokens": list[str]}
@@ -116,7 +118,9 @@ def 풀형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: O
     if not keyword or not keyword.strip():
         return {"keyword": keyword, "result": "", "tokens": []}
 
-    jh = jiana_home or DEFAULT_JIANA_HOME
+    if not jiana_home:
+        raise ValueError("jiana_home 경로가 없습니다. workspace에 jiana/ 디렉토리가 필요합니다.")
+    jh = jiana_home
     lib_path = f"{jh}/lib"
     classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
     resource_path = f"{jh}/resources/korean"
@@ -151,7 +155,7 @@ def 풀형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: O
                 logger.warning("FullTest 실패 (rc=%d): %s", proc.returncode, stderr_txt)
                 return {
                     "keyword": keyword,
-                    "result": f"분석 실패: {stderr_txt[:200]}",
+                    "result": f"분析 실패: {stderr_txt[:200]}",
                     "tokens": [],
                 }
 
@@ -171,21 +175,21 @@ def 풀형태소분석(keyword: str, domain: Optional[str] = None, jiana_home: O
             logger.error("FullTest 타임아웃 (%d초): %s", MORPHEME_TIMEOUT, keyword)
             return {
                 "keyword": keyword,
-                "result": f"분석 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
+                "result": f"분析 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
                 "tokens": [],
             }
         except FileNotFoundError:
-            logger.error("java 실행 파일 없음")
+            logger.error("java run_phase1_service 파일 없음")
             return {
                 "keyword": keyword,
-                "result": "Java 실행 파일 없음",
+                "result": "Java run_phase1_service 파일 없음",
                 "tokens": [],
             }
         except Exception as e:
             logger.exception("FullTest 예외: %s", e)
             return {
                 "keyword": keyword,
-                "result": f"분석 오류: {str(e)[:200]}",
+                "result": f"분析 오류: {str(e)[:200]}",
                 "tokens": [],
             }
 
@@ -212,16 +216,17 @@ def _find_synonym_path(workspace: str) -> Optional[Path]:
     return None
 
 
-def _build_설정값(workspace: str, jiana_home: Optional[str] = None):
-    """know-ops 설정 객체 생성 (형태소분석래퍼용)."""
+def _build_config(workspace: str, jiana_home: Optional[str] = None):
+    """know-ops 설정 객체 생성 (형태소分析래퍼용)."""
     _ensure_know_ops_path()
     from know.core.config import 설정
 
-    jh = Path(jiana_home) if jiana_home else Path(DEFAULT_JIANA_HOME)
+    if not jiana_home:
+        raise ValueError("jiana_home 경로가 없습니다.")
+    jh = Path(jiana_home)
     lib_path = jh.parent / "lib" if (jh.parent / "lib").exists() else jh / "lib"
 
     설정값 = 설정()
-    # jiana jar 경로 재설정
     jar1 = lib_path / "jiana1.5.jar"
     jar2 = lib_path / "dqdic-1.0.3.jar"
     if jar1.exists():
@@ -231,12 +236,12 @@ def _build_설정값(workspace: str, jiana_home: Optional[str] = None):
     return 설정값
 
 
-def 실시간_분석(keyword: str, domain: str, workspace: str) -> dict:
-    """단일 키워드 실시간 LITE 분석 파이프라인.
+def analyze_realtime(keyword: str, domain: str, workspace: str) -> dict:
+    """단일 키워드 실시간 LITE 分析 파이프라인.
 
-    1. LiteTest 형태소분석 (기존 형태소분석() 재사용)
+    1. LiteTest 형태소分析 (analyze_morpheme() 재사용)
     2. 결과변환 (형태소결과변환기 사용)
-    3. 유사어체크 (단일_유사어체크() 사용)
+    3. check_synonyms (check_single_synonym() 사용)
 
     Returns:
         {"keyword": str, "analysis": str}
@@ -244,17 +249,17 @@ def 실시간_분석(keyword: str, domain: str, workspace: str) -> dict:
     if not keyword or not keyword.strip():
         return {"keyword": keyword, "analysis": ""}
 
-    jiana_home = None
-    if workspace:
-        ws_jiana = Path(WORKSPACE_BASE) / workspace / "jiana"
-        if ws_jiana.exists():
-            jiana_home = str(ws_jiana)
+    if not workspace:
+        return {"keyword": keyword, "analysis": "오류: workspace가 지정되지 않았습니다."}
+    ws_jiana = Path(WORKSPACE_BASE) / workspace / "jiana"
+    if not ws_jiana.exists():
+        return {"keyword": keyword, "analysis": f"오류: {ws_jiana} 경로가 없습니다."}
+    jiana_home = str(ws_jiana)
 
-    # Step 1: 형태소분석
-    morph_result = 형태소분석(keyword, domain, jiana_home=jiana_home)
+    morph_result = analyze_morpheme(keyword, domain, jiana_home=jiana_home)
     raw_text = morph_result.get("result", "")
 
-    if not raw_text or raw_text.startswith("분석"):
+    if not raw_text or raw_text.startswith("분析"):
         return {"keyword": keyword, "analysis": raw_text}
 
     # Step 2: 결과변환 (임시파일 기반)
@@ -273,29 +278,29 @@ def 실시간_분석(keyword: str, domain: str, workspace: str) -> dict:
     except Exception as e:
         logger.warning("결과변환 실패, raw 사용: %s", e)
 
-    # Step 3: 유사어체크
+    # Step 3: check_synonyms
     analysis = transformed
     if workspace:
         syn_path = _find_synonym_path(workspace)
         if syn_path:
             try:
-                from phase1.synonym_checker import 단일_유사어체크
-                설정값 = None
+                from phase1.synonym_checker import check_single_synonym
+                config = None
                 try:
-                    설정값 = _build_설정값(workspace, jiana_home)
+                    config = _build_config(workspace, jiana_home)
                 except Exception as e:
-                    logger.warning("설정값 생성 실패, 유사어 형태소분석 스킵: %s", e)
-                analysis = 단일_유사어체크(keyword, transformed, syn_path, 설정값)
+                    logger.warning("설정값 생성 실패, 유사어 형태소分析 스킵: %s", e)
+                analysis = check_single_synonym(keyword, transformed, syn_path, config)
             except Exception as e:
-                logger.warning("유사어체크 실패, transform 결과 반환: %s", e)
+                logger.warning("check_synonyms 실패, transform 결과 반환: %s", e)
 
     return {"keyword": keyword, "analysis": analysis}
 
 
-def 실시간_풀분석(keyword: str, domain: str, workspace: str) -> dict:
-    """단일 키워드 실시간 FULL 분석 파이프라인.
+def analyze_realtime_full(keyword: str, domain: str, workspace: str) -> dict:
+    """단일 키워드 실시간 FULL 分析 파이프라인.
 
-    1. FullTest 형태소분석 (기존 풀형태소분석() 재사용)
+    1. FullTest 형태소分析 (analyze_morpheme_full() 재사용)
     2. 유사어사전 로드
     3. 유사어 정보 병합
 
@@ -305,17 +310,18 @@ def 실시간_풀분석(keyword: str, domain: str, workspace: str) -> dict:
     if not keyword or not keyword.strip():
         return {"keyword": keyword, "full_analysis": ""}
 
-    jiana_home = None
-    if workspace:
-        ws_jiana = Path(WORKSPACE_BASE) / workspace / "jiana"
-        if ws_jiana.exists():
-            jiana_home = str(ws_jiana)
+    if not workspace:
+        return {"keyword": keyword, "full_analysis": "오류: workspace가 지정되지 않았습니다."}
+    ws_jiana = Path(WORKSPACE_BASE) / workspace / "jiana"
+    if not ws_jiana.exists():
+        return {"keyword": keyword, "full_analysis": f"오류: {ws_jiana} 경로가 없습니다."}
+    jiana_home = str(ws_jiana)
 
-    # Step 1: 풀형태소분석
-    morph_result = 풀형태소분석(keyword, domain, jiana_home=jiana_home)
+    # Step 1: 풀형태소分析
+    morph_result = analyze_morpheme_full(keyword, domain, jiana_home=jiana_home)
     raw_text = morph_result.get("result", "")
 
-    if not raw_text or raw_text.startswith("분석"):
+    if not raw_text or raw_text.startswith("분析"):
         return {"keyword": keyword, "full_analysis": raw_text}
 
     # Step 2: 유사어 정보 병합
@@ -324,9 +330,8 @@ def 실시간_풀분석(keyword: str, domain: str, workspace: str) -> dict:
         syn_path = _find_synonym_path(workspace)
         if syn_path:
             try:
-                from phase1.synonym_checker import _유사어사전로드
-                사전 = _유사어사전로드(syn_path)
-                # FullTest 결과에 <<유사어>> 마킹 추가
+                from phase1.synonym_checker import _load_synonym_dict
+                사전 = _load_synonym_dict(syn_path)
                 lines_out = []
                 for line in raw_text.splitlines():
                     lines_out.append(line)
@@ -339,3 +344,5 @@ def 실시간_풀분석(keyword: str, domain: str, workspace: str) -> dict:
                 logger.warning("FULL 유사어 병합 실패, raw 반환: %s", e)
 
     return {"keyword": keyword, "full_analysis": full_analysis}
+
+

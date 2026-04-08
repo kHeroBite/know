@@ -22,7 +22,7 @@ def _ensure_know_ops_path() -> None:
         sys.path.insert(0, KNOW_OPS_SRC)
 
 
-def _유사어사전로드(synonym_path: Path) -> dict:
+def _load_synonym_dict(synonym_path: Path) -> dict:
     """synonym 파일을 읽어 {키워드: "유사어1, 유사어2"} 딕셔너리 반환.
 
     두 가지 포맷 자동 감지:
@@ -81,19 +81,19 @@ def _유사어사전로드(synonym_path: Path) -> dict:
     return 사전
 
 
-def _형태소분석_일괄(설정값, 유사어목록: list, work_dir: Path) -> dict:
-    """유사어 목록을 jiana로 형태소분석하여 {키워드: [출력줄, ...]} dict 반환.
+def _batch_morpheme_analyze(설정값, 유사어list_tasks: list, work_dir: Path) -> dict:
+    """유사어 목록을 jiana로 analyze_morpheme하여 {키워드: [출력줄, ...]} dict 반환.
 
     Args:
         설정값: know-ops 설정 객체
-        유사어목록: 분석할 유사어 키워드 목록
+        유사어list_tasks: 분석할 유사어 키워드 list_tasks
         work_dir: 임시 파일 작업 디렉토리
 
     Returns:
         {키워드: [변환결과줄, ...]} — comp 라인 포함
     """
     _ensure_know_ops_path()
-    from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼
+    from know.pipeline.분석.analyze_morpheme래퍼 import analyze_morpheme래퍼
     from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
 
     tmp_input = work_dir / "_syn_morph_input.txt"
@@ -103,11 +103,11 @@ def _형태소분석_일괄(설정값, 유사어목록: list, work_dir: Path) ->
     try:
         # 임시 입력파일 작성
         with open(tmp_input, "w", encoding="utf-8") as f:
-            for kw in 유사어목록:
+            for kw in 유사어list_tasks:
                 f.write(f"{kw}\n")
 
-        # 형태소분석
-        래퍼 = 형태소분석래퍼(설정값=설정값)
+        # analyze_morpheme
+        래퍼 = analyze_morpheme래퍼(설정값=설정값)
         래퍼.분석(tmp_input, "", 출력파일=tmp_analyzed)
 
         # 결과변환
@@ -153,21 +153,21 @@ def _형태소분석_일괄(설정값, 유사어목록: list, work_dir: Path) ->
                 pass
 
 
-def 단일_유사어체크(keyword: str, 분석결과: str, 유사어사전경로: Path, 설정값=None) -> str:
-    """단일 키워드의 형태소분석 결과에 유사어를 찾아 표시.
+def check_single_synonym(keyword: str, 분석결과: str, 유사어사전경로: Path, 설정값=None) -> str:
+    """단일 키워드의 analyze_morpheme 결과에 유사어를 찾아 표시.
 
     Args:
         keyword: 원본 키워드
-        분석결과: 형태소분석+결과변환 후 텍스트 (transform.txt 1블록 형식)
+        분석결과: analyze_morpheme+결과변환 후 텍스트 (transform.txt 1블록 형식)
         유사어사전경로: synonym_full_v2.txt 경로
-        설정값: know-ops 설정 객체 (유사어 형태소분석용)
+        설정값: know-ops 설정 객체 (유사어 analyze_morpheme용)
 
     Returns:
         유사어 마킹된 분석결과 텍스트 (synonym.txt 1블록과 동일 포맷)
     """
     import tempfile
 
-    사전 = _유사어사전로드(유사어사전경로)
+    사전 = _load_synonym_dict(유사어사전경로)
 
     # 1패스: 분석결과에서 유사어 집합 수집 (<<...>> 용)
     유사어_집합: set = set()
@@ -183,14 +183,14 @@ def 단일_유사어체크(keyword: str, 분석결과: str, 유사어사전경�
                     if syn:
                         유사어_집합.add(syn)
 
-    # jiana 형태소분석 일괄 실행
-    형태소분석결과: dict = {}
+    # jiana analyze_morpheme 일괄 run_phase1_service
+    analyze_morpheme결과: dict = {}
     if 설정값 is not None and 유사어_집합:
         try:
             with tempfile.TemporaryDirectory(prefix="syn_single_") as tmpdir:
-                형태소분석결과 = _형태소분석_일괄(설정값, sorted(유사어_집합), Path(tmpdir))
+                analyze_morpheme결과 = _batch_morpheme_analyze(설정값, sorted(유사어_집합), Path(tmpdir))
         except Exception as e:
-            logger.warning(f"단일 유사어 형태소분석 실패, 스킵: {e}")
+            logger.warning(f"단일 유사어 analyze_morpheme 실패, 스킵: {e}")
 
     # 2패스: 마킹 처리 (파일 대신 텍스트 입출력)
     syncnt = 0
@@ -273,8 +273,8 @@ def 단일_유사어체크(keyword: str, 분석결과: str, 유사어사전경�
                     printinfo += "<<" + 사전[headkwd] + ">>\n"
                     for syn in 사전[headkwd].split(","):
                         syn = syn.strip()
-                        if syn and syn in 형태소분석결과:
-                            for morph_line in 형태소분석결과[syn]:
+                        if syn and syn in analyze_morpheme결과:
+                            for morph_line in analyze_morpheme결과[syn]:
                                 printinfo += morph_line + "\n"
 
         if linecnt == 1:
@@ -283,11 +283,11 @@ def 단일_유사어체크(keyword: str, 분석결과: str, 유사어사전경�
         else:
             출력줄들.append("\n" + printinfo)
 
-    logger.info(f"단일 유사어체크 완료: 전체유사어={syncnt}, 부분유사어={subpartcnt}, 복합어유사어={compsyncnt}")
+    logger.info(f"단일 check_synonyms complete: 전체유사어={syncnt}, 부분유사어={subpartcnt}, 복합어유사어={compsyncnt}")
     return "".join(출력줄들)
 
 
-def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파일: Path, 설정값=None) -> Path:
+def check_synonyms(입력파일: Path, 유사어사전경로: Path, 출력파일: Path, 설정값=None) -> Path:
     """형태소 분석 결과에서 유사어를 찾아 표시.
 
     Args:
@@ -296,7 +296,7 @@ def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파�
         출력파일: synonym.txt
         설정값: know-ops 설정 객체. None이면 jiana 호출 스킵 (하위 호환).
     """
-    사전 = _유사어사전로드(유사어사전경로)
+    사전 = _load_synonym_dict(유사어사전경로)
     logger.info(f"유사어 사전 로드: {len(사전)}개")
 
     출력파일.parent.mkdir(parents=True, exist_ok=True)
@@ -316,14 +316,14 @@ def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파�
                         if syn:
                             유사어_집합.add(syn)
 
-    # jiana 형태소분석 일괄 실행
-    형태소분석결과: dict = {}
+    # jiana analyze_morpheme 일괄 run_phase1_service
+    analyze_morpheme결과: dict = {}
     if 설정값 is not None and 유사어_집합:
         try:
-            형태소분석결과 = _형태소분석_일괄(설정값, sorted(유사어_집합), 출력파일.parent)
-            logger.info(f"유사어 형태소분석: {len(유사어_집합)}건 → {len(형태소분석결과)}건")
+            analyze_morpheme결과 = _batch_morpheme_analyze(설정값, sorted(유사어_집합), 출력파일.parent)
+            logger.info(f"유사어 analyze_morpheme: {len(유사어_집합)}건 → {len(analyze_morpheme결과)}건")
         except Exception as e:
-            logger.warning(f"유사어 형태소분석 실패, 스킵: {e}")
+            logger.warning(f"유사어 analyze_morpheme 실패, 스킵: {e}")
 
     # 2패스: 출력 파일 생성
     syncnt = 0
@@ -410,11 +410,11 @@ def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파�
                     if headkwd in 사전:
                         syncnt += 1
                         printinfo += "<<" + 사전[headkwd] + ">>\n"
-                        # 각 유사어의 형태소분석 결과줄 추가
+                        # 각 유사어의 analyze_morpheme 결과줄 추가
                         for syn in 사전[headkwd].split(","):
                             syn = syn.strip()
-                            if syn and syn in 형태소분석결과:
-                                for morph_line in 형태소분석결과[syn]:
+                            if syn and syn in analyze_morpheme결과:
+                                for morph_line in analyze_morpheme결과[syn]:
                                     printinfo += morph_line + "\n"
 
             chkcnt += 1
@@ -425,5 +425,5 @@ def 유사어체크(입력파일: Path, 유사어사전경로: Path, 출력파�
             else:
                 fout.write("\n" + printinfo)
 
-    logger.info(f"유사어 체크 완료: 검사={chkcnt}건, 전체유사어={syncnt}, 부분유사어={subpartcnt}, 복합어유사어={compsyncnt}")
+    logger.info(f"유사어 체크 complete: 검사={chkcnt}건, 전체유사어={syncnt}, 부분유사어={subpartcnt}, 복합어유사어={compsyncnt}")
     return 출력파일

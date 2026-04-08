@@ -16,4 +16,4 @@ class 페이지응답(BaseModel, Generic[T]):
 class 성공응답(BaseModel):
     """단순 성공 응답 모델."""
     success: bool = True
-    message: str = "처리 완료"
+    message: str = "처리 complete"

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from core.database import DB연결확인, 엔진, 세션팩토리
+from core.database import check_db_connection, 엔진, 세션팩토리
 from api.auth import 라우터 as 인증라우터
 from api.domain import 라우터 as 도메인라우터
 from api.dictionary import 라우터 as 사전라우터
@@ -55,17 +55,17 @@ from api.dict_verify import 라우터 as 사전검증라우터
 앱.include_router(워크스페이스라우터, prefix="/api", tags=["워크스페이스"])
 앱.include_router(도메인관리라우터, prefix="/api", tags=["도메인관리"])
 앱.include_router(계정라우터, prefix="/api", tags=["계정관리"])
-앱.include_router(할당라우터, prefix="/api/assignments", tags=["데이터할당"])
-앱.include_router(형태소라우터, prefix="/api", tags=["형태소분석"])
+앱.include_router(할당라우터, prefix="/api/assignments", tags=["데이터assign"])
+앱.include_router(형태소라우터, prefix="/api", tags=["analyze_morpheme"])
 앱.include_router(작업이력라우터, prefix="/api", tags=["작업이력"])
 앱.include_router(AI분석라우터, prefix="/api", tags=["AI분석"])
 앱.include_router(LLM설정라우터, prefix="/api/llm-settings", tags=["LLM설정"])
-앱.include_router(사전검증라우터, prefix="/api", tags=["사전검증"])
+앱.include_router(사전검증라우터, prefix="/api", tags=["verify_dict"])
 
 
 
 @앱.on_event("startup")
-def _마이그레이션_실행():
+def _run_migration():
     """서버 기동 시 신규 테이블 생성 + 기존 워크스페이스 phase 자동 추론."""
     from sqlalchemy import text
     마이그레이션경로 = os.path.join(os.path.dirname(__file__), "migrations", "002_user_work_phase.sql")
@@ -81,22 +81,22 @@ def _마이그레이션_실행():
                     conn.execute(text(정제된_sql))
             conn.commit()
     except Exception as e:
-        print(f"[migration 002] 실행 실패: {e}")
+        print(f"[migration 002] run_phase1_service 실패: {e}")
     # phase 자동 마이그레이션 (기존 워크스페이스 대상)
     try:
-        from services.workspace_service import _phase자동마이그레이션
+        from services.workspace_service import _auto_migrate_phase
         db = 세션팩토리()
         try:
-            _phase자동마이그레이션(db)
+            _auto_migrate_phase(db)
         finally:
             db.close()
     except Exception as e:
-        print(f"[phase 자동마이그레이션] 실행 실패: {e}")
+        print(f"[phase 자동마이그레이션] run_phase1_service 실패: {e}")
 
 
 @앱.get("/api/health")
-def 헬스체크():
-    return {"status": "ok", "db": DB연결확인()}
+def health_check():
+    return {"status": "ok", "db": check_db_connection()}
 
 
 # React SPA 정적 파일 서빙 (빌드 후 활성화)
@@ -110,7 +110,7 @@ if os.path.isdir(_프론트엔드경로):
         앱.mount("/manual", StaticFiles(directory=_매뉴얼경로), name="manual")
 
     @앱.get("/{full_path:path}")
-    def 프론트엔드서빙(full_path: str):
+    def serve_frontend(full_path: str):
         """SPA 라우팅 — 정적 파일 존재 시 직접 서빙, 아니면 index.html."""
         file_path = os.path.join(_프론트엔드경로, full_path)
         if os.path.isfile(file_path):

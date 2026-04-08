@@ -25,7 +25,7 @@ Base = declarative_base()
 SessionLocal = 세션팩토리
 
 
-def DB세션():
+def db_session():
     db = 세션팩토리()
     try:
         yield db
@@ -33,7 +33,7 @@ def DB세션():
         db.close()
 
 
-def DB연결확인() -> bool:
+def check_db_connection() -> bool:
     try:
         with 엔진.connect() as conn:
             conn.execute(text("SELECT 1"))

@@ -5,7 +5,7 @@
   2. 공백/특수문자 제거
   3. 중복 제거 (case-insensitive)
   4. 최소 길이 필터 (2자 미만 제거)
-  5. 정제된 키워드 목록 저장 + 통계 반환
+  5. 정제된 키워드 list_tasks 저장 + get_stats 반환
 """
 import logging
 import os
@@ -47,7 +47,7 @@ def refine_search_log(file_path: str, pipeline_id: int = None) -> Dict[str, Any]
     keyword_col = _detect_keyword_column(df)
     if keyword_col is None:
         raise ValueError(
-            f"키워드 컬럼을 찾을 수 없습니다. 컬럼 목록: {list(df.columns)}"
+            f"키워드 컬럼을 찾을 수 없습니다. 컬럼 list_tasks: {list(df.columns)}"
         )
 
     keywords = df[keyword_col].astype(str).tolist()
@@ -79,7 +79,7 @@ def refine_search_log(file_path: str, pipeline_id: int = None) -> Dict[str, Any]
         f.write("\n".join(cleaned))
 
     summary = _build_summary(input_count, output_count, stats)
-    logger.info("정제 완료: 입력=%d, 출력=%d, 제거=%d", input_count, output_count, removed_count)
+    logger.info("정제 complete: 입력=%d, 출력=%d, 제거=%d", input_count, output_count, removed_count)
 
     return {
         "input_count": input_count,

@@ -1,4 +1,4 @@
-"""데이터 할당 서비스 — 프리징/목록/할당/완료/사전등록"""
+"""데이터 assign 서비스 — freeze_service/list_tasks/assign/complete/사전등록"""
 from __future__ import annotations
 import os, logging
 from datetime import datetime
@@ -14,7 +14,7 @@ WORKSPACE_BASE = "/home/know/apps/know-ops/workspace"
 import re as _re
 
 
-def _유사어키워드추출(block_lines: list[str]) -> dict:
+def _extract_synonym_keywords(block_lines: list[str]) -> dict:
     """분석 블록에서 유사어 정보를 구조화하여 추출.
 
     Returns:
@@ -38,7 +38,7 @@ def _유사어키워드추출(block_lines: list[str]) -> dict:
     return {"part_synonyms": part_syns, "full_synonyms": full_syns}
 
 
-def synonym_파싱(workspace: str) -> list:
+def parse_synonym(workspace: str) -> list:
     """synonym.txt를 파싱하여 [{keyword, analysis, synonym_info}] 반환."""
     syn_path = os.path.join(WORKSPACE_BASE, workspace, "build", "work", "synonym.txt")
     if not os.path.isfile(syn_path):
@@ -56,7 +56,7 @@ def synonym_파싱(workspace: str) -> list:
                 keyword = current_block[0].split("\t")[0].strip()
                 if keyword and not keyword.startswith("comp "):
                     analysis = "\n".join(current_block)
-                    synonym_info = _유사어키워드추출(current_block)
+                    synonym_info = _extract_synonym_keywords(current_block)
                     blocks.append({"keyword": keyword, "analysis": analysis, "synonym_info": synonym_info})
                 current_block = []
         else:
@@ -65,13 +65,13 @@ def synonym_파싱(workspace: str) -> list:
         keyword = current_block[0].split("\t")[0].strip()
         if keyword and not keyword.startswith("comp "):
             analysis = "\n".join(current_block)
-            synonym_info = _유사어키워드추출(current_block)
+            synonym_info = _extract_synonym_keywords(current_block)
             blocks.append({"keyword": keyword, "analysis": analysis, "synonym_info": synonym_info})
 
     return blocks
 
 
-def _배치_풀분석(keywords: list[str], workspace: str) -> dict[str, str]:
+def _batch_full_analyze(keywords: list[str], workspace: str) -> dict[str, str]:
     """키워드 목록을 FullTest로 일괄 분석하여 {keyword: result} 반환.
 
     FullTest는 파일 기반이므로 키워드를 모아서 한 번에 처리.
@@ -79,9 +79,9 @@ def _배치_풀분석(keywords: list[str], workspace: str) -> dict[str, str]:
     """
     import tempfile
     from pathlib import Path as P
-    from services.workspace_service import jiana홈경로
+    from services.workspace_service import get_jiana_home_path
 
-    jiana_home = jiana홈경로(workspace)
+    jiana_home = get_jiana_home_path(workspace)
     lib_path = f"{jiana_home}/lib"
     classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
     resource_path = f"{jiana_home}/resources/korean"
@@ -131,7 +131,7 @@ def _배치_풀분석(keywords: list[str], workspace: str) -> dict[str, str]:
         return {}
 
 
-def _풀분석_유사어병합(block: dict, 풀분석결과: dict[str, str]) -> str:
+def _merge_full_analyze_synonyms(block: dict, 풀분석결과: dict[str, str]) -> str:
     """FullTest 결과에 유사어 정보를 심플 버전과 동일한 구조로 병합.
 
     결과 형식:
@@ -169,7 +169,7 @@ def _풀분석_유사어병합(block: dict, 풀분석결과: dict[str, str]) -> 
     return "\n".join(lines)
 
 
-def _full_analysis_컬럼확인(db: Session) -> bool:
+def _check_full_analysis_column(db: Session) -> bool:
     """full_analysis 컬럼 존재 여부 확인 + 없으면 추가."""
     try:
         db.execute(text("SELECT full_analysis FROM keyword_assignments LIMIT 0"))
@@ -185,7 +185,7 @@ def _full_analysis_컬럼확인(db: Session) -> bool:
             return False
 
 
-def 프리징(db: Session, workspace: str, domain: str) -> dict:
+def freeze_service(db: Session, workspace: str, domain: str) -> dict:
     """refine.txt → keyword_assignments INSERT (기존 데이터 DELETE 후)."""
     refine_path = os.path.join(WORKSPACE_BASE, workspace, "build", "work", "refine.txt")
     if not os.path.isfile(refine_path):
@@ -212,9 +212,9 @@ def 프리징(db: Session, workspace: str, domain: str) -> dict:
     return {"total": len(keywords), "workspace": workspace, "domain": domain}
 
 
-def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pending",
+def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pending",
               page: int = 1, size: int = 50, assigned_to: Optional[str] = None) -> dict:
-    """키워드 목록 조회 (페이지네이션 + 필터 + assigned_to)."""
+    """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to)."""
     where = "workspace=:ws AND domain=:dom"
     params = {"ws": workspace, "dom": domain}
     
@@ -269,7 +269,7 @@ def 키워드목록(db: Session, workspace: str, domain: str, filter: str = "pen
     return {"items": items, "total": total, "page": page, "size": size, "worked_count": worked_count}
 
 
-def 통계(db: Session, workspace: str, domain: str) -> dict:
+def get_stats(db: Session, workspace: str, domain: str) -> dict:
     """상태별 건수."""
     rows = db.execute(text("""
         SELECT status, COUNT(*) FROM keyword_assignments
@@ -282,8 +282,8 @@ def 통계(db: Session, workspace: str, domain: str) -> dict:
     return result
 
 
-def 할당받기(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str) -> dict:
-    """미완료 목록 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 할당."""
+def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str) -> dict:
+    """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 assign."""
     now = datetime.now().isoformat()
     offset = max(0, from_pos - 1)
     limit = to_pos - from_pos + 1
@@ -294,7 +294,7 @@ def 할당받기(db: Session, workspace: str, domain: str, from_pos: int, to_pos
         ORDER BY line_num ASC LIMIT :lim OFFSET :off
     """), {"ws": workspace, "dom": domain, "lim": limit, "off": offset}).fetchall()
     if not ids:
-        raise HTTPException(400, detail="할당 가능한 미완료 키워드가 없습니다")
+        raise HTTPException(400, detail="assign 가능한 미complete 키워드가 없습니다")
     id_list = [r[0] for r in ids]
     placeholders = ",".join(f":id{i}" for i in range(len(id_list)))
     params = {"uid": user_id, "now": now}
@@ -305,11 +305,11 @@ def 할당받기(db: Session, workspace: str, domain: str, from_pos: int, to_pos
     """), params)
     db.commit()
     return {"assigned": len(id_list), "user_id": user_id,
-            "message": f"{len(id_list)}건 할당 완료"}
+            "message": f"{len(id_list)}건 assign complete"}
 
 
-def flag_업데이트(db: Session, keyword_id: int, flag: str, user_id: str) -> dict:
-    """키워드 flag 업데이트 (R=읽음, W=작업완료, ''=미확인)."""
+def update_flag_service(db: Session, keyword_id: int, flag: str, user_id: str) -> dict:
+    """키워드 flag 업데이트 (R=읽음, W=작업complete, ''=미확인)."""
     db.execute(
         text("UPDATE keyword_assignments SET flag=:flag WHERE id=:id AND assigned_to=:uid"),
         {"flag": flag, "id": keyword_id, "uid": user_id},
@@ -318,7 +318,7 @@ def flag_업데이트(db: Session, keyword_id: int, flag: str, user_id: str) -> 
     return {"id": keyword_id, "flag": flag}
 
 
-def 마지막읽은위치(db: Session, workspace: str, domain: str, assigned_to: str, size: int = 100) -> dict:
+def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to: str, size: int = 100) -> dict:
     """마지막으로 읽은(R/W) 키워드의 위치를 반환하여 해당 페이지부터 로딩할 수 있게 한다."""
     params = {"ws": workspace, "dom": domain, "uid": assigned_to}
 
@@ -346,8 +346,8 @@ def 마지막읽은위치(db: Session, workspace: str, domain: str, assigned_to:
     return {"keyword_id": keyword_id, "line_num": line_num, "page": page, "position": position}
 
 
-def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """user_id에게 할당된 키워드를 완료 처리."""
+def process_complete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """user_id에게 할당된 키워드를 complete 처리."""
     now = datetime.now().isoformat()
     result = db.execute(text("""
         UPDATE keyword_assignments SET status='completed', completed_at=:now
@@ -357,8 +357,8 @@ def 완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict
     return {"completed": result.rowcount, "user_id": user_id}
 
 
-def 전체_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """할당된 모든 키워드를 완료(W) 처리 후 작업자 제거(반납)."""
+def process_all_complete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """할당된 모든 키워드를 complete(W) 처리 후 작업자 제거(반납)."""
     now = datetime.now().isoformat()
     result = db.execute(text("""
         UPDATE keyword_assignments SET status='completed', flag='W', completed_at=:now, assigned_to=NULL
@@ -368,8 +368,8 @@ def 전체_완료처리(db: Session, workspace: str, domain: str, user_id: str) 
     return {"completed": result.rowcount, "mode": "all_complete"}
 
 
-def 전체_미완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
-    """할당된 모든 키워드를 미완료 처리 후 작업자 제거(반납) — pending으로 복귀."""
+def process_all_incomplete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+    """할당된 모든 키워드를 미complete 처리 후 작업자 제거(반납) — pending으로 복귀."""
     result = db.execute(text("""
         UPDATE keyword_assignments SET status='pending', flag='', assigned_to=NULL, assigned_at=NULL, completed_at=NULL
         WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
@@ -378,10 +378,10 @@ def 전체_미완료처리(db: Session, workspace: str, domain: str, user_id: st
     return {"completed": result.rowcount, "mode": "all_incomplete"}
 
 
-def 작업이력대로_완료처리(db: Session, workspace: str, domain: str, user_id: str) -> dict:
+def complete_by_history(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """현재 flag 상태 유지하고 작업자 제거(반납) — 작업한(W/R)은 completed, 나머지는 pending."""
     now = datetime.now().isoformat()
-    # 작업완료(W) / 검토완료(R) 키워드 → completed
+    # 작업complete(W) / 검토complete(R) 키워드 → completed
     db.execute(text("""
         UPDATE keyword_assignments SET status='completed', completed_at=:now, assigned_to=NULL
         WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned' AND flag IN ('W','R')
@@ -395,14 +395,14 @@ def 작업이력대로_완료처리(db: Session, workspace: str, domain: str, us
     return {"completed": result.rowcount, "mode": "by_history"}
 
 
-def 작업완료모드처리(db: Session, workspace: str, domain: str, user_id: str, mode: str) -> dict:
-    """모드에 따라 완료처리 함수 분기."""
+def process_complete_mode(db: Session, workspace: str, domain: str, user_id: str, mode: str) -> dict:
+    """모드에 따라 process_complete 함수 분기."""
     if mode == "all_complete":
-        return 전체_완료처리(db, workspace, domain, user_id)
+        return process_all_complete(db, workspace, domain, user_id)
     elif mode == "all_incomplete":
-        return 전체_미완료처리(db, workspace, domain, user_id)
+        return process_all_incomplete(db, workspace, domain, user_id)
     elif mode == "by_history":
-        return 작업이력대로_완료처리(db, workspace, domain, user_id)
+        return complete_by_history(db, workspace, domain, user_id)
     else:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"알 수 없는 mode: {mode}")

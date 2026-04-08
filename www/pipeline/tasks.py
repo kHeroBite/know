@@ -149,9 +149,9 @@ def task_refine(self, pipeline_id: int, file_path: str):
                       output_count=result["output_count"],
                       log_text=result["summary"])
         _publish(pipeline_id, "refine", 20,
-                 f"정제 완료: {result['output_count']}건 (제거 {result['removed_count']}건)")
+                 f"정제 complete: {result['output_count']}건 (제거 {result['removed_count']}건)")
         db.close()
-        # 승인 게이트: refine 완료 후 morpheme 시작 전 관리자 승인 필요
+        # 승인 게이트: refine complete 후 morpheme 시작 전 관리자 승인 필요
         _wait_for_approval(pipeline_id, "refine")
         db = _get_db()
         return {"pipeline_id": pipeline_id, "refined_file": result["output_file"]}
@@ -166,27 +166,27 @@ def task_refine(self, pipeline_id: int, file_path: str):
 
 
 # ─────────────────────────────────────────────
-# 태스크 2: 형태소분석 (morpheme)
+# 태스크 2: analyze_morpheme (morpheme)
 # ─────────────────────────────────────────────
 @celery_app.task(bind=True, max_retries=3, soft_time_limit=1800,
                  name="pipeline.tasks.task_morpheme")
 def task_morpheme(self, prev_result: dict, pipeline_id: int):
-    """형태소분석 태스크 (cotton_test.sh 래핑)"""
+    """analyze_morpheme 태스크 (cotton_test.sh 래핑)"""
     db = _get_db()
     refined_file = prev_result.get("refined_file", "")
     try:
         _update_stage(db, pipeline_id, "morpheme", "running")
         _update_pipeline(db, pipeline_id, "running", current_stage="morpheme")
-        _publish(pipeline_id, "morpheme", 25, "형태소분석 시작")
+        _publish(pipeline_id, "morpheme", 25, "analyze_morpheme 시작")
 
         from pipeline.morpheme import run_morpheme
         result = run_morpheme(refined_file, pipeline_id)
 
         _update_stage(db, pipeline_id, "morpheme", "completed",
                       log_text=result.get("log", ""))
-        _publish(pipeline_id, "morpheme", 50, "형태소분석 완료")
+        _publish(pipeline_id, "morpheme", 50, "analyze_morpheme complete")
         db.close()
-        # 승인 게이트: morpheme 완료 후 register 시작 전 관리자 승인 필요
+        # 승인 게이트: morpheme complete 후 register 시작 전 관리자 승인 필요
         _wait_for_approval(pipeline_id, "morpheme")
         db = _get_db()
         return {"pipeline_id": pipeline_id, "morpheme_result": result["output_file"]}
@@ -194,7 +194,7 @@ def task_morpheme(self, prev_result: dict, pipeline_id: int):
         logger.error("task_morpheme 실패 pipeline_id=%s: %s", pipeline_id, exc)
         _update_stage(db, pipeline_id, "morpheme", "failed", log_text=str(exc))
         _update_pipeline(db, pipeline_id, "failed", error_message=str(exc))
-        _publish(pipeline_id, "morpheme", 0, f"형태소분석 실패: {exc}")
+        _publish(pipeline_id, "morpheme", 0, f"analyze_morpheme 실패: {exc}")
         raise self.retry(exc=exc, countdown=60)
     finally:
         db.close()
@@ -206,7 +206,7 @@ def task_morpheme(self, prev_result: dict, pipeline_id: int):
 @celery_app.task(bind=True, max_retries=3, soft_time_limit=1800,
                  name="pipeline.tasks.task_register")
 def task_register(self, prev_result: dict, pipeline_id: int):
-    """사전등록 태스크 (형태소분석 결과를 DB에 등록)"""
+    """사전등록 태스크 (analyze_morpheme 결과를 DB에 등록)"""
     db = _get_db()
     morpheme_result = prev_result.get("morpheme_result", "")
     try:
@@ -223,8 +223,8 @@ def task_register(self, prev_result: dict, pipeline_id: int):
 
         _update_stage(db, pipeline_id, "register", "completed",
                       output_count=registered,
-                      log_text=f"등록 완료: {registered}건\n")
-        _publish(pipeline_id, "register", 70, f"사전등록 완료: {registered}건")
+                      log_text=f"등록 complete: {registered}건\n")
+        _publish(pipeline_id, "register", 70, f"사전등록 complete: {registered}건")
         return {"pipeline_id": pipeline_id, "registered_count": registered}
     except Exception as exc:
         logger.error("task_register 실패 pipeline_id=%s: %s", pipeline_id, exc)
@@ -237,9 +237,9 @@ def task_register(self, prev_result: dict, pipeline_id: int):
 
 
 def _do_register(db, pipeline_id: int, domain: str, morpheme_path: str) -> int:
-    """형태소분석 결과를 dictionary_{domain} 테이블에 INSERT"""
+    """analyze_morpheme 결과를 dictionary_{domain} 테이블에 INSERT"""
     if not morpheme_path or not os.path.exists(morpheme_path):
-        logger.warning("형태소분석 결과 파일 없음: %s", morpheme_path)
+        logger.warning("analyze_morpheme 결과 파일 없음: %s", morpheme_path)
         return 0
 
     count = 0
@@ -259,7 +259,7 @@ def _do_register(db, pipeline_id: int, domain: str, morpheme_path: str) -> int:
                 except Exception as e:
                     logger.debug("단어 INSERT 실패 (word=%s): %s", word, e)
             db.commit()
-            logger.info("_do_register 완료: domain=%s, 등록=%d건", domain, count)
+            logger.info("_do_register complete: domain=%s, 등록=%d건", domain, count)
     except Exception as e:
         logger.error("_do_register 오류: %s", e)
     return count
@@ -282,13 +282,13 @@ def task_build(self, prev_result: dict, pipeline_id: int, domain: str):
         result = run_build(domain, pipeline_id)
 
         summary = (
-            f"빌드 완료 — domain={domain} "
+            f"빌드 complete — domain={domain} "
             f"entry_count={result.get('entry_count', 'N/A')} "
             f"file_size={result.get('file_size', 'N/A')}"
         )
         _update_stage(db, pipeline_id, "build", "completed", log_text=result.get("log", ""))
         _update_pipeline(db, pipeline_id, "completed", result_summary=summary)
-        _publish(pipeline_id, "build", 100, "빌드 완료")
+        _publish(pipeline_id, "build", 100, "빌드 complete")
         return {"pipeline_id": pipeline_id, "build_result": result}
     except Exception as exc:
         logger.error("task_build 실패 pipeline_id=%s: %s", pipeline_id, exc)
@@ -301,10 +301,10 @@ def task_build(self, prev_result: dict, pipeline_id: int, domain: str):
 
 
 # ─────────────────────────────────────────────
-# 파이프라인 체인 실행 진입점
+# 파이프라인 체인 run_phase1_service 진입점
 # ─────────────────────────────────────────────
 def run_pipeline(pipeline_id: int, file_path: str, domain: str):
-    """파이프라인 체인 실행 (정제 → 형태소 → 사전등록 → 빌드)
+    """파이프라인 체인 run_phase1_service (정제 → 형태소 → 사전등록 → 빌드)
 
     Args:
         pipeline_id: pipeline_history.id

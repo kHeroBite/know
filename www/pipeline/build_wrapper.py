@@ -7,7 +7,7 @@ antdic.sh 4단계를 Python으로 직접 구현:
   4) data.tar 생성 (tarfile)
 
 동시 빌드 방지: threading.Lock (전역)
-빌드 완료 후 entry_count 확인
+빌드 complete 후 entry_count 확인
 build_history 레코드 업데이트 포함.
 """
 import ftplib
@@ -80,10 +80,10 @@ def run_build(
     jiana_home: Optional[str] = None,
     workspace: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """antdic 4단계를 Python으로 직접 실행
+    """antdic 4단계를 Python으로 직접 run_phase1_service
 
     동시 빌드를 방지하기 위해 전역 threading.Lock 사용.
-    build_history 테이블에 시작/완료/실패 상태를 기록.
+    build_history 테이블에 시작/complete/실패 상태를 기록.
 
     Args:
         domain: 사전 도메인 (예: 'autoever', 'base')
@@ -152,7 +152,7 @@ def run_build(
             log_text=result.get("log", ""),
         )
 
-        logger.info("빌드 완료: domain=%s, entry_count=%s, file_size=%s",
+        logger.info("빌드 complete: domain=%s, entry_count=%s, file_size=%s",
                     domain, entry_count, file_size)
         return {
             "output_path": data_tar,
@@ -232,16 +232,16 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
         full_log = "\n".join(logs)
         _publish_log(pipeline_id, "build", full_log, domain=domain)
         return {"returncode": proc_returncode, "log": full_log, "stderr": "\n".join(ant_err_lines)}
-    logger.info("[1/3] ant dic 컴파일 완료")
+    logger.info("[1/3] ant dic 컴파일 complete")
 
     # ── [2/3] 기존 data.tar 삭제 ────────────────────────────────
     logger.info("[2/3] 기존 data.tar 삭제")
-    logs.append("[1/3] ant dic 컴파일 완료")
+    logs.append("[1/3] ant dic 컴파일 complete")
     logs.append("[2/3] 기존 data.tar 삭제...")
     _publish_log(pipeline_id, "build", "\n".join(logs), domain=domain)
     if os.path.exists(data_tar):
         os.remove(data_tar)
-        logs.append(f"  삭제 완료: {data_tar}")
+        logs.append(f"  삭제 complete: {data_tar}")
     else:
         logs.append(f"  {data_tar} 없음 (건너뜀)")
 
@@ -266,8 +266,8 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
                 logs.append(f"  추가: {name}")
             else:
                 logs.append(f"  [경고] {name} 없음 (건너뜀)")
-    logs.append(f"  생성 완료: {data_tar}")
-    logger.info("[3/3] data.tar 생성 완료: %s", data_tar)
+    logs.append(f"  생성 complete: {data_tar}")
+    logger.info("[3/3] data.tar 생성 complete: %s", data_tar)
 
     full_log = "\n".join(logs)
     _publish_log(pipeline_id, "build", full_log, domain=domain)
@@ -386,8 +386,8 @@ def _export_thesaurus_before_build(
     workspace_base = "/home/know/apps/know-ops/workspace"
     출력파일 = Path(workspace_base) / workspace / "synonym_full_v2.txt"
     try:
-        from phase1.executor import _db_thesaurus를파일로내보내기
-        cnt = _db_thesaurus를파일로내보내기(workspace, domain, 출력파일)
+        from phase1.executor import _export_db_thesaurus_to_file
+        cnt = _export_db_thesaurus_to_file(workspace, domain, 출력파일)
         msg = f"[thesaurus export] {출력파일} — {cnt}건"
         logger.info(msg)
         _update_build_history(build_history_id, log_text=msg)
@@ -499,7 +499,7 @@ def _publish_log(pipeline_id, stage: str, text: str, domain: str = ""):
 
 
 # ─────────────────────────────────────────────
-# 단독 실행 테스트
+# 단독 run_phase1_service 테스트
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     import sys

@@ -6,14 +6,14 @@ from sqlalchemy import Table, Column, String, DateTime, Text, MetaData
 _사이트명패턴 = re.compile(r'^[A-Za-z0-9_]+$')
 
 
-def 사이트명검증(site: str) -> str:
+def validate_site_name(site: str) -> str:
     """사이트명 유효성 검증 — SQL Injection 방지."""
     if not _사이트명패턴.match(site):
         raise ValueError(f"잘못된 사이트명: {site!r} (영문자/숫자/언더스코어만 허용)")
     return site.upper()
 
 
-def 사전테이블가져오기(site: str, dic_type: str, metadata: MetaData) -> Table:
+def get_dict_table(site: str, dic_type: str, metadata: MetaData) -> Table:
     """도메인별 동적 사전 테이블 정의 반환.
 
     Args:
@@ -24,7 +24,7 @@ def 사전테이블가져오기(site: str, dic_type: str, metadata: MetaData) ->
     Returns:
         Table 객체
     """
-    사이트명검증(site)
+    validate_site_name(site)
     suffix_map = {
         "udic": "_UDIC",
         "cndic": "_CNDIC",
@@ -52,7 +52,7 @@ def 사전테이블가져오기(site: str, dic_type: str, metadata: MetaData) ->
         return Table(
             table_name, metadata,
             Column("_HEAD_WORD", String(128), primary_key=True),
-            Column("_TAIL_WORD", Text),   # 쉼표/줄바꿈 구분 동의어 목록
+            Column("_TAIL_WORD", Text),   # 쉼표/줄바꿈 구분 동의어 list_tasks
             Column("_MEMO", String(128)),
             Column("_USER_ID", String(32)),
             Column("_UPDATED", DateTime),
@@ -68,50 +68,50 @@ def 사전테이블가져오기(site: str, dic_type: str, metadata: MetaData) ->
         )
 
 
-def 도메인테이블생성(site: str, engine) -> None:
+def create_domain_table(site: str, engine) -> None:
     """신규 도메인 등록 시 4개 사전 테이블 CREATE TABLE."""
-    사이트명검증(site)
+    validate_site_name(site)
     meta = MetaData()
     for dic_type in ("udic", "cndic", "thesaurus", "category"):
-        사전테이블가져오기(site, dic_type, meta)
+        get_dict_table(site, dic_type, meta)
     meta.create_all(engine)
 
 
-def 도메인테이블삭제(site: str, engine) -> None:
+def drop_domain_table(site: str, engine) -> None:
     """도메인 삭제 시 4개 사전 테이블 DROP TABLE."""
-    사이트명검증(site)
+    validate_site_name(site)
     meta = MetaData()
     for dic_type in ("udic", "cndic", "thesaurus", "category"):
-        사전테이블가져오기(site, dic_type, meta)
+        get_dict_table(site, dic_type, meta)
     meta.drop_all(engine)
 
 
 # ── 워크스페이스 사전 테이블 ──
 
-def ws_사전사이트명(workspace: str, domain: str) -> str:
+def ws_dict_site_name(workspace: str, domain: str) -> str:
     """워크스페이스 사전 테이블용 사이트명 생성. 예: WS_A_EPOST"""
     return f"WS_{workspace}_{domain}".upper()
 
 
-def ws_사전테이블생성(workspace: str, domain: str, engine) -> None:
+def ws_create_dict_table(workspace: str, domain: str, engine) -> None:
     """워크스페이스 사전 테이블 4개 CREATE TABLE."""
-    site = ws_사전사이트명(workspace, domain)
-    도메인테이블생성(site, engine)
+    site = ws_dict_site_name(workspace, domain)
+    create_domain_table(site, engine)
 
 
-def ws_사전테이블삭제(workspace: str, domain: str, engine) -> None:
+def ws_drop_dict_table(workspace: str, domain: str, engine) -> None:
     """워크스페이스 사전 테이블 4개 DROP TABLE."""
-    site = ws_사전사이트명(workspace, domain)
-    도메인테이블삭제(site, engine)
+    site = ws_dict_site_name(workspace, domain)
+    drop_domain_table(site, engine)
 
 
-def ws_사전데이터복사(workspace: str, domain: str, engine) -> int:
+def ws_copy_dict_data(workspace: str, domain: str, engine) -> int:
     """도메인 사전 4개 테이블 데이터를 워크스페이스 사전으로 복사. 총 복사 건수 반환."""
     from sqlalchemy import text
     src_site = domain.upper()
-    dst_site = ws_사전사이트명(workspace, domain)
-    사이트명검증(src_site)
-    사이트명검증(dst_site)
+    dst_site = ws_dict_site_name(workspace, domain)
+    validate_site_name(src_site)
+    validate_site_name(dst_site)
     suffixes = ["_UDIC", "_CNDIC", "_THESAURUS", "_CATEGORY"]
     total = 0
     with engine.connect() as conn:

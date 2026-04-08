@@ -7,31 +7,31 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, insert, update, delete, func, text
 from fastapi import HTTPException
 from models.domain import 도메인테이블
-from models.dictionary import 사이트명검증, 도메인테이블생성
+from models.dictionary import validate_site_name, create_domain_table
 from core.database import 엔진
 
 
-def 도메인목록조회(db: Session, page: int = 1, size: int = 20) -> dict:
-    """전체 도메인 목록 페이지네이션 조회."""
+def get_domain_list(db: Session, page: int = 1, size: int = 20) -> dict:
+    """전체 도메인 list_tasks 페이지네이션 조회."""
     offset = (page - 1) * size
     total_stmt = select(func.count()).select_from(도메인테이블)
     total = db.execute(total_stmt).scalar() or 0
     stmt = select(도메인테이블).offset(offset).limit(size)
     rows = db.execute(stmt).mappings().all()
-    items = [_행to도메인(row) for row in rows]
+    items = [_row_to_domain(row) for row in rows]
     return {"items": items, "total": total, "page": page, "size": size}
 
 
-def 도메인조회(db: Session, site: str) -> dict:
+def get_domain_service(db: Session, site: str) -> dict:
     """특정 도메인 조회. 없으면 HTTPException 404."""
     stmt = select(도메인테이블).where(도메인테이블.c._SITE == site.upper())
     row = db.execute(stmt).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail=f"도메인을 찾을 수 없음: {site}")
-    return _행to도메인(row)
+    return _row_to_domain(row)
 
 
-def 도메인생성(
+def create_domain(
     db: Session,
     site: str,
     memo: Optional[str] = None,
@@ -42,7 +42,7 @@ def 도메인생성(
     user_id: Optional[str] = None,
 ) -> dict:
     """도메인 등록 + 4개 사전 테이블 생성."""
-    사이트명검증(site)
+    validate_site_name(site)
     site_upper = site.upper()
 
     # 중복 확인
@@ -68,17 +68,17 @@ def 도메인생성(
 
     # 동적 사전 테이블 4개 생성 (UDIC, CNDIC, THESAURUS, CATEGORY)
     try:
-        도메인테이블생성(site_upper, 엔진)
+        create_domain_table(site_upper, 엔진)
     except Exception as e:
         # 테이블 생성 실패 시 도메인 레코드 롤백
         db.execute(delete(도메인테이블).where(도메인테이블.c._SITE == site_upper))
         db.commit()
         raise HTTPException(status_code=500, detail=f"사전 테이블 생성 실패: {e}")
 
-    return 도메인조회(db, site_upper)
+    return get_domain_service(db, site_upper)
 
 
-def 도메인수정(
+def update_domain_service(
     db: Session,
     site: str,
     memo: Optional[str] = None,
@@ -90,7 +90,7 @@ def 도메인수정(
     """도메인 정보 수정 (site 변경 불가)."""
     site_upper = site.upper()
     # 존재 확인
-    도메인조회(db, site_upper)
+    get_domain_service(db, site_upper)
 
     # None 값은 기존 값 유지 (부분 업데이트)
     업데이트값 = {}
@@ -110,14 +110,14 @@ def 도메인수정(
         db.execute(stmt)
         db.commit()
 
-    return 도메인조회(db, site_upper)
+    return get_domain_service(db, site_upper)
 
 
-def 도메인삭제(db: Session, site: str) -> None:
+def delete_domain_ws(db: Session, site: str) -> None:
     """도메인 삭제 + 4개 사전 테이블 DROP + 서버 디렉토리 삭제."""
     site_upper = site.upper()
     # 존재 확인
-    도메인조회(db, site_upper)
+    get_domain_service(db, site_upper)
 
     # 동적 사전 테이블 4개 DROP (db 세션 경유)
     try:
@@ -140,7 +140,7 @@ def 도메인삭제(db: Session, site: str) -> None:
         shutil.rmtree(도메인경로, ignore_errors=True)
 
 
-def _행to도메인(row) -> dict:
+def _row_to_domain(row) -> dict:
     """DB 행 → 응답 딕셔너리 변환."""
     return {
         "site": row["_SITE"],

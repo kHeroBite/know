@@ -1,4 +1,4 @@
-"""Phase 1 서비스 — 파일 관리 + 실행 오케스트레이션"""
+"""Phase 1 서비스 — 파일 관리 + run_phase1_service 오케스트레이션"""
 import os
 import asyncio
 import logging
@@ -22,7 +22,7 @@ def _build_dir(workspace: str, folder: str) -> str:
 
 class Phase1서비스:
     @staticmethod
-    async def 파일목록(folder: str, workspace: str = "") -> Dict:
+    async def list_phase1_files(folder: str, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _list():
             dir_path = _build_dir(workspace, folder)
@@ -41,7 +41,7 @@ class Phase1서비스:
         return await loop.run_in_executor(None, _list)
 
     @staticmethod
-    async def 파일저장(folder: str, filename: str, content: bytes, workspace: str = "") -> Dict:
+    async def save_file(folder: str, filename: str, content: bytes, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _write():
             dir_path = _build_dir(workspace, folder)
@@ -59,7 +59,7 @@ class Phase1서비스:
         return await loop.run_in_executor(None, _write)
 
     @staticmethod
-    async def 파일삭제(folder: str, filename: str, workspace: str = "") -> Dict:
+    async def delete_phase1_file(folder: str, filename: str, workspace: str = "") -> Dict:
         loop = asyncio.get_event_loop()
         def _delete():
             file_path = os.path.join(_build_dir(workspace, folder), filename)
@@ -71,7 +71,7 @@ class Phase1서비스:
         return await loop.run_in_executor(None, _delete)
 
     @staticmethod
-    async def 실행DB등록(run_id: str, 요청) -> None:
+    async def register_execution_db(run_id: str, 요청) -> None:
         # 파일 자동 선택: filename이 없으면 폴더의 최신 파일 사용
         resolved_filename = 요청.filename if 요청.filename else ""
         if not resolved_filename:
@@ -106,7 +106,7 @@ class Phase1서비스:
         요청.filename = resolved_filename
 
     @staticmethod
-    async def 실행(run_id: str, 요청) -> None:
+    async def run_phase1_service(run_id: str, 요청) -> None:
         loop = asyncio.get_event_loop()
         def _update_status(status, step=-1, error=None):
             db = 세션팩토리()
@@ -133,11 +133,11 @@ class Phase1서비스:
                         files.sort(key=lambda f: os.path.getmtime(os.path.join(folder_dir, f)), reverse=True)
                         filename = files[0]
             file_path = os.path.join(folder_dir, filename) if filename else folder_dir
-            logger.info(f"Phase1 실행: run_id={run_id}, domain={요청.domain}, file_path={file_path}, "
+            logger.info(f"Phase1 run_phase1_service: run_id={run_id}, domain={요청.domain}, file_path={file_path}, "
                         f"steps={요청.start_step}-{요청.end_step}, workspace={요청.workspace}")
-            from phase1.executor import phase1_실행
-            await phase1_실행(run_id, 요청.domain or "", file_path, 요청.start_step, 요청.end_step, 요청.workspace or "", 요청.filter_mode, 요청.filter_value, 요청.sort_by, getattr(요청, "rank_value", 150000), getattr(요청, "count_value", 5))
+            from phase1.executor import run_phase1
+            await run_phase1(run_id, 요청.domain or "", file_path, 요청.start_step, 요청.end_step, 요청.workspace or "", 요청.filter_mode, 요청.filter_value, 요청.sort_by, getattr(요청, "rank_value", 150000), getattr(요청, "count_value", 5))
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
-            logger.error(f"Phase1 실행 실패: run_id={run_id}, error={e}", exc_info=True)
+            logger.error(f"Phase1 run_phase1_service 실패: run_id={run_id}, error={e}", exc_info=True)
             await loop.run_in_executor(None, _update_status, "failed", -1, str(e))

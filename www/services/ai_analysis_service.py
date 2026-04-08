@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
-from services.llm_settings_service import LLM질의
+from services.llm_settings_service import llm_query
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,7 +31,7 @@ _PROMPT_FILE = Path(__file__).parent.parent / "config" / "ai_prompt.json"
 _DEFAULT_PROMPT = "{keyword} 무엇인지 짧게 2줄로 설명해줘. 여러의미가 있을경우 중요한 의미순서로 5가지 이내로 모두 말해달라."
 
 
-def 프롬프트로드() -> str:
+def load_prompt() -> str:
     """config/ai_prompt.json에서 프롬프트 템플릿 로드."""
     try:
         if _PROMPT_FILE.exists():
@@ -42,7 +42,7 @@ def 프롬프트로드() -> str:
     return _DEFAULT_PROMPT
 
 
-def 프롬프트저장(prompt_template: str) -> None:
+def save_prompt(prompt_template: str) -> None:
     """config/ai_prompt.json에 프롬프트 템플릿 저장."""
     _PROMPT_FILE.parent.mkdir(parents=True, exist_ok=True)
     _PROMPT_FILE.write_text(
@@ -51,7 +51,7 @@ def 프롬프트저장(prompt_template: str) -> None:
     )
 
 
-async def _위키피디아검색(keyword: str) -> dict:
+async def _search_wikipedia(keyword: str) -> dict:
     """Wikipedia 한국어 REST API로 키워드 요약 추출 (영어 fallback 포함)."""
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True) as client:
@@ -76,16 +76,16 @@ async def _위키피디아검색(keyword: str) -> dict:
         return {"result": None, "error": str(e)}
 
 
-async def AI검색(keyword: str, user_id: str = '') -> dict:
+async def ai_search_service(keyword: str, user_id: str = '') -> dict:
     """LLM 질의 + Wikipedia 동시 검색."""
     import asyncio
     logger.info("[AI분석] 검색 시작: keyword=%r", keyword)
-    prompt = 프롬프트로드()
+    prompt = load_prompt()
     query = prompt.format(keyword=keyword)
     logger.info("[AI분석] 프롬프트 query=%r", query)
 
-    llm_task = asyncio.create_task(LLM질의(keyword, prompt, user_id=user_id, usage_type='ai_analysis'))
-    wiki_task = asyncio.create_task(_위키피디아검색(keyword))
+    llm_task = asyncio.create_task(llm_query(keyword, prompt, user_id=user_id, usage_type='ai_analysis'))
+    wiki_task = asyncio.create_task(_search_wikipedia(keyword))
 
     llm_result = await llm_task
     wiki_result = await wiki_task

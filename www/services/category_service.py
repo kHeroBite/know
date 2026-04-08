@@ -5,19 +5,19 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, insert, update, delete, func, MetaData
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
-from models.dictionary import 사이트명검증, 사전테이블가져오기
+from models.dictionary import validate_site_name, get_dict_table
 
 
-def _카테고리테이블(db: Session, site: str):
+def _category_table(db: Session, site: str):
     """카테고리 테이블 반환."""
     meta = MetaData()
-    return 사전테이블가져오기(site.upper(), "category", meta)
+    return get_dict_table(site.upper(), "category", meta)
 
 
-def 카테고리목록조회(db: Session, site: str, page: int = 1, size: int = 100) -> dict:
-    """카테고리 목록 페이지네이션 조회."""
-    사이트명검증(site)
-    tbl = _카테고리테이블(db, site)
+def get_category_list(db: Session, site: str, page: int = 1, size: int = 100) -> dict:
+    """카테고리 list_tasks 페이지네이션 조회."""
+    validate_site_name(site)
+    tbl = _category_table(db, site)
     offset = (page - 1) * size
     try:
         total = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
@@ -28,7 +28,7 @@ def 카테고리목록조회(db: Session, site: str, page: int = 1, size: int = 
     return {"items": items, "total": total, "page": page, "size": size}
 
 
-def 카테고리추가(
+def add_category(
     db: Session,
     site: str,
     word: str,
@@ -36,10 +36,10 @@ def 카테고리추가(
     user_id: Optional[str] = None,
 ) -> dict:
     """카테고리 항목 추가 (_WORD PK 기준)."""
-    사이트명검증(site)
+    validate_site_name(site)
     word = word.strip()
     display_category = display_category.strip()
-    tbl = _카테고리테이블(db, site)
+    tbl = _category_table(db, site)
 
     # 중복 확인 (_WORD PK)
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
@@ -56,16 +56,16 @@ def 카테고리추가(
     return {"word": word, "display_category": display_category}
 
 
-def 카테고리수정(
+def update_category(
     db: Session,
     site: str,
     word: str,
     new_display_category: str,
 ) -> dict:
     """카테고리 항목 수정 (display_category 변경)."""
-    사이트명검증(site)
+    validate_site_name(site)
     new_display_category = new_display_category.strip()
-    tbl = _카테고리테이블(db, site)
+    tbl = _category_table(db, site)
 
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
     if not 존재:
@@ -79,10 +79,10 @@ def 카테고리수정(
     return {"word": word, "display_category": new_display_category}
 
 
-def 카테고리삭제(db: Session, site: str, word: str) -> None:
+def delete_category(db: Session, site: str, word: str) -> None:
     """카테고리 항목 삭제."""
-    사이트명검증(site)
-    tbl = _카테고리테이블(db, site)
+    validate_site_name(site)
+    tbl = _category_table(db, site)
 
     존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
     if not 존재:
@@ -92,15 +92,15 @@ def 카테고리삭제(db: Session, site: str, word: str) -> None:
     db.commit()
 
 
-def 카테고리일괄추가(
+def bulk_add_category(
     db: Session,
     site: str,
     items: List[dict],
     user_id: Optional[str] = None,
 ) -> dict:
     """카테고리 항목 일괄 등록."""
-    사이트명검증(site)
-    tbl = _카테고리테이블(db, site)
+    validate_site_name(site)
+    tbl = _category_table(db, site)
     성공 = 0
     건너뜀 = 0
     for item in items:

@@ -10,10 +10,10 @@ from models.pipeline import PipelineHistory, PipelineStageLog
 logger = logging.getLogger(__name__)
 
 class PipelineService:
-    def 파이프라인시작(self, db: Session, domain: str, file_path: str, started_by=None) -> dict:
+    def start_pipeline_service(self, db: Session, domain: str, file_path: str, started_by=None) -> dict:
         실행중 = (db.query(PipelineHistory).filter(PipelineHistory.domain == domain).filter(PipelineHistory.status.in_(["pending","running","paused"])).first())
         if 실행중:
-            raise HTTPException(status_code=409, detail=f"도메인 '{domain}'에 이미 실행 중인 파이프라인이 있습니다. (id={실행중.id})")
+            raise HTTPException(status_code=409, detail=f"도메인 '{domain}'에 이미 run_phase1_service 중인 파이프라인이 있습니다. (id={실행중.id})")
         pipeline = PipelineHistory(domain=domain, status="pending", input_file=file_path, started_by=started_by)
         db.add(pipeline); db.commit(); db.refresh(pipeline)
         try:
@@ -26,7 +26,7 @@ class PipelineService:
             raise HTTPException(status_code=500, detail=f"파이프라인 시작 오류: {exc}")
         return {"pipeline_id": pipeline.id, "domain": pipeline.domain, "status": pipeline.status, "celery_task_id": pipeline.celery_task_id}
 
-    def 파이프라인상태(self, db: Session, pipeline_id: int) -> dict:
+    def get_pipeline_status_service(self, db: Session, pipeline_id: int) -> dict:
         pipeline = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
         if not pipeline:
             raise HTTPException(status_code=404, detail=f"파이프라인 id={pipeline_id} 없음")
@@ -41,7 +41,7 @@ class PipelineService:
             "stages": [{"stage": s.stage, "status": s.status, "started_at": s.started_at.isoformat() if s.started_at else None, "completed_at": s.completed_at.isoformat() if s.completed_at else None, "input_count": s.input_count, "output_count": s.output_count} for s in stage_logs],
         }
 
-    def 파이프라인승인(self, db: Session, pipeline_id: int, stage: str, approved_by: str) -> dict:
+    def approve_pipeline_service(self, db: Session, pipeline_id: int, stage: str, approved_by: str) -> dict:
         pipeline = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
         if not pipeline:
             raise HTTPException(status_code=404, detail=f"파이프라인 id={pipeline_id} 없음")
@@ -58,9 +58,9 @@ class PipelineService:
             pipeline.status = "running"
         db.commit()
         logger.info("파이프라인 DB 승인 pipeline_id=%s stage=%s by=%s", pipeline_id, stage, approved_by)
-        return {"pipeline_id": pipeline_id, "stage": stage, "approved_by": approved_by, "message": f"'{stage}' 단계 승인 완료"}
+        return {"pipeline_id": pipeline_id, "stage": stage, "approved_by": approved_by, "message": f"'{stage}' 단계 승인 complete"}
 
-    def 파이프라인취소(self, db: Session, pipeline_id: int) -> dict:
+    def cancel_pipeline_service(self, db: Session, pipeline_id: int) -> dict:
         pipeline = db.query(PipelineHistory).filter_by(id=pipeline_id).first()
         if not pipeline:
             raise HTTPException(status_code=404, detail=f"파이프라인 id={pipeline_id} 없음")
@@ -77,7 +77,7 @@ class PipelineService:
         pipeline.error_message = "사용자 요청으로 취소"; db.commit()
         return {"pipeline_id": pipeline_id, "status": "cancelled", "message": "파이프라인이 취소되었습니다."}
 
-    def 파이프라인이력(self, db: Session, page: int = 1, size: int = 20) -> dict:
+    def get_pipeline_history_service(self, db: Session, page: int = 1, size: int = 20) -> dict:
         if page < 1: page = 1
         if size < 1 or size > 100: size = 20
         offset = (page - 1) * size

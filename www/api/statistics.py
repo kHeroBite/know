@@ -2,48 +2,48 @@ from __future__ import annotations
 from typing import List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from core.database import DB세션
-from api.auth import 현재사용자가져오기
-from services.statistics_service import 도메인별사전통계, 전체도메인통계, LLM사용통계조회, LLM월별사용자추이
+from core.database import db_session
+from api.auth import get_current_user
+from services.statistics_service import get_domain_dict_stats, get_all_domain_stats, get_llm_usage_stats_service, get_llm_monthly_trend
 
-라우터 = APIRouter(prefix="/api/stats", tags=["통계"])
+라우터 = APIRouter(prefix="/api/stats", tags=["get_stats"])
 
 
 @라우터.get("/dictionary/{domain}")
-def 사전통계(
+def get_dict_stats(
     domain: str,
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
 ):
     """도메인별 사전 유형별 항목 수 반환."""
-    return 도메인별사전통계(db, domain)
+    return get_domain_dict_stats(db, domain)
 
 
 @라우터.get("/domains")
-def 전체통계(
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+def get_all_stats(
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
 ):
     """전체 도메인 사전 현황 반환."""
-    return 전체도메인통계(db)
+    return get_all_domain_stats(db)
 
 
 @라우터.get("/llm-usage")
-def LLM사용통계(
+def get_llm_usage_stats(
     year: int = Query(..., description="조회 연도 (예: 2026)"),
     month: int = Query(..., description="조회 월 (1~12)"),
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ):
-    """월별 사용자/usage_type별 LLM 사용 통계 반환."""
-    return LLM사용통계조회(year, month)
+    """월별 사용자/usage_type별 LLM 사용 get_stats 반환."""
+    return get_llm_usage_stats_service(year, month)
 
 
 @라우터.get("/llm-usage-trend")
-def LLM사용추이(
+def get_llm_usage_trend(
     mode: str = Query("monthly", description="daily 또는 monthly"),
     start: str = Query("", description="시작일 (YYYY-MM-DD 또는 YYYY-MM)"),
     end: str = Query("", description="종료일 (YYYY-MM-DD 또는 YYYY-MM)"),
-    _current: dict = Depends(현재사용자가져오기),
+    _current: dict = Depends(get_current_user),
 ):
     """기간별 사용자/모델별 LLM 사용 추이."""
-    return LLM월별사용자추이(mode=mode, start=start, end=end)
+    return get_llm_monthly_trend(mode=mode, start=start, end=end)

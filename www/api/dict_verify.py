@@ -1,9 +1,9 @@
-"""사전검증 API 엔드포인트
+"""verify_dict API 엔드포인트
 
-POST /run               — 키워드 목록으로 사전검증 실행 (workspace 지정 시 DB 자동 조회)
-POST /run-file-based    — 형태소분석 기반 사전검증 실행 (Java 로직 복원)
+POST /run               — 키워드 목록으로 verify_dict run_phase1_service (workspace 지정 시 DB 자동 조회)
+POST /run-file-based    — analyze_morpheme 기반 verify_dict run_phase1_service (Java 로직 복원)
 GET  /result/{domain}   — 최근 검증 결과 조회
-POST /analyze           — 단일 키워드 형태소분석
+POST /analyze           — 단일 키워드 analyze_morpheme
 """
 from typing import Optional, List
 
@@ -12,13 +12,13 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.auth import 현재사용자가져오기
-from core.database import DB세션
-from services.dict_verify_service import 사전검증, 자동사전검증
-from services.morpheme_service import 형태소분석
-from services.workspace_service import jiana홈경로
+from api.auth import get_current_user
+from core.database import db_session
+from services.dict_verify_service import verify_dict, auto_verify_dict
+from services.morpheme_service import analyze_morpheme
+from services.workspace_service import get_jiana_home_path
 
-라우터 = APIRouter(prefix="/dict-verify", tags=["사전검증"])
+라우터 = APIRouter(prefix="/dict-verify", tags=["verify_dict"])
 
 # 최근 검증 결과 메모리 캐시 (도메인별)
 _최근결과: dict = {}
@@ -43,10 +43,10 @@ class 자동검증요청(BaseModel):
 
 
 @라우터.post("/run")
-def 검증실행(요청: 검증요청, db: Session = Depends(DB세션), _current: dict = Depends(현재사용자가져오기)):
-    """키워드 목록으로 사전검증 실행.
+def run_verify(요청: 검증요청, db: Session = Depends(db_session), _current: dict = Depends(get_current_user)):
+    """키워드 목록으로 verify_dict run_phase1_service.
 
-    keywords가 빈 배열이고 workspace가 주어지면 서버에서 완료 키워드를 자동 조회.
+    keywords가 빈 배열이고 workspace가 주어지면 서버에서 complete 키워드를 자동 조회.
     """
     keywords = 요청.keywords
     if not keywords and 요청.workspace:
@@ -55,44 +55,44 @@ def 검증실행(요청: 검증요청, db: Session = Depends(DB세션), _current
             "WHERE workspace=:ws AND domain=:dom AND status='done'"
         ), {"ws": 요청.workspace, "dom": 요청.domain}).fetchall()
         keywords = [r[0] for r in rows]
-    jiana_home = jiana홈경로(요청.workspace) if 요청.workspace else None
-    result = 사전검증(keywords, 요청.domain, jiana_home=jiana_home)
+    jiana_home = get_jiana_home_path(요청.workspace) if 요청.workspace else None
+    result = verify_dict(keywords, 요청.domain, jiana_home=jiana_home)
     _최근결과[요청.domain] = result
     return result
 
 
 @라우터.post("/run-file-based")
-def 파일기반검증실행(요청: 자동검증요청, db: Session = Depends(DB세션), _current: dict = Depends(현재사용자가져오기)):
-    """기존 Java 로직(형태소분석) 기반 사전검증. 완료 키워드 자동 로딩."""
-    jiana_home = jiana홈경로(요청.workspace) if 요청.workspace else None
-    result = 자동사전검증(db, 요청.workspace, 요청.domain, jiana_home=jiana_home)
+def run_file_verify(요청: 자동검증요청, db: Session = Depends(db_session), _current: dict = Depends(get_current_user)):
+    """기존 Java 로직(analyze_morpheme) 기반 verify_dict. complete 키워드 자동 로딩."""
+    jiana_home = get_jiana_home_path(요청.workspace) if 요청.workspace else None
+    result = auto_verify_dict(db, 요청.workspace, 요청.domain, jiana_home=jiana_home)
     _최근결과[요청.domain] = result
     return result
 
 
 @라우터.post("/run-split")
-def 분리검증실행(요청: 자동검증요청, db: Session = Depends(DB세션), _current: dict = Depends(현재사용자가져오기)):
-    """완료/미완료 키워드를 분리하여 각각 사전검증 실행."""
-    jiana_home = jiana홈경로(요청.workspace) if 요청.workspace else None
-    # 완료 키워드
+def run_split_verify(요청: 자동검증요청, db: Session = Depends(db_session), _current: dict = Depends(get_current_user)):
+    """complete/미complete 키워드를 분리하여 각각 verify_dict run_phase1_service."""
+    jiana_home = get_jiana_home_path(요청.workspace) if 요청.workspace else None
+    # complete 키워드
     완료rows = db.execute(text(
         "SELECT DISTINCT keyword FROM keyword_assignments "
         "WHERE workspace=:ws AND domain=:dom AND status='completed'"
     ), {"ws": 요청.workspace, "dom": 요청.domain}).scalars().all()
-    # 미완료 키워드
+    # 미complete 키워드
     미완료rows = db.execute(text(
         "SELECT DISTINCT keyword FROM keyword_assignments "
         "WHERE workspace=:ws AND domain=:dom AND status!='completed'"
     ), {"ws": 요청.workspace, "dom": 요청.domain}).scalars().all()
 
-    완료결과 = 사전검증(list(완료rows), 요청.domain, jiana_home=jiana_home) if 완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}
-    미완료결과 = 사전검증(list(미완료rows), 요청.domain, jiana_home=jiana_home) if 미완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}
+    완료결과 = verify_dict(list(완료rows), 요청.domain, jiana_home=jiana_home) if 완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}
+    미완료결과 = verify_dict(list(미완료rows), 요청.domain, jiana_home=jiana_home) if 미완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}
 
     return {"completed": 완료결과, "pending": 미완료결과}
 
 
 @라우터.get("/result/{domain}")
-def 결과조회(domain: str, _current: dict = Depends(현재사용자가져오기)):
+def get_verify_result(domain: str, _current: dict = Depends(get_current_user)):
     """최근 검증 결과 조회."""
     if domain in _최근결과:
         return _최근결과[domain]
@@ -100,7 +100,7 @@ def 결과조회(domain: str, _current: dict = Depends(현재사용자가져오�
 
 
 @라우터.post("/analyze")
-def 단일분석(요청: 분석요청, _current: dict = Depends(현재사용자가져오기)):
-    """단일 키워드 형태소분석."""
-    jiana_home = jiana홈경로(요청.workspace) if 요청.workspace else None
-    return 형태소분석(요청.keyword, 요청.domain, jiana_home=jiana_home)
+def single_analyze(요청: 분석요청, _current: dict = Depends(get_current_user)):
+    """단일 키워드 analyze_morpheme."""
+    jiana_home = get_jiana_home_path(요청.workspace) if 요청.workspace else None
+    return analyze_morpheme(요청.keyword, 요청.domain, jiana_home=jiana_home)

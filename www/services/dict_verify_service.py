@@ -1,6 +1,6 @@
-"""사전검증 서비스 — Java Check_Synonym_NonWorkDic.java 포팅
+"""verify_dict 서비스 — Java Check_Synonym_NonWorkDic.java 포팅
 
-키워드 목록에 대해 형태소분석 실행 후, cnlist(복합어 사전)과 대조하여
+키워드 목록에 대해 analyze_morpheme run_phase1_service 후, cnlist(복합어 사전)과 대조하여
 사전 누락 키워드를 분류합니다.
 
 분류 로직:
@@ -29,7 +29,7 @@ DOMAIN_BASE = "/home/know/apps/know-ops/domain"
 MORPHEME_TIMEOUT = 120  # 배치 처리용 충분한 시간
 
 
-def cnlist_로딩(domain: str, jiana_home: str | None = None) -> set:
+def load_cnlist(domain: str, jiana_home: str | None = None) -> set:
     """jiana 빌드 산출물 cnlist.ks 로딩 → set 반환.
 
     domain 파라미터는 시그니처 유지용 (호환성). 실제로는 공통 cnlist 사용.
@@ -48,8 +48,8 @@ def cnlist_로딩(domain: str, jiana_home: str | None = None) -> set:
     return result
 
 
-def 배치_형태소분석(keywords: list, jiana_home: str | None = None) -> list:
-    """키워드 목록을 일괄 jiana 형태소분석. 반환: 원본 결과 라인 리스트."""
+def batch_morpheme_analyze(keywords: list, jiana_home: str | None = None) -> list:
+    """키워드 목록을 일괄 jiana analyze_morpheme. 반환: 원본 결과 라인 리스트."""
     if not keywords:
         return []
 
@@ -98,18 +98,18 @@ def 배치_형태소분석(keywords: list, jiana_home: str | None = None) -> lis
             return []
 
         except subprocess.TimeoutExpired:
-            logger.error("배치 형태소분석 타임아웃 (%d초)", MORPHEME_TIMEOUT)
+            logger.error("배치 analyze_morpheme 타임아웃 (%d초)", MORPHEME_TIMEOUT)
             return []
         except Exception as e:
-            logger.exception("배치 형태소분석 예외: %s", e)
+            logger.exception("배치 analyze_morpheme 예외: %s", e)
             return []
 
 
-def 사전검증(keywords: list, domain: str, jiana_home: str | None = None) -> dict:
-    """키워드 목록에 대해 사전 누락 검증 실행.
+def verify_dict(keywords: list, domain: str, jiana_home: str | None = None) -> dict:
+    """키워드 목록에 대해 사전 누락 검증 run_phase1_service.
 
     Args:
-        keywords: 검증할 키워드 목록
+        keywords: 검증할 키워드 list_tasks
         domain: 도메인명 (cnlist.ks 경로 결정용)
         jiana_home: jiana 홈 경로 (None이면 기본값 사용)
 
@@ -126,11 +126,11 @@ def 사전검증(keywords: list, domain: str, jiana_home: str | None = None) -> 
         return {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": domain}
 
     # 1. cnlist 로딩
-    cnlist = cnlist_로딩(domain, jiana_home=jiana_home)
+    cnlist = load_cnlist(domain, jiana_home=jiana_home)
     logger.info("cnlist 로딩: %d건 (도메인: %s)", len(cnlist), domain)
 
-    # 2. 배치 형태소분석
-    분석결과 = 배치_형태소분석(keywords, jiana_home=jiana_home)
+    # 2. 배치 analyze_morpheme
+    분석결과 = batch_morpheme_analyze(keywords, jiana_home=jiana_home)
 
     # 3. 원본 라인 + 후속 토큰 그룹핑 파서
     # 실제 jiana 출력: 원본 키워드 라인 → 후속 "단어 코드" 토큰 라인들 → 다음 원본 반복
@@ -159,7 +159,7 @@ def 사전검증(keywords: list, domain: str, jiana_home: str | None = None) -> 
         tokens = 그룹.get(kw, [])
 
         if not tokens:
-            # 형태소분析 결과 없음 → skip
+            # analyze_morpheme 결과 없음 → skip
             skipped.append(kw)
             continue
 
@@ -203,13 +203,13 @@ def 사전검증(keywords: list, domain: str, jiana_home: str | None = None) -> 
     }
 
 
-def 자동사전검증(db, workspace: str, domain: str, jiana_home: str | None = None) -> dict:
-    """DB에서 완료 키워드 자동 로딩 → 기존 사전검증 호출 (형태소분석 기반)."""
+def auto_verify_dict(db, workspace: str, domain: str, jiana_home: str | None = None) -> dict:
+    """DB에서 complete 키워드 자동 로딩 → 기존 verify_dict 호출 (analyze_morpheme 기반)."""
     완료키워드 = db.execute(text(
         "SELECT DISTINCT keyword FROM keyword_assignments "
         "WHERE workspace=:ws AND domain=:dom AND status='completed'"
     ), {"ws": workspace, "dom": domain}).scalars().all()
-    result = 사전검증(list(완료키워드), domain, jiana_home=jiana_home)
+    result = verify_dict(list(완료키워드), domain, jiana_home=jiana_home)
     result["workspace"] = workspace
     return result
 
@@ -245,7 +245,7 @@ def _read_synonym(path: str) -> set:
     return result
 
 
-def 파일로딩(jiana_home: str) -> tuple[set, set, set]:
+def load_file(jiana_home: str) -> tuple[set, set, set]:
     """user.ks + cnlist.ks + synonym.UTF-8 → 3 set 반환."""
     udic_path = f"{jiana_home}/txt_resrc/udic/user.ks"
     cndic_path = f"{jiana_home}/txt_resrc/cndic/cnlist.ks"
@@ -257,7 +257,7 @@ def 파일로딩(jiana_home: str) -> tuple[set, set, set]:
     return user_set, cn_set, syn_set
 
 
-def 파일기반사전검증(db, workspace: str, domain: str, jiana_home: str) -> dict:
+def verify_dict_from_file(db, workspace: str, domain: str, jiana_home: str) -> dict:
     """완료된 키워드를 3개 파일과 교차검증.
 
     - 단일어(공백 없음): user.ks에 있어야 함
@@ -269,7 +269,7 @@ def 파일기반사전검증(db, workspace: str, domain: str, jiana_home: str) -
         "WHERE workspace=:ws AND domain=:dom AND status='completed'"
     ), {"ws": workspace, "dom": domain}).scalars().all()
 
-    user_set, cn_set, syn_set = 파일로딩(jiana_home)
+    user_set, cn_set, syn_set = load_file(jiana_home)
 
     missing_user, missing_cn, missing_syn = [], [], []
     for kw in 완료키워드:

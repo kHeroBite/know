@@ -8,11 +8,11 @@ from .config import 설정값
 암호컨텍스트 = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def 비밀번호해시(평문: str) -> str:
+def hash_password(평문: str) -> str:
     return 암호컨텍스트.hash(평문)
 
 
-def 비밀번호검증(평문: str, 저장된값: str) -> bool:
+def verify_password(평문: str, 저장된값: str) -> bool:
     """bcrypt 해시 검증 + 기존 평문 fallback (마이그레이션 호환)."""
     if not 저장된값:
         return False
@@ -23,7 +23,7 @@ def 비밀번호검증(평문: str, 저장된값: str) -> bool:
     return 평문 == 저장된값
 
 
-def 액세스토큰생성(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=설정값.JWT_EXPIRE_MINUTES)
@@ -32,7 +32,7 @@ def 액세스토큰생성(data: dict, expires_delta: Optional[timedelta] = None)
     return jwt.encode(to_encode, 설정값.JWT_SECRET, algorithm=설정값.JWT_ALGORITHM)
 
 
-def 토큰검증(token: str) -> Optional[dict]:
+def verify_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, 설정값.JWT_SECRET, algorithms=[설정값.JWT_ALGORITHM])
     except JWTError:

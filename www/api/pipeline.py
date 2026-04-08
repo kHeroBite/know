@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from api.auth import 현재사용자가져오기
-from core.database import DB세션
+from api.auth import get_current_user
+from core.database import db_session
 from services.pipeline_service import pipeline_service
 
 라우터 = APIRouter(prefix="/api/pipeline", tags=["파이프라인"])
@@ -14,28 +14,28 @@ class 파이프라인시작요청(BaseModel):
     file_path: str
 
 @라우터.post("/start")
-def 파이프라인시작(req: 파이프라인시작요청, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def start_pipeline_service(req: 파이프라인시작요청, current_user: dict = Depends(get_current_user), db: Session = Depends(db_session)):
     """파이프라인 시작"""
     started_by = current_user.get("id") or current_user.get("user_id")
-    return pipeline_service.파이프라인시작(db, req.domain, req.file_path, started_by=started_by)
+    return pipeline_service.start_pipeline_service(db, req.domain, req.file_path, started_by=started_by)
 
 @라우터.get("/{pipeline_id}/status")
-def 파이프라인상태조회(pipeline_id: int, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def get_pipeline_status(pipeline_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(db_session)):
     """단계별 상태 조회"""
-    return pipeline_service.파이프라인상태(db, pipeline_id)
+    return pipeline_service.get_pipeline_status_service(db, pipeline_id)
 
 @라우터.post("/{pipeline_id}/approve/{stage}")
-def 파이프라인승인(pipeline_id: int, stage: str, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def approve_pipeline_service(pipeline_id: int, stage: str, current_user: dict = Depends(get_current_user), db: Session = Depends(db_session)):
     """승인 게이트"""
     approved_by = str(current_user.get("user_id", "unknown"))
-    return pipeline_service.파이프라인승인(db, pipeline_id, stage, approved_by)
+    return pipeline_service.approve_pipeline_service(db, pipeline_id, stage, approved_by)
 
 @라우터.post("/{pipeline_id}/cancel")
-def 파이프라인취소(pipeline_id: int, current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def cancel_pipeline_service(pipeline_id: int, current_user: dict = Depends(get_current_user), db: Session = Depends(db_session)):
     """파이프라인 취소"""
-    return pipeline_service.파이프라인취소(db, pipeline_id)
+    return pipeline_service.cancel_pipeline_service(db, pipeline_id)
 
 @라우터.get("/history")
-def 파이프라인이력조회(page: int = Query(default=1, ge=1), size: int = Query(default=20, ge=1, le=100), current_user: dict = Depends(현재사용자가져오기), db: Session = Depends(DB세션)):
+def get_pipeline_history(page: int = Query(default=1, ge=1), size: int = Query(default=20, ge=1, le=100), current_user: dict = Depends(get_current_user), db: Session = Depends(db_session)):
     """파이프라인 이력 페이지네이션"""
-    return pipeline_service.파이프라인이력(db, page=page, size=size)
+    return pipeline_service.get_pipeline_history_service(db, page=page, size=size)

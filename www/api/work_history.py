@@ -7,13 +7,13 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.auth import 현재사용자가져오기
-from core.database import DB세션
+from api.auth import get_current_user
+from core.database import db_session
 from services.work_history_service import (
-    이력목록조회,
-    이력추가,
-    이력취소,
-    이력전체삭제,
+    get_history_list,
+    add_history,
+    cancel_history_service,
+    delete_all_history_service,
 )
 
 라우터 = APIRouter(prefix="/work-history", tags=["작업이력"])
@@ -31,24 +31,24 @@ class 이력추가요청(BaseModel):
 
 
 @라우터.get("")
-def 이력목록(
+def list_history(
     workspace: str = Query(...),
     domain: str = Query(...),
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """작업이력 목록 조회."""
-    return 이력목록조회(db, workspace, domain, current.get("user_id", ""))
+    """작업이력 list_tasks 조회."""
+    return get_history_list(db, workspace, domain, current.get("user_id", ""))
 
 
 @라우터.post("")
-def 이력기록(
+def record_history(
     요청: 이력추가요청,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """작업이력 기록 추가."""
-    return 이력추가(
+    return add_history(
         db,
         요청.workspace,
         요청.domain,
@@ -63,21 +63,21 @@ def 이력기록(
 
 
 @라우터.post("/undo/{history_id}")
-def 이력취소처리(
+def cancel_history(
     history_id: int,
-    db: Session = Depends(DB세션),
-    current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """작업 취소/롤백."""
-    return 이력취소(db, history_id, current.get("user_id", ""))
+    return cancel_history_service(db, history_id, current.get("user_id", ""))
 
 
 @라우터.delete("")
-def 이력전체삭제처리(
+def delete_all_history(
     workspace: str = Query(...),
     domain: str = Query(...),
-    db: Session = Depends(DB세션),
-    _current: dict = Depends(현재사용자가져오기),
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 해제 시 전체 이력 삭제."""
-    return 이력전체삭제(db, workspace, domain)
+    return delete_all_history_service(db, workspace, domain)
