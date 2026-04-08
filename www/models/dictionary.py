@@ -90,7 +90,8 @@ def drop_domain_table(site: str, engine) -> None:
 
 def ws_dict_site_name(workspace: str, domain: str) -> str:
     """워크스페이스 사전 테이블용 사이트명 생성. 예: WS_A_EPOST"""
-    return f"WS_{workspace}_{domain}".upper()
+    safe_ws = re.sub(r'[^A-Za-z0-9]', '_', workspace)
+    return f"WS_{safe_ws}_{domain}".upper()
 
 
 def ws_create_dict_table(workspace: str, domain: str, engine) -> None:

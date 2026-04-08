@@ -89,7 +89,7 @@ export default function DicTab({
   const [편집저장중, set편집저장중] = useState(false)
 
   const 데이터조회 = useCallback(async () => {
-    if (!domain) return
+    if (domain === null || domain === undefined) return
     set로딩(true)
     try {
       const 경로 = dicType === 'thesaurus' ? 'thesaurus/list' : dicType
@@ -110,7 +110,7 @@ export default function DicTab({
     return () => clearTimeout(timer)
   }, [검색어])
 
-  useEffect(() => { if (domain) 데이터조회() }, [domain, 데이터조회])
+  useEffect(() => { if (domain != null) 데이터조회() }, [domain, 데이터조회])
 
   // 컨테이너 높이 감지 → 테이블 스크롤 높이 자동 조절
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function DicTab({
 
   // refreshKey 변경 시 강제 리로드
   useEffect(() => {
-    if (refreshKey && refreshKey > 0 && domain) 데이터조회()
+    if (refreshKey && refreshKey > 0 && domain != null) 데이터조회()
   }, [refreshKey])
 
   // externalSearch: 외부에서 검색어 주입
