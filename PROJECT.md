@@ -350,6 +350,19 @@ www/
 
 ---
 
+## 최근 변경사항 요약 (2026-04-09, 전처리 초기화 + kw_{workspace} 전환)
+
+### 핵심 변경
+- `services/assignment_service.py` — `kw_{workspace}` 테이블 전용 CRUD로 전환 + 동적 테이블 생성
+- `api/workspace.py` — 이전단계 이동 시 phase1_runs/로그/kw_{workspace} TRUNCATE 호출
+- `services/workspace_service.py` — `reset_phase_data()` 신규 (전처리 전체 초기화)
+- `init_db.py` — `kw_{workspace}` 동적 테이블 생성 지원
+- `api/assignment.py` — kw_{workspace} 기반 API 조정
+- `pages/Phase1Pipeline.tsx` — 이전단계 이동 시 `?reset=1` 쿼리 파라미터 처리
+- `pages/Assignment.tsx`, `api/assignment.ts`, `pages/KnowledgeWork.tsx` — 워크스페이스별 테이블 전환 반영
+
+---
+
 ## 최근 변경사항 요약 (2026-04-09, k5 파이프라인)
 
 ### Phase 1: 백엔드 구조 정비

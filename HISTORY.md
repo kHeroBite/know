@@ -1,5 +1,30 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-09 — 전처리 초기화 + 키워드 워크스페이스별 전용테이블 전환
+
+### 수정 내용
+
+**핵심 변경**: 이전단계 이동 시 전처리 작업 전체 초기화 + 키워드 테이블 워크스페이스별 전용 테이블(`kw_{workspace}`) 전환
+
+#### 수정 파일 (총 9개)
+- `www/services/assignment_service.py` — `kw_{workspace}` 테이블 전용 CRUD로 전환 + `kw_{workspace}` 테이블 자동 생성 로직 추가
+- `www/api/workspace.py` — 이전단계 이동 시 `phase1_runs`/로그 TRUNCATE + `kw_{workspace}` TRUNCATE 호출
+- `www/services/workspace_service.py` — `reset_phase_data()` 함수 추가 (phase1_runs/logs/kw_{workspace} 초기화)
+- `www/init_db.py` — `kw_{workspace}` 동적 테이블 생성 지원 추가
+- `www/api/assignment.py` — `kw_{workspace}` 테이블 기반 API 조정
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — 이전단계 이동 시 `?reset=1` 쿼리 파라미터로 프론트 상태 초기화
+- `www/frontend/src/pages/Assignment.tsx` — `kw_{workspace}` 전환에 따른 API 호출 조정
+- `www/frontend/src/api/assignment.ts` — 워크스페이스별 테이블 기반 API 엔드포인트 조정
+- `www/frontend/src/pages/KnowledgeWork.tsx` — 이전단계 이동 후 상태 리셋 처리
+
+#### 아키텍처 변경
+- **키워드 테이블 분리**: 공용 `keyword_assignments` → 워크스페이스별 `kw_{workspace}` 테이블로 전환 (격리 강화)
+- **전처리 초기화**: 이전단계 이동 시 `phase1_runs`, phase1 로그, `kw_{workspace}` 일괄 TRUNCATE
+- **INSERT OR REPLACE 보장**: DB 업데이트 중복 방지로 멱등성 확보
+- **프론트 상태 초기화**: `?reset=1` 쿼리 파라미터로 이전단계 이동 시 프론트엔드 상태 자동 초기화
+
+---
+
 ## 2026-04-08 — 전처리 5단계 복원 + 사전빌드 후 재분석 + 캐시 제거 + DB migration
 
 ### 수정 내용

@@ -164,14 +164,14 @@ export default function Assignment() {
         onPrev={() => {
           Modal.confirm({
             title: '이전단계로 돌아가시겠습니까?',
-            content: 'DB에 저장된 할당 데이터가 모두 삭제됩니다. 데이터 전처리 단계로 돌아갑니다.',
+            content: '전처리 로그, 키워드 데이터가 모두 초기화됩니다. 데이터 전처리 단계로 돌아갑니다.',
             okText: '확인',
             cancelText: '취소',
             okButtonProps: { danger: true },
             onOk: async () => {
               try {
                 await useWorkspaceStore.getState().revertPhase('preprocess')
-                navigate('/preprocess')
+                navigate('/preprocess?reset=1')
               } catch (err: any) {
                 message.error(err.response?.data?.detail || 'phase 전이 실패')
               }

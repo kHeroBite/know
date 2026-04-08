@@ -188,7 +188,7 @@ export default function KnowledgeWork() {
         setSelected(target)
         setIsCenterFocused(true)
         if (!target.flag) {
-          assignmentApi.updateFlag(target.id, 'R').catch(() => {})
+          assignmentApi.updateFlag(target.id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === target!.id ? { ...i, flag: 'R' } : i))
         }
       }
@@ -578,7 +578,7 @@ export default function KnowledgeWork() {
       setSelected(filteredItems[newIdx])
       // Alt+↑: 첫 줄 첫 워드 (기본 동작 — ref 설정 안 함)
       if (!filteredItems[newIdx].flag) {
-        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
       }
       return
@@ -591,7 +591,7 @@ export default function KnowledgeWork() {
       const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
       setSelected(filteredItems[newIdx])
       if (!filteredItems[newIdx].flag) {
-        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+        assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
       }
       return
@@ -759,7 +759,7 @@ export default function KnowledgeWork() {
         if (curIdx > 0) {
           setSelected(filteredItems[curIdx - 1])
           if (!filteredItems[curIdx - 1].flag) {
-            assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R').catch(() => {})
+            assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
           }
         }
@@ -775,7 +775,7 @@ export default function KnowledgeWork() {
         selectLastLineFirstRef.current = true
         setSelected(filteredItems[newIdx])
         if (!filteredItems[newIdx].flag) {
-          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
       } else {
@@ -794,7 +794,7 @@ export default function KnowledgeWork() {
         if (curIdx < filteredItems.length - 1) {
           setSelected(filteredItems[curIdx + 1])
           if (!filteredItems[curIdx + 1].flag) {
-            assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R').catch(() => {})
+            assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
           }
         }
@@ -808,7 +808,7 @@ export default function KnowledgeWork() {
         const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
         setSelected(filteredItems[newIdx])
         if (!filteredItems[newIdx].flag) {
-          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R').catch(() => {})
+          assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
       } else {
@@ -835,7 +835,7 @@ export default function KnowledgeWork() {
             selectLastTokenRef.current = true
             setSelected(filteredItems[curIdx - 1])
             if (!filteredItems[curIdx - 1].flag) {
-              assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R').catch(() => {})
+              assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
             }
           }
@@ -852,7 +852,7 @@ export default function KnowledgeWork() {
           if (curIdx >= 0 && curIdx < filteredItems.length - 1) {
             setSelected(filteredItems[curIdx + 1])
             if (!filteredItems[curIdx + 1].flag) {
-              assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R').catch(() => {})
+              assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
             }
           } else {
@@ -897,7 +897,7 @@ export default function KnowledgeWork() {
               if (dicType === 'udic') setUdicSearch(selectedWord)
               else if (dicType === 'cndic') setCndicSearch(selectedWord)
               if (selected) {
-                assignmentApi.updateFlag(selected.id, 'W').catch(() => {})
+                assignmentApi.updateFlag(selected.id, 'W', selectedWorkspace ?? '').catch(() => {})
                 setItems(prev => prev.map(i => i.id === selected.id ? { ...i, flag: 'W' } : i))
               }
               if (selectedWorkspace && selectedDomain) {
@@ -1183,7 +1183,7 @@ export default function KnowledgeWork() {
                   onClick={(e) => {
                     e.stopPropagation(); setSelected(record); setIsCenterFocused(true)
                     if (!record.flag) {
-                      assignmentApi.updateFlag(record.id, 'R').catch(() => {})
+                      assignmentApi.updateFlag(record.id, 'R', selectedWorkspace ?? '').catch(() => {})
                       setItems(prev => prev.map(i => i.id === record.id ? { ...i, flag: 'R' } : i))
                     }
                   }}

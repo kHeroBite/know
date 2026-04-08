@@ -352,3 +352,12 @@ elif os.path.isdir(path):
 **원인**: Agent tool 방식은 pane 없이 실행되므로 kstatus의 tmux pane 기반 진단과 불일치
 **해결**: kstatus Step 7 수량 리포팅에 Agent tool 방식 정상 처리 로직 추가 완료
 **Level**: 2 (스킬 수정)
+
+---
+
+## [2026-04-09] 전처리 초기화 + kw_{workspace} 전용 테이블 전환
+
+> **작업 요약**: 이전단계 이동 시 전처리 작업 전체 초기화 + 키워드 테이블 워크스페이스별 전용 분리
+> **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — MEMORY.md 반영 없음
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 모든 작업은 기존 패턴의 정상 적용이며 hook/스킬 처리 완료 또는 1회성 특이사항 없음. MEMORY.md 반영 없음.

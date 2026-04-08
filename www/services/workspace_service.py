@@ -716,20 +716,7 @@ def phase_backward(ws_name: str, prev_phase: str) -> dict[str, Any]:
     상태[ws_name]["phase"] = prev_phase
     _write_state(상태)
 
-    # 데이터할당 → 전처리로 되돌아갈 때 keyword_assignments 삭제
-    if prev_phase == "preprocess":
-        try:
-            from core.database import 세션팩토리
-            from sqlalchemy import text
-            db = 세션팩토리()
-            try:
-                db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws"), {"ws": ws_name})
-                db.commit()
-            finally:
-                db.close()
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("phase_backward: keyword_assignments 삭제 실패 — %s", e)
+    # kw_{ws} 데이터 삭제는 api/workspace.py workspace_phase_backward에서 처리
 
     return {"name": ws_name, "phase": prev_phase, "prev": 현재}
 

@@ -160,10 +160,45 @@ CREATE TABLE IF NOT EXISTS user_work_phase (
 
 ---
 
+### kw_{workspace} 테이블 (2026-04-09 워크스페이스별 전용 테이블 전환)
+
+```sql
+-- 워크스페이스명에 따라 동적 생성 (예: kw_EPOST, kw_NEWS 등)
+CREATE TABLE IF NOT EXISTS kw_{workspace} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL,
+    line_num INTEGER NOT NULL,      -- 원본 순번
+    keyword TEXT NOT NULL,
+    analysis TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    assigned_to TEXT,
+    assigned_at TEXT,
+    completed_at TEXT,
+    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_{workspace}_unique ON kw_{workspace}(domain, line_num);
+CREATE INDEX IF NOT EXISTS idx_kw_{workspace}_domain ON kw_{workspace}(domain);
+CREATE INDEX IF NOT EXISTS idx_kw_{workspace}_status ON kw_{workspace}(status);
+```
+
+**목적**: 워크스페이스별 키워드 할당 격리 — 기존 공용 `keyword_assignments` 테이블에서 분리  
+**생성 시점**: `init_db.py` 또는 워크스페이스 접근 시 동적 생성 (`CREATE TABLE IF NOT EXISTS`)  
+**초기화**: 이전단계(`phase → preprocess`) 이동 시 TRUNCATE 수행  
+**INSERT OR REPLACE 보장**: 전처리 DB 업데이트 시 중복 방지 + 멱등성 확보  
+**주요 쿼리**:
+- 목록 조회: `SELECT ... FROM kw_{workspace} WHERE domain=? AND assigned_to=? ORDER BY line_num LIMIT ? OFFSET ?`
+- flag 업데이트: `UPDATE kw_{workspace} SET flag=:flag WHERE id=:id AND assigned_to=:uid`
+- 초기화: `DELETE FROM kw_{workspace}` (이전단계 이동 시)
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-09 | kw_{workspace} 워크스페이스별 전용 테이블 전환 (keyword_assignments 분리) + 이전단계 이동 시 TRUNCATE | assignment_service.py, workspace_service.py, init_db.py |
 | 2026-04-05 | user_work_phase 테이블 신규 생성 (user_id/domain/phase) | migrations/002_user_work_phase.sql |
 | 2026-04-05 | workspace phase enum 도입 (preprocess→work→build→verify) — isFrozen/isAssigned/isBuildPhase 제거 | workspace_service.py |
 | 2026-04-03 | llm_usage_log 테이블 신규 생성 (provider/model/user_id/tokens_used/duration_ms/success) | init_db.py |

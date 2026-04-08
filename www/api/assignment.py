@@ -66,11 +66,12 @@ def assign(workspace: str = Query(...), domain: str = Query(...),
 def update_flag(
     keyword_id: int = Query(...),
     flag: str = Query(...),
+    workspace: str = Query(...),
     db: Session = Depends(db_session),
     current: dict = Depends(get_current_user),
 ):
     """키워드 읽음/작업complete flag 업데이트."""
-    return assignment_service.update_flag_service(db, keyword_id, flag, current["user_id"])
+    return assignment_service.update_flag_service_ws(db, workspace, keyword_id, flag, current["user_id"])
 
 def _after_complete_side_effects(db: Session, workspace: str, domain: str, user_id: str) -> None:
     """complete 이벤트 후 myPhase=done + 100% complete 시 phase→build 전이."""

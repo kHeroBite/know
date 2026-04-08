@@ -287,14 +287,17 @@ def release_workspace_handler(
     db: Session = Depends(db_session),
     _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """워크스페이스 해제 + keyword_assignments 자동 initialize."""
+    """워크스페이스 해제 + kw_{ws} 테이블 DROP + 관련 데이터 정리."""
     from services.workspace_service import _read_state
+    from services.assignment_service import drop_kw_table
     상태 = _read_state()
     도메인 = 상태.get(name, {}).get("domain")
     if 도메인:
-        # freeze_service 데이터
-        db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
-                   {"ws": name, "dom": 도메인})
+        # kw_{ws} 테이블 DROP (workspace 전용 키워드 테이블)
+        try:
+            drop_kw_table(db, name)
+        except Exception:
+            pass  # 테이블 미존재 시 무시
         # 전처리 run_phase1_service 로그 (domain 매칭 + 빈 domain 레코드도 정리)
         db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL)"),
                    {"dom": 도메인})
@@ -344,9 +347,28 @@ def workspace_phase_forward(
 def workspace_phase_backward(
     name: str,
     요청: PhaseAdvanceRequest,
+    db: Session = Depends(db_session),
     _current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """워크스페이스 phase 역방향 전이."""
+    """워크스페이스 phase 역방향 전이 + 전처리 초기화."""
+    if 요청.to == "preprocess":
+        from services.workspace_service import _read_state
+        from services.assignment_service import truncate_kw_table
+        상태 = _read_state()
+        도메인 = 상태.get(name, {}).get("domain")
+        if 도메인:
+            # phase1_logs 먼저 삭제 (FK 의존)
+            db.execute(text(
+                "DELETE FROM phase1_logs WHERE run_id IN "
+                "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
+            ), {"dom": 도메인})
+            db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": 도메인})
+            db.commit()
+        # kw_{ws} 데이터 전체 삭제 (테이블 유지)
+        try:
+            truncate_kw_table(db, name)
+        except Exception:
+            pass  # 테이블 미존재 시 무시
     return phase_backward(name, 요청.to)
 
 

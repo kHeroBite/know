@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Row, Col, Card, Button, message, Typography, Result } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
@@ -19,6 +19,7 @@ export default function Phase1Pipeline() {
   const [runStartStep, setRunStartStep] = useState(1)
   const ws = usePhase1WebSocket(runId, runStartStep)
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
   const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
@@ -103,6 +104,19 @@ export default function Phase1Pipeline() {
     setStepElapsed({})
     setStepOutputs({})
   }, [selectedWorkspace])
+
+  // 이전단계 복귀 시 reset=1 파라미터 감지 → 상태 초기화
+  useEffect(() => {
+    if (searchParams.get('reset') === '1') {
+      setRunId(null)
+      setFileTabs({})
+      setActiveViewTab(null)
+      setFileStatus({})
+      setStepElapsed({})
+      setStepOutputs({})
+      setSearchParams({})
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const 이전실행로드 = async () => {

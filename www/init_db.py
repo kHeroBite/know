@@ -76,7 +76,10 @@ def create_tables():
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_logs_run ON phase1_logs(run_id)"))
         
-        # 4. keyword_assignments (데이터 assign)
+        # 4. keyword_assignments (레거시 호환 유지)
+        # NOTE: 신규 데이터는 kw_{workspace} 동적 테이블에 저장됨.
+        #       kw_{workspace} 테이블은 assignment_service.ensure_kw_table()이 런타임에 생성.
+        #       이 테이블은 마이그레이션 호환용으로만 유지.
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS keyword_assignments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

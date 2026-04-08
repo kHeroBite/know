@@ -1,6 +1,6 @@
 """데이터 assign 서비스 — freeze_service/list_tasks/assign/complete/사전등록"""
 from __future__ import annotations
-import os, logging
+import os, logging, re as _re
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -12,8 +12,58 @@ from core.constants import WORKSPACE_BASE
 logger = logging.getLogger(__name__)
 
 
-import re as _re
+# ─────────────────────────────────────────────────────────────────────────────
+# kw_{workspace} 테이블 관리
+# ─────────────────────────────────────────────────────────────────────────────
 
+def _kw_table(ws: str) -> str:
+    """워크스페이스명을 안전한 테이블명으로 변환 (alphanumeric + underscore만 허용)."""
+    safe = _re.sub(r'[^a-zA-Z0-9_]', '_', ws)
+    return f"kw_{safe}"
+
+
+def ensure_kw_table(db: Session, ws: str) -> None:
+    """kw_{ws} 테이블이 없으면 생성."""
+    tbl = _kw_table(ws)
+    db.execute(text(f"""CREATE TABLE IF NOT EXISTS {tbl} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT NOT NULL,
+        line_num INTEGER NOT NULL,
+        keyword TEXT NOT NULL,
+        analysis TEXT NOT NULL DEFAULT '',
+        full_analysis TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        assigned_to TEXT,
+        assigned_at TEXT,
+        completed_at TEXT,
+        flag TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(domain, line_num)
+    )"""))
+    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_domain ON {tbl}(domain)"))
+    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_status ON {tbl}(status)"))
+    db.commit()
+
+
+def drop_kw_table(db: Session, ws: str) -> None:
+    """kw_{ws} 테이블 DROP (워크스페이스 해제/삭제 시)."""
+    tbl = _kw_table(ws)
+    db.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+    db.commit()
+
+
+def truncate_kw_table(db: Session, ws: str) -> None:
+    """kw_{ws} 데이터 전체 삭제 (이전단계 이동 시). 테이블 자체는 유지."""
+    tbl = _kw_table(ws)
+    # 테이블이 없으면 생성 후 삭제 (오류 방지)
+    ensure_kw_table(db, ws)
+    db.execute(text(f"DELETE FROM {tbl}"))
+    db.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 유사어 파싱 유틸
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_synonym_keywords(block_lines: list[str]) -> dict:
     """분석 블록에서 유사어 정보를 구조화하여 추출.
@@ -136,11 +186,11 @@ def _merge_full_analyze_synonyms(block: dict, 풀분석결과: dict[str, str]) -
     """FullTest 결과에 유사어 정보를 심플 버전과 동일한 구조로 병합.
 
     결과 형식:
-        치즈	치즈 ncn                    ← 원본 FullTest
+        치즈\t치즈 ncn                    ← 원본 FullTest
         미니 <MINI MINNIE>              ← 부분 유사어 태그
         <<CHEESE 치이즈>>               ← 전체 유사어 태그
-        CHEESE	CHEESE nq_per           ← 유사어의 FullTest 분석
-        치이즈	치이즈 ncn               ← 유사어의 FullTest 분석
+        CHEESE\tCHEESE nq_per           ← 유사어의 FullTest 분석
+        치이즈\t치이즈 ncn               ← 유사어의 FullTest 분석
     """
     kw = block["keyword"]
     base = 풀분석결과.get(kw, "")
@@ -170,24 +220,12 @@ def _merge_full_analyze_synonyms(block: dict, 풀분석결과: dict[str, str]) -
     return "\n".join(lines)
 
 
-def _check_full_analysis_column(db: Session) -> bool:
-    """full_analysis 컬럼 존재 여부 확인 + 없으면 추가."""
-    try:
-        db.execute(text("SELECT full_analysis FROM keyword_assignments LIMIT 0"))
-        return True
-    except Exception:
-        db.rollback()
-        try:
-            db.execute(text("ALTER TABLE keyword_assignments ADD COLUMN full_analysis TEXT DEFAULT ''"))
-            db.commit()
-            return True
-        except Exception:
-            db.rollback()
-            return False
-
+# ─────────────────────────────────────────────────────────────────────────────
+# 핵심 서비스 함수
+# ─────────────────────────────────────────────────────────────────────────────
 
 def freeze_service(db: Session, workspace: str, domain: str) -> dict:
-    """refine.txt → keyword_assignments INSERT (기존 데이터 DELETE 후)."""
+    """refine.txt → kw_{workspace} INSERT (기존 데이터 DELETE 후)."""
     refine_path = os.path.join(WORKSPACE_BASE, workspace, "build", "work", "refine.txt")
     if not os.path.isfile(refine_path):
         raise HTTPException(400, detail=f"refine.txt 없음: {refine_path}")
@@ -198,16 +236,18 @@ def freeze_service(db: Session, workspace: str, domain: str) -> dict:
     if not keywords:
         raise HTTPException(400, detail="키워드가 없습니다")
 
-    # 기존 데이터 삭제
-    db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
-               {"ws": workspace, "dom": domain})
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
 
-    # INSERT (analysis='', full_analysis='')
+    # 기존 데이터 삭제 (domain 기준)
+    db.execute(text(f"DELETE FROM {tbl} WHERE domain=:dom"), {"dom": domain})
+
+    # INSERT
     for i, kw in enumerate(keywords, 1):
-        db.execute(text("""
-            INSERT INTO keyword_assignments (workspace, domain, line_num, keyword, analysis, full_analysis, status)
-            VALUES (:ws, :dom, :num, :kw, '', '', 'pending')
-        """), {"ws": workspace, "dom": domain, "num": i, "kw": kw})
+        db.execute(text(f"""
+            INSERT INTO {tbl} (domain, line_num, keyword, analysis, full_analysis, status)
+            VALUES (:dom, :num, :kw, '', '', 'pending')
+        """), {"dom": domain, "num": i, "kw": kw})
 
     db.commit()
     return {"total": len(keywords), "workspace": workspace, "domain": domain}
@@ -216,9 +256,12 @@ def freeze_service(db: Session, workspace: str, domain: str) -> dict:
 def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pending",
               page: int = 1, size: int = 50, assigned_to: Optional[str] = None) -> dict:
     """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to)."""
-    where = "workspace=:ws AND domain=:dom"
-    params = {"ws": workspace, "dom": domain}
-    
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
+
+    where = "domain=:dom"
+    params: dict = {"dom": domain}
+
     if filter == "pending":
         where += " AND status='pending'"
     elif filter == "assigned":
@@ -226,74 +269,58 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     elif filter == "completed":
         where += " AND status='completed'"
     # filter == "all" → 조건 없음
-    
+
     if assigned_to:
         where += " AND assigned_to=:uid"
         params["uid"] = assigned_to
-    
-    total = db.execute(text(f"SELECT COUNT(*) FROM keyword_assignments WHERE {where}"), params).scalar() or 0
+
+    total = db.execute(text(f"SELECT COUNT(*) FROM {tbl} WHERE {where}"), params).scalar() or 0
 
     worked_count = db.execute(text(
-        f"SELECT COUNT(*) FROM keyword_assignments WHERE {where} AND flag != ''"
+        f"SELECT COUNT(*) FROM {tbl} WHERE {where} AND flag != ''"
     ), params).scalar() or 0
 
     offset = (page - 1) * size
-    # full_analysis 컬럼 유무 확인
-    try:
-        db.execute(text("SELECT full_analysis FROM keyword_assignments LIMIT 0"))
-        has_full = True
-    except Exception:
-        db.rollback()
-        has_full = False
+    rows = db.execute(text(f"""
+        SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at, flag, full_analysis
+        FROM {tbl} WHERE {where}
+        ORDER BY line_num ASC LIMIT :limit OFFSET :offset
+    """), {**params, "limit": size, "offset": offset}).fetchall()
 
-    if has_full:
-        rows = db.execute(text(f"""
-            SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at, flag, full_analysis
-            FROM keyword_assignments WHERE {where}
-            ORDER BY line_num ASC LIMIT :limit OFFSET :offset
-        """), {**params, "limit": size, "offset": offset}).fetchall()
+    items = [{"id": r[0], "line_num": r[1], "keyword": r[2], "analysis": r[3],
+              "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7],
+              "flag": r[8] or "", "full_analysis": r[9] or ""} for r in rows]
 
-        items = [{"id": r[0], "line_num": r[1], "keyword": r[2], "analysis": r[3],
-                  "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7],
-                  "flag": r[8] or "", "full_analysis": r[9] or ""} for r in rows]
-    else:
-        rows = db.execute(text(f"""
-            SELECT id, line_num, keyword, analysis, status, assigned_to, assigned_at, completed_at, flag
-            FROM keyword_assignments WHERE {where}
-            ORDER BY line_num ASC LIMIT :limit OFFSET :offset
-        """), {**params, "limit": size, "offset": offset}).fetchall()
-
-        items = [{"id": r[0], "line_num": r[1], "keyword": r[2], "analysis": r[3],
-                  "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7],
-                  "flag": r[8] or "", "full_analysis": ""} for r in rows]
-    
     return {"items": items, "total": total, "page": page, "size": size, "worked_count": worked_count}
 
 
 def get_stats(db: Session, workspace: str, domain: str) -> dict:
     """상태별 건수."""
-    rows = db.execute(text("""
-        SELECT status, COUNT(*) FROM keyword_assignments
-        WHERE workspace=:ws AND domain=:dom GROUP BY status
-    """), {"ws": workspace, "dom": domain}).fetchall()
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
+    rows = db.execute(text(f"""
+        SELECT status, COUNT(*) FROM {tbl} WHERE domain=:dom GROUP BY status
+    """), {"dom": domain}).fetchall()
     result = {"total": 0, "pending": 0, "assigned": 0, "completed": 0}
-    for status, cnt in rows:
-        result[status] = cnt
+    for status_val, cnt in rows:
+        result[status_val] = cnt
         result["total"] += cnt
     return result
 
 
 def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str) -> dict:
     """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 assign."""
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
     offset = max(0, from_pos - 1)
     limit = to_pos - from_pos + 1
     # pending 목록에서 순번 기준으로 대상 ID 조회
-    ids = db.execute(text("""
-        SELECT id FROM keyword_assignments
-        WHERE workspace=:ws AND domain=:dom AND status='pending'
+    ids = db.execute(text(f"""
+        SELECT id FROM {tbl}
+        WHERE domain=:dom AND status='pending'
         ORDER BY line_num ASC LIMIT :lim OFFSET :off
-    """), {"ws": workspace, "dom": domain, "lim": limit, "off": offset}).fetchall()
+    """), {"dom": domain, "lim": limit, "off": offset}).fetchall()
     if not ids:
         raise HTTPException(400, detail="assign 가능한 미complete 키워드가 없습니다")
     id_list = [r[0] for r in ids]
@@ -301,7 +328,7 @@ def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_p
     params = {"uid": user_id, "now": now}
     params.update({f"id{i}": v for i, v in enumerate(id_list)})
     db.execute(text(f"""
-        UPDATE keyword_assignments SET status='assigned', assigned_to=:uid, assigned_at=:now
+        UPDATE {tbl} SET status='assigned', assigned_to=:uid, assigned_at=:now
         WHERE id IN ({placeholders})
     """), params)
     db.commit()
@@ -311,6 +338,10 @@ def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_p
 
 def update_flag_service(db: Session, keyword_id: int, flag: str, user_id: str) -> dict:
     """키워드 flag 업데이트 (R=읽음, W=작업complete, ''=미확인)."""
+    # flag 업데이트는 id 기준이므로 workspace를 알 수 없음 — keyword_assignments 레거시 테이블에서도 시도
+    # 실제로는 API 레이어에서 workspace를 파라미터로 넘겨야 하나, 기존 시그니처 유지
+    # NOTE: 이 함수는 keyword_id(PK)만 받으므로 어느 kw_{ws} 테이블인지 알 수 없음.
+    # 기존 keyword_assignments 테이블을 레거시로 유지하면서 여기서만 사용.
     db.execute(
         text("UPDATE keyword_assignments SET flag=:flag WHERE id=:id AND assigned_to=:uid"),
         {"flag": flag, "id": keyword_id, "uid": user_id},
@@ -319,14 +350,27 @@ def update_flag_service(db: Session, keyword_id: int, flag: str, user_id: str) -
     return {"id": keyword_id, "flag": flag}
 
 
+def update_flag_service_ws(db: Session, workspace: str, keyword_id: int, flag: str, user_id: str) -> dict:
+    """키워드 flag 업데이트 (workspace 명시 버전)."""
+    tbl = _kw_table(workspace)
+    db.execute(
+        text(f"UPDATE {tbl} SET flag=:flag WHERE id=:id AND assigned_to=:uid"),
+        {"flag": flag, "id": keyword_id, "uid": user_id},
+    )
+    db.commit()
+    return {"id": keyword_id, "flag": flag}
+
+
 def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to: str, size: int = 100) -> dict:
     """마지막으로 읽은(R/W) 키워드의 위치를 반환하여 해당 페이지부터 로딩할 수 있게 한다."""
-    params = {"ws": workspace, "dom": domain, "uid": assigned_to}
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
+    params = {"dom": domain, "uid": assigned_to}
 
     # 마지막 R/W 키워드 조회 (line_num DESC)
-    row = db.execute(text("""
-        SELECT id, line_num FROM keyword_assignments
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND flag IN ('R','W')
+    row = db.execute(text(f"""
+        SELECT id, line_num FROM {tbl}
+        WHERE domain=:dom AND assigned_to=:uid AND flag IN ('R','W')
         ORDER BY line_num DESC LIMIT 1
     """), params).fetchone()
 
@@ -336,9 +380,9 @@ def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to
     keyword_id, line_num = row[0], row[1]
 
     # 해당 키워드 앞에 몇 건이 있는지 (페이지 계산용)
-    position = db.execute(text("""
-        SELECT COUNT(*) FROM keyword_assignments
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid
+    position = db.execute(text(f"""
+        SELECT COUNT(*) FROM {tbl}
+        WHERE domain=:dom AND assigned_to=:uid
         AND status='assigned' AND line_num < :ln
     """), {**params, "ln": line_num}).scalar() or 0
 
@@ -349,49 +393,57 @@ def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to
 
 def process_complete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """user_id에게 할당된 키워드를 complete 처리."""
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
-    result = db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', completed_at=:now
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
-    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    result = db.execute(text(f"""
+        UPDATE {tbl} SET status='completed', completed_at=:now
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"now": now, "dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "user_id": user_id}
 
 
 def process_all_complete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """할당된 모든 키워드를 complete(W) 처리 후 작업자 제거(반납)."""
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
-    result = db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', flag='W', completed_at=:now, assigned_to=NULL
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
-    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    result = db.execute(text(f"""
+        UPDATE {tbl} SET status='completed', flag='W', completed_at=:now, assigned_to=NULL
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"now": now, "dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "mode": "all_complete"}
 
 
 def process_all_incomplete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """할당된 모든 키워드를 미complete 처리 후 작업자 제거(반납) — pending으로 복귀."""
-    result = db.execute(text("""
-        UPDATE keyword_assignments SET status='pending', flag='', assigned_to=NULL, assigned_at=NULL, completed_at=NULL
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
-    """), {"ws": workspace, "dom": domain, "uid": user_id})
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
+    result = db.execute(text(f"""
+        UPDATE {tbl} SET status='pending', flag='', assigned_to=NULL, assigned_at=NULL, completed_at=NULL
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "mode": "all_incomplete"}
 
 
 def complete_by_history(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """현재 flag 상태 유지하고 작업자 제거(반납) — 작업한(W/R)은 completed, 나머지는 pending."""
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
     # 작업complete(W) / 검토complete(R) 키워드 → completed
-    db.execute(text("""
-        UPDATE keyword_assignments SET status='completed', completed_at=:now, assigned_to=NULL
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned' AND flag IN ('W','R')
-    """), {"now": now, "ws": workspace, "dom": domain, "uid": user_id})
+    db.execute(text(f"""
+        UPDATE {tbl} SET status='completed', completed_at=:now, assigned_to=NULL
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned' AND flag IN ('W','R')
+    """), {"now": now, "dom": domain, "uid": user_id})
     # 미작업 키워드 → pending 복귀
-    result = db.execute(text("""
-        UPDATE keyword_assignments SET status='pending', assigned_to=NULL, assigned_at=NULL
-        WHERE workspace=:ws AND domain=:dom AND assigned_to=:uid AND status='assigned'
-    """), {"ws": workspace, "dom": domain, "uid": user_id})
+    result = db.execute(text(f"""
+        UPDATE {tbl} SET status='pending', assigned_to=NULL, assigned_at=NULL
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"dom": domain, "uid": user_id})
     db.commit()
     return {"completed": result.rowcount, "mode": "by_history"}
 
@@ -410,7 +462,7 @@ def process_complete_mode(db: Session, workspace: str, domain: str, user_id: str
 
 
 def reanalyze_after_build(workspace: str, domain: str) -> dict:
-    """빌드 완료 후 3/4/5단계(분석→변환→유사어)를 재실행하여 keyword_assignments 업데이트.
+    """빌드 완료 후 3/4/5단계(분석→변환→유사어)를 재실행하여 kw_{ws} 업데이트.
 
     1. _sync_analyze → _sync_convert → _sync_synonym 순차 실행
     2. synonym.txt 파싱 → analysis 컬럼 UPDATE (lite)
@@ -442,7 +494,7 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
         logger.error("reanalyze_after_build: 전처리 단계 실패 — %s", e)
         return {"skipped": True, "reason": str(e)}
 
-    # synonym.txt 파싱 → keyword_assignments.analysis 업데이트 (lite)
+    # synonym.txt 파싱 → kw_{ws}.analysis 업데이트 (lite)
     try:
         blocks = parse_synonym(workspace)
     except Exception as e:
@@ -451,14 +503,15 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
 
     db = 세션팩토리()
     try:
-        _check_full_analysis_column(db)
+        tbl = _kw_table(workspace)
+        ensure_kw_table(db, workspace)
 
         # analysis 컬럼 업데이트 (lite)
         for block in blocks:
-            db.execute(text("""
-                UPDATE keyword_assignments SET analysis=:ana
-                WHERE workspace=:ws AND domain=:dom AND keyword=:kw
-            """), {"ana": block["analysis"], "ws": workspace, "dom": domain, "kw": block["keyword"]})
+            db.execute(text(f"""
+                UPDATE {tbl} SET analysis=:ana
+                WHERE domain=:dom AND keyword=:kw
+            """), {"ana": block["analysis"], "dom": domain, "kw": block["keyword"]})
         db.commit()
         logger.info("reanalyze_after_build: analysis 업데이트 complete — %d건", len(blocks))
 
@@ -470,10 +523,10 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
             for block in blocks:
                 merged = _merge_full_analyze_synonyms(block, 풀분석결과)
                 if merged:
-                    db.execute(text("""
-                        UPDATE keyword_assignments SET full_analysis=:fa
-                        WHERE workspace=:ws AND domain=:dom AND keyword=:kw
-                    """), {"fa": merged, "ws": workspace, "dom": domain, "kw": block["keyword"]})
+                    db.execute(text(f"""
+                        UPDATE {tbl} SET full_analysis=:fa
+                        WHERE domain=:dom AND keyword=:kw
+                    """), {"fa": merged, "dom": domain, "kw": block["keyword"]})
                     full_count += 1
             db.commit()
             logger.info("reanalyze_after_build: full_analysis 업데이트 complete — %d건", full_count)
