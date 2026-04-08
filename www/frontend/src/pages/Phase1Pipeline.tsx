@@ -94,6 +94,16 @@ export default function Phase1Pipeline() {
     }
   }, [ws.logs])
 
+  // 워크스페이스 변경 시 전처리 관련 상태 초기화
+  useEffect(() => {
+    setRunId(null)
+    setFileTabs({})
+    setActiveViewTab(null)
+    setFileStatus({})
+    setStepElapsed({})
+    setStepOutputs({})
+  }, [selectedWorkspace])
+
   useEffect(() => {
     const 이전실행로드 = async () => {
       try {

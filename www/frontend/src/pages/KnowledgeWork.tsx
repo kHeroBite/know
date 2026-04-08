@@ -1462,17 +1462,17 @@ export default function KnowledgeWork() {
                 {
                   key: 'udic',
                   label: <span>사용자사전 <KbdKey>{displayTabKey(derivedHotkeys.tabUdic)}</KbdKey></span>,
-                  children: <DicTab dicType="udic" domain={selectedDomain} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={udicSearch} autoFocusTrigger={udicFocusTrigger} />,
+                  children: <DicTab dicType="udic" domain={selectedDomain ?? ''} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={udicSearch} autoFocusTrigger={udicFocusTrigger} />,
                 },
                 {
                   key: 'cndic',
                   label: <span>복합명사사전 <KbdKey>{displayTabKey(derivedHotkeys.tabCndic)}</KbdKey></span>,
-                  children: <DicTab dicType="cndic" domain={selectedDomain} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={cndicSearch} autoFocusTrigger={cndicFocusTrigger} />,
+                  children: <DicTab dicType="cndic" domain={selectedDomain ?? ''} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={cndicSearch} autoFocusTrigger={cndicFocusTrigger} />,
                 },
                 {
                   key: 'thesaurus',
                   label: <span>유사어사전 <KbdKey>{displayTabKey(derivedHotkeys.tabThesaurus)}</KbdKey></span>,
-                  children: <DicTab dicType="thesaurus" domain={selectedDomain} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} onModalClose={() => setIsCenterFocused(true)} />,
+                  children: <DicTab dicType="thesaurus" domain={selectedDomain ?? ''} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} onModalClose={() => setIsCenterFocused(true)} />,
                 },
               ]}
             />
