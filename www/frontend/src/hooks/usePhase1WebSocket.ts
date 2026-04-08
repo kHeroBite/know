@@ -22,12 +22,14 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
   const doneRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stepStatusesRef = useRef<Record<number, string>>({})
 
   useEffect(() => {
     if (!runId) return
 
     setLogs([])
     setCurrentStep(-1)
+    stepStatusesRef.current = {}
     // 기존 completed 상태 보존 (개별 실행 시 이전 단계 유지)
     setStepStatuses(prev => {
       const preserved: Record<number, string> = {}
@@ -53,38 +55,53 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     }
 
-    const applyLogs = (entries: LogEntry[]) => {
+    const applyLogs = (entries: LogEntry[], prevStatuses?: Record<number, string>) => {
       setLogs(entries)
       // 각 step별 최신 상태만 추출 (step_num → 마지막 entry)
       const stepLatest: Record<number, LogEntry> = {}
-      let completed = false
+      let pipelineCompleted = false
+      let hasFailed = false
       for (const e of entries) {
         stepLatest[e.step_num] = e
-        if (e.step_num === -1 && e.status === 'completed') completed = true
-        if (e.status === 'failed') completed = true
+        if (e.step_num === -1 && e.status === 'completed') pipelineCompleted = true
+        if (e.status === 'failed') hasFailed = true
       }
-      // 기존 completed 상태 보존 + 새 로그 머지 (한 번만 setState)
-      setStepStatuses(prev => {
-        const merged: Record<number, string> = {}
-        for (const [k, v] of Object.entries(prev)) {
-          if (v === 'completed') merged[Number(k)] = v
-        }
-        for (const [k, e] of Object.entries(stepLatest)) {
-          merged[Number(k)] = e.status
-        }
-        return merged
+
+      const sortedSteps = Object.keys(stepLatest)
+        .map(Number)
+        .filter(n => n >= 1)
+        .sort((a, b) => a - b)
+
+      // 아직 UI에 반영 안 된 step만 순차 업데이트 (300ms 간격)
+      const already = prevStatuses ?? {}
+      const newSteps = sortedSteps.filter(n => !already[n] || already[n] === 'running')
+
+      if (newSteps.length === 0) {
+        // 모두 이미 표시됨 — 즉시 완료 처리
+        if (pipelineCompleted || hasFailed) doMarkDone()
+        return pipelineCompleted || hasFailed
+      }
+
+      newSteps.forEach((stepNum, idx) => {
+        setTimeout(() => {
+          const status = stepLatest[stepNum].status
+          stepStatusesRef.current = { ...stepStatusesRef.current, [stepNum]: status }
+          setStepStatuses(prev => ({ ...prev, [stepNum]: status }))
+          setCurrentStep(stepNum)
+          if (idx === newSteps.length - 1 && (pipelineCompleted || hasFailed)) {
+            doMarkDone()
+          }
+        }, idx * 350)
       })
-      const lastStep = Math.max(-1, ...Object.keys(stepLatest).map(Number).filter(n => n >= 0))
-      setCurrentStep(lastStep >= 0 ? lastStep : -1)
-      if (completed) doMarkDone()
-      return completed
+
+      return false // setTimeout 비동기 처리 — 즉시 완료 반환 안 함
     }
 
     const fetchLogs = async (): Promise<boolean> => {
       try {
         const { data } = await 클라이언트.get(`/preprocess/logs/${runId}`)
         if (Array.isArray(data) && data.length > 0) {
-          return applyLogs(data)
+          return applyLogs(data, stepStatusesRef.current)
         }
       } catch { /* ignore */ }
       return false
