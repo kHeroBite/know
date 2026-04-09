@@ -898,3 +898,21 @@
 ### 배경
 - Playwright 테스트 중 `.some is not a function` JS 오류 발견 → API 응답이 `{items:[...]}` 객체인데 배열로 처리하던 버그
 - bcrypt 5.0.0 + passlib 호환성 문제는 이전 세션에서 수정 완료 (bcrypt==3.2.2 다운그레이드)
+
+---
+
+## 2026-04-10 — 전역작업 스토어 실시간 다중 PC 동기화 구현
+
+### 수정 내용
+- **globalTaskStore.ts**:
+  - F1: `_finishTask`에서 `syncToServer(null)` 호출을 `setTimeout 2000ms` 내부로 이동 (race condition 수정 — 다른 탭이 isBlocked 조기 해제 방지)
+  - F2: `applyRemoteTask`의 done/error 수신 시 `isBlocked:false` 해제를 2초 지연으로 통일 (`_finishTask`와 일관성)
+- **useNotification.ts**:
+  - F3: `closedIntentionally` ref 추가 (의도치 않은 WS 재연결 방지)
+  - F4: `ws.onopen`에서 `GET /api/notifications/global-task` fetch → `applyRemoteTask()` 호출 (초기 상태 동기화 — 재연결 시 최신 상태 즉시 반영)
+  - F5: `userId` 변경 시 기존 WS를 의도적으로 close 후 새 연결 (계정 전환 시 WS 혼선 방지)
+
+### 배경
+- 다중 탭/PC 환경에서 전역작업 큐가 탭별로 독립 상태로 분기되는 문제 발생
+- `_finishTask`에서 `syncToServer(null)`을 즉시 호출하면 다른 탭의 WS가 null을 수신하기 전에 isBlocked를 해제하여 race condition 유발
+- WS 재연결 후 초기 상태를 서버에서 fetch하지 않아 재연결 시 이전 상태 유실 문제

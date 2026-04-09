@@ -135,12 +135,12 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     get()._stopPolling(id)
     get()._completedIds.add(id)
     const finished: GlobalTask = { ...cur, status, updatedAt: Date.now() }
-    set({ currentTask: finished, isBlocked: false })
+    set({ currentTask: finished })  // isBlocked는 2초 지연 후 해제 (race condition 방지)
     syncToServer(finished)
-    syncToServer(null)  // 서버 즉시 null (WS reconnect 시 done task 재수신 방지)
     setTimeout(() => {
       const latest = get().currentTask
-      if (latest?.id === id) set({ currentTask: null })
+      if (latest?.id === id) set({ currentTask: null, isBlocked: false })
+      syncToServer(null)  // 2초 지연 후 서버 null (다른 탭이 isBlocked를 조기 해제하는 race condition 방지)
       // TTL: 5분 후 completedIds에서 제거
       setTimeout(() => {
         get()._completedIds.delete(id)
@@ -231,10 +231,10 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
       state._stopPolling(task.id)
       state._completedIds.add(task.id)
       const finalTask: GlobalTask = { ...task, updatedAt: Date.now() }
-      set({ currentTask: finalTask, isBlocked: false })
+      set({ currentTask: finalTask })  // isBlocked는 2초 지연 후 해제 (_finishTask와 일관성)
       setTimeout(() => {
         const cur = get().currentTask
-        if (cur?.id === task.id) set({ currentTask: null })
+        if (cur?.id === task.id) set({ currentTask: null, isBlocked: false })
         // TTL: 5분 후 completedIds에서 제거
         setTimeout(() => get()._completedIds.delete(task.id), 300000)
       }, 2000)
@@ -242,6 +242,9 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     }
 
     // 5. running 수신 — 상태 갱신 (폴링이 있으면 유지, 없으면 WS만으로 상태 반영)
+    // 클라이언트가 폴링 중인 task는 덮어쓰지 않음 (applyRemoteTask 덮어쓰기 버그 방지)
+    const isPolling = !!state._timers[task.id]
+    if (isPolling) return
     set({
       currentTask: { ...task, updatedAt: Date.now() },
       isBlocked: true,

@@ -309,7 +309,7 @@ www/
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
-    ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask)
+    ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask) — 다중 PC WS 동기화 race condition 수정 완료
     ├── src/stores/workspaceOpsSlice.ts # 워크스페이스 작업 슬라이스 (executeCreate/Connect/Cancel/Release/Reinit, restoreWorkspacePolling)
     └── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)
     └── src/index.css           # 전역 디자인 CSS (glassmorphism, 애니메이션, CSS 변수)
@@ -412,7 +412,7 @@ www/
 
 ### Phase 4: 실시간 알림 + UX 개선
 - `services/notification_service.py` + `api/notification.py` 신규
-- `hooks/useNotification.ts` 신규 (WebSocket 기반 실시간 알림)
+- `hooks/useNotification.ts` 신규 (WebSocket 기반 실시간 알림) — closedIntentionally ref + onopen 초기 상태 fetch + userId 변경 시 재연결 추가 (다중 PC 동기화)
 - `components/GlobalSearch.tsx` 신규 (통합 검색)
 - `Layout.tsx`: disabled Tooltip + GlobalSearch 헤더 통합
 - `Workspace.tsx`: 진행률 표시 개선

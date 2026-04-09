@@ -109,8 +109,11 @@ export function createWorkspaceOpsSlice(
         return
       }
 
+      // await 전에 taskId 저장 (await 후 다른 작업으로 교체될 수 있음)
+      const taskId = current.id
+
       // 폴링 즉시 중단 (서버 응답 대기 전)
-      get()._stopPolling(current.id)
+      get()._stopPolling(taskId)
 
       // 서버 취소 API 호출
       try {
@@ -120,8 +123,10 @@ export function createWorkspaceOpsSlice(
         console.error('[workspaceOpsSlice] 서버 취소 API 실패:', e)
       }
 
-      // store 상태 전이: running → cancelled
-      get()._finishTask(current.id, 'cancelled')
+      // store 상태 전이: running → cancelled (await 후 task 교체 여부 재확인)
+      if (get().currentTask?.id === taskId) {
+        get()._finishTask(taskId, 'cancelled')
+      }
       callbacks?.onCancel?.()
     },
 
@@ -178,7 +183,9 @@ export function createWorkspaceOpsSlice(
     const { currentTask } = get()
     for (const ws of wsList) {
       if (ws.status !== 'CONNECTING') continue
-      if (currentTask?.id.includes(`-${ws.name}-`) && currentTask.status === 'running') continue
+      const escapedName = ws.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const pattern = new RegExp(`^ws-(?:connect|reinit)-${escapedName}-\\d+$`)
+      if (currentTask && pattern.test(currentTask.id) && currentTask.status === 'running') continue
       try {
         const prog = await workspaceAPI.진행률조회(ws.name)
         const progData = prog?.data

@@ -436,3 +436,27 @@ elif os.path.isdir(path):
 > **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — MEMORY.md 반영 없음
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 모든 작업은 기존 패턴의 정상 적용이며 hook/스킬 처리 완료 또는 1회성 특이사항 없음. MEMORY.md 반영 없음.
+
+---
+
+## [2026-04-10] 전역작업 스토어 실시간 다중 PC 동기화 구현
+
+> **작업 요약**: WebSocket 기반 전역작업(GlobalTask) 실시간 동기화 — 모든 탭/PC에서 단일 큐 공유. F1~F5 수정으로 race condition 근본 해결 및 초기 상태 동기화 구현.
+
+### L-049: 서브에이전트 spawn 프롬프트에도 L-110(curl localhost 금지) 적용 (2026-04-10)
+
+**현상**: kdev 에이전트가 서브에이전트 spawn 프롬프트 문자열 내에 `curl -s http://localhost:` 명령어를 직접 포함 → hook(HOOK_BLOCK_CURL_LOCALHOST) 차단 발생.
+**원인**: L-110 규칙이 메인 에이전트 직접 실행에만 적용된다고 인식하고, spawn 프롬프트 문자열에는 해당 없다고 판단한 실수.
+**해결**: 정상 차단 후 curl 명령 없이 프롬프트 재작성.
+**재발방지**: L-110은 spawn 프롬프트 문자열 내부에도 동일하게 적용된다. 프롬프트에 `curl -s http://localhost` 포함 금지.
+**Level**: 1 (1회 발생, docs 기록)
+
+### L-050: 파이프라인 활성(DEV) 중 일반 서브에이전트(general-purpose) spawn 금지 (2026-04-10)
+
+**현상**: DEV 상태에서 `subagent_type=general-purpose` Agent spawn 시도 → hook(HOOK_BLOCK_NO_TEAM_AGENT) 차단 발생.
+**원인**: 파이프라인 활성 중 추가 조사가 필요할 때 일반 서브에이전트 spawn이 가능하다고 잘못 판단.
+**해결**: 정상 차단 확인. 조사는 kio file_read/bash_exec로 직접 수행.
+**재발방지**: DEV/TEST 상태에서 일반 서브에이전트(general-purpose, codex 등) spawn 불가. 팀에이전트 spawn은 SPAWN_PHASE 상태에서만 허용. 파이프라인 활성 중 조사 작업은 kio 도구 직접 사용.
+**Level**: 1 (1회 발생, docs 기록)
+
+**MEMORY.md 점검 결과**: L-049, L-050 모두 Level 1 (1회성 실수, hook 정상 차단). 이미 hook이 물리 차단하므로 MEMORY.md 추가 반영 없음.

@@ -215,6 +215,10 @@ export default function DomainManage() {
 
   const 임포트실행 = async () => {
     if (!사전도메인) return
+    const taskId = `domain-import-${Date.now()}`
+    const { _startTask, _updateProgress, _finishTask } = useGlobalTaskStore.getState()
+    const started = _startTask({ id: taskId, type: '도메인 파일 임포트', label: `${사전도메인} 사전 임포트 중`, percent: 0, status: 'running' })
+    if (!started) { message.warning('이미 다른 작업이 진행 중입니다'); return }
     set임포트중(true); set진행률({ percent: 0, stage: 'preparing', status: 'running', current: 0 })
     try {
       await 클라이언트.post(`/dictionaries/${사전도메인}/import-from-files?udic=${임포트옵션.udic}&cndic=${임포트옵션.cndic}&thesaurus=${임포트옵션.thesaurus}&mode=${임포트모드}`)
@@ -222,9 +226,12 @@ export default function DomainManage() {
         try {
           const res = await 클라이언트.get(`/dictionaries/${사전도메인}/import-progress`)
           set진행률(res.data)
+          const percent: number = res.data.percent ?? 0
+          _updateProgress(taskId, percent)
           if (res.data.status === 'done' || res.data.status === 'error') {
             clearInterval(poll); set임포트중(false)
             if (res.data.status === 'done') {
+              _finishTask(taskId, 'done')
               const r = res.data.result
               const fmt = (d: any) => {
                 if (typeof d === 'number') return `${d}건`
@@ -238,11 +245,18 @@ export default function DomainManage() {
               setDicKey(k => k + 1)
               setTimeout(() => set임포트모달(false), 1500)
             }
-            if (res.data.status === 'error') message.error('임포트 실패: ' + (res.data.result?.error || '알 수 없는 오류'))
+            if (res.data.status === 'error') {
+              _finishTask(taskId, 'error')
+              message.error('임포트 실패: ' + (res.data.result?.error || '알 수 없는 오류'))
+            }
           }
         } catch { /* polling error */ }
       }, 1000)
-    } catch (e: any) { set임포트중(false); message.error(e?.response?.data?.detail || '임포트 시작 실패') }
+    } catch (e: any) {
+      _finishTask(taskId, 'error')
+      set임포트중(false)
+      message.error(e?.response?.data?.detail || '임포트 시작 실패')
+    }
   }
 
   const 단계라벨 = (stage: string) => {
