@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { notification } from 'antd'
+import { useGlobalTaskStore } from '../stores/globalTaskStore'
 
 export function useNotification(userId: string | null) {
   const wsRef = useRef<WebSocket | null>(null)
@@ -10,6 +11,11 @@ export function useNotification(userId: string | null) {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
+        // 전역작업 브로드캐스트 처리 (다중 계정 동기화)
+        if (data.type === 'global_task') {
+          useGlobalTaskStore.getState().applyRemoteTask(data.task ?? null)
+          return
+        }
         notification.info({
           message: data.title || '알림',
           description: data.message,

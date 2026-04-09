@@ -56,7 +56,7 @@ interface 워크스페이스항목 {
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
-  const { isBlocked, startTask, updateProgress, finishTask, startPolling } = useGlobalTaskStore()
+  const { isBlocked, startTask, updateProgress, finishTask, startPolling, currentTask } = useGlobalTaskStore()
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -95,17 +95,27 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
-      // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드 시)
+      // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드/새로고침 시)
       // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
       const storeTimers = useGlobalTaskStore.getState()._timers
-      wsList.forEach(ws => {
-        if (ws.status !== 'CONNECTING') return
-        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`ws-`) && tid.includes(ws.name))
-        if (existingTaskId) return // 이미 store에서 폴링 중
-        const taskId = `ws-connect-${ws.name}-restore`
-        startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
-        폴링시작(ws.name, taskId)
-      })
+      for (const ws of wsList) {
+        if (ws.status !== 'CONNECTING') continue
+        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith('ws-') && tid.includes(ws.name))
+        if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
+        // 새로고침 또는 최초 로드 — 서버 진행률 조회 후 복원
+        try {
+          const pRes = await workspaceAPI.진행률조회(ws.name)
+          const pct = pRes.data?.percent ?? 0
+          set복사진행중(prev => ({ ...prev, [ws.name]: pct }))
+          const taskId = `ws-connect-${ws.name}-${Date.now()}`
+          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: pct })
+          폴링시작(ws.name, taskId)
+        } catch {
+          const taskId = `ws-connect-${ws.name}-${Date.now()}`
+          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
+          폴링시작(ws.name, taskId)
+        }
+      }
       // FAILED 워크스페이스 에러 메시지 조회
       wsList.filter(ws => ws.status === 'FAILED').forEach(ws => {
         workspaceAPI.진행률조회(ws.name).then(res => {
@@ -125,6 +135,16 @@ export default function Workspace() {
     목록조회()
     // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
+
+  // store ↔ 로컬 복사진행중 동기화 (페이지 이동 후 복귀 시)
+  useEffect(() => {
+    if (!currentTask || currentTask.status !== 'running') return
+    // ws-connect-{name}-... 형태의 taskId에서 wsName 추출
+    const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
+    if (!match) return
+    const wsName = match[1]
+    set복사진행중(prev => ({ ...prev, [wsName]: currentTask.percent }))
+  }, [currentTask?.percent, currentTask?.id])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {
@@ -423,6 +443,7 @@ export default function Workspace() {
                 icon={<PlusOutlined />}
                 onClick={생성핸들러}
                 loading={생성로딩}
+                disabled={isBlocked}
               >
                 생성
               </Button>

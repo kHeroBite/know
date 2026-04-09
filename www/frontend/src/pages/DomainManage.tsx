@@ -144,7 +144,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 export default function DomainManage() {
   const { user: currentUser } = useAuthStore()
   const isSuper = currentUser?.auth === 'A'
-  const { isBlocked, startTask, finishTask, startPolling } = useGlobalTaskStore()
+  const { isBlocked, startTask, finishTask, startPolling, currentTask } = useGlobalTaskStore()
 
   // 도메인 목록
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -190,19 +190,19 @@ export default function DomainManage() {
       ])
       set도메인목록(dmRes.data)
       set워크스페이스목록(wsRes.data)
-      // 진행 중인 도메인 폴링 복원 (페이지 로드 시)
+      // 진행 중인 도메인 폴링 복원 (페이지 로드/새로고침 시)
       // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
       const storeTimers = useGlobalTaskStore.getState()._timers
       for (const dm of dmRes.data) {
-        if (도메인폴링ref.current[dm.id]) continue
-        const existingTaskId = Object.keys(storeTimers).find(tid => tid.includes(`domain-add-${dm.id}`))
-        if (existingTaskId) continue // 이미 store에서 폴링 중
+        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`domain-add-${dm.id}`))
+        if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
         try {
           const res = await workspaceAPI.도메인추가진행률(dm.id)
           if (res.data?.status && res.data.status !== 'idle' && res.data.status !== 'done') {
-            set도메인복사진행중(prev => ({ ...prev, [dm.id]: res.data?.percent ?? 0 }))
-            const taskId = `domain-add-${dm.id}-restore`
-            startTask({ id: taskId, type: '도메인 추가', label: `${dm.id} 추가 중`, percent: res.data?.percent ?? 0 })
+            const pct = res.data?.percent ?? 0
+            set도메인복사진행중(prev => ({ ...prev, [dm.id]: pct }))
+            const taskId = `domain-add-${dm.id}-${Date.now()}`
+            startTask({ id: taskId, type: '도메인 추가', label: `${dm.id} 추가 중`, percent: pct })
             도메인폴링시작(dm.id, taskId)
           }
         } catch { /* ignore */ }
@@ -214,9 +214,17 @@ export default function DomainManage() {
 
   useEffect(() => { 목록조회() }, [])
 
+  // store ↔ 로컬 도메인복사진행중 동기화 (페이지 이동 후 복귀 시)
+  useEffect(() => {
+    if (!currentTask || currentTask.status !== 'running') return
+    const match = currentTask.id.match(/^domain-add-(.+?)-(?:\d+|restore)$/)
+    if (!match) return
+    const dmName = match[1]
+    set도메인복사진행중(prev => ({ ...prev, [dmName]: currentTask.percent }))
+  }, [currentTask?.percent, currentTask?.id])
+
   const 도메인폴링시작 = (dmName: string, taskId: string) => {
     // store 폴링: 페이지 이동과 무관하게 유지됨
-    도메인폴링ref.current[dmName] = taskId as any
     startPolling(
       taskId,
       async () => {
