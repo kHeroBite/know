@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Typography,
   Button,
@@ -56,7 +56,7 @@ interface 워크스페이스항목 {
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
-  const { isBlocked, startTask, updateProgress, finishTask, startPolling, currentTask } = useGlobalTaskStore()
+  const { isBlocked, currentTask, executeConnect, executeCancel, executeRelease, executeReinit } = useGlobalTaskStore()
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -68,25 +68,19 @@ export default function Workspace() {
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
   const [선택jiana, set선택jiana] = useState<string>('')
-  // 복사진행중: store에서 직접 파생 (로컬 state 제거 — 충돌 방지)
-  // ws.status === 'CONNECTING' 이고 store에 해당 task가 running이면 percent 표시
+  const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
+  const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
+  const [작업진행률, set작업진행률] = useState<Record<string, number>>({})
+
+  // store에서 직접 파생: 현재 연결 진행 중인 WS 이름과 진행률
   const 연결진행중WS = (() => {
     if (!currentTask || currentTask.status !== 'running') return null
     const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
     if (!match) return null
     return { name: match[1], percent: currentTask.percent }
   })()
-  const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
-  const [연결해제중, set연결해제중] = useState(false)
-  const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
-  const [작업진행률, set작업진행률] = useState<Record<string, number>>({})
-  // 페이지 이동 후 복원용: 진행 중인 taskId → wsName 매핑 (로컬 UI 상태 복원용)
-  const 폴링ref = useRef<Record<string, string>>({})
 
   const isSuper = currentUser?.auth === 'A'
-
-
-
 
   const 목록조회 = async () => {
     set로딩(true)
@@ -119,20 +113,7 @@ export default function Workspace() {
 
   useEffect(() => {
     목록조회()
-    // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
-
-  // store에 running task가 있는데 타이머가 없으면 폴링 재시작 (페이지 복귀 시 복원)
-  useEffect(() => {
-    if (!currentTask || currentTask.status !== 'running') return
-    const timers = useGlobalTaskStore.getState()._timers
-    if (timers[currentTask.id]) return
-    const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
-    if (!match) return
-    const wsName = match[1]
-    const isReinit = currentTask.id.startsWith('ws-reinit-')
-    폴링시작(wsName, currentTask.id, isReinit)
-  }, [currentTask?.id, currentTask?.status])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {
@@ -144,7 +125,6 @@ export default function Workspace() {
         const data = res.data
         const total = data?.total_keywords ?? 0
         const completed = data?.completed_keywords ?? 0
-        // total이 0이면 표시할 의미 없음 — 세팅 안 함
         if (total === 0) return
         const percent = Math.round((completed / total) * 100)
         set작업진행률(prev => ({ ...prev, [ws.name]: percent }))
@@ -153,52 +133,6 @@ export default function Workspace() {
       }
     })
   }, [목록])
-
-  const 폴링시작 = (wsName: string, taskId: string, isReinit?: boolean) => {
-    // store 폴링: 페이지 이동과 무관하게 유지됨
-    폴링ref.current[taskId] = wsName
-    startPolling(
-      taskId,
-      async () => {
-        const res = await workspaceAPI.진행률조회(wsName)
-        const st = res.data?.status
-        if (st === 'done') {
-          const elapsed = res.data?.elapsed
-          const fileCount = res.data?.file_count
-          const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
-          message.success(`${isReinit ? '초기화' : '연결'} 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
-          set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
-          return { percent: 100, done: true, error: false }
-        }
-        if (st === 'error') {
-          const errMsg = res.data?.message || '알 수 없는 오류'
-          set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
-          message.error(`연결 실패: ${errMsg}`)
-          return { percent: 0, done: false, error: true, message: errMsg }
-        }
-        if (st === 'cancelled') {
-          message.info(`"${wsName}" 연결이 취소되었습니다`)
-          set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
-          return { percent: 0, done: true, error: false }
-        }
-        if (st === 'idle' || !st) {
-          return { percent: 100, done: true, error: false }
-        }
-        const percent: number = res.data?.percent ?? 0
-        return { percent, done: false, error: false }
-      },
-      2000,
-      () => {
-        // onDone: 폴링 ref 정리 후 목록 재조회
-        delete 폴링ref.current[taskId]
-        목록조회()
-      },
-      () => {
-        delete 폴링ref.current[taskId]
-        목록조회()
-      },
-    )
-  }
 
   const 생성핸들러 = async () => {
     if (!새이름.trim()) {
@@ -239,47 +173,44 @@ export default function Workspace() {
       return
     }
     const wsName = 연결팝업WS
+    const domain = 선택도메인
     const jianaVer = 선택jiana
-    const taskId = `ws-connect-${wsName}-${Date.now()}`
-    try {
-      set연결팝업WS(null)
-      set선택도메인(null)
-      startTask({ id: taskId, type: '워크스페이스 연결', label: `${wsName} 연결 중`, percent: 0 })
-      await workspaceAPI.도메인연결(wsName, 선택도메인, jianaVer)
-      message.success(`"${wsName}" 도메인 연결 시작 (jiana ${jianaVer})`)
-      폴링시작(wsName, taskId)
-      await 목록조회()
-    } catch (err: any) {
-      finishTask(taskId, 'error')
-      const status = err.response?.status
-      const detail = err.response?.data?.detail || '연결 실패'
-      if (status === 404) {
-        message.error(`도메인 디렉토리를 찾을 수 없습니다: ${detail}`)
-      } else {
-        message.error(detail)
-      }
-    }
+    set연결팝업WS(null)
+    set선택도메인(null)
+
+    await executeConnect(wsName, domain, jianaVer, {
+      onDone: async () => {
+        const elapsed = undefined  // 서버에서 elapsed 받으려면 별도 조회 필요
+        message.success(`"${wsName}" 연결 완료`)
+        set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
+        await 목록조회()
+      },
+      onError: async (err) => {
+        const status = (err || '').includes('404') ? 404 : 0
+        if (status === 404) {
+          message.error(`도메인 디렉토리를 찾을 수 없습니다: ${err}`)
+        } else {
+          message.error(err || '연결 실패')
+        }
+        await 목록조회()
+      },
+    })
   }
 
   const 해제핸들러 = async (wsName: string) => {
-    const taskId = `ws-disconnect-${wsName}-${Date.now()}`
-    set연결해제중(true)
-    startTask({ id: taskId, type: '워크스페이스 연결해제', label: `${wsName} 연결해제 중`, percent: 50 })
-    try {
-      await workspaceAPI.워크스페이스해제(wsName)
-      // 선택된 워크스페이스를 연결해제하면 선택도 해제 + 테마 초기화
-      if (selectedWorkspace === wsName) {
-        clearWorkspace()
-      }
-      message.success(`"${wsName}" 연결해제 완료`)
-      finishTask(taskId, 'done')
-      await 목록조회()
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '연결해제 실패')
-      finishTask(taskId, 'error')
-    } finally {
-      set연결해제중(false)
-    }
+    await executeRelease(wsName, {
+      onDone: async () => {
+        if (selectedWorkspace === wsName) {
+          clearWorkspace()
+        }
+        message.success(`"${wsName}" 연결해제 완료`)
+        await 목록조회()
+      },
+      onError: async (err) => {
+        message.error(err || '연결해제 실패')
+        await 목록조회()
+      },
+    })
   }
 
   const 선택해제핸들러 = () => {
@@ -288,34 +219,43 @@ export default function Workspace() {
   }
 
   const 초기화핸들러 = async (wsName: string) => {
-    // 현재 연결 정보 저장
     const ws = 목록.find(w => w.name === wsName)
     const domain = ws?.domain
     if (!domain) { message.error('연결된 도메인이 없습니다'); return }
-    // state.json에서 jiana_version 가져오기
+
     let jianaVer: string | undefined
     try {
       const res = await workspaceAPI.도메인jiana설정(domain)
       jianaVer = res.data?.jiana_version || undefined
     } catch { /* 없으면 무시 */ }
 
-    const taskId = `ws-reinit-${wsName}-${Date.now()}`
-    startTask({ id: taskId, type: '워크스페이스 초기화', label: `${wsName} 초기화 중`, percent: 0 })
-    try {
-      // 1단계: 연결해제 (DB 정리 + 파일 정리)
-      if (selectedWorkspace === wsName) clearWorkspace()
-      await workspaceAPI.워크스페이스해제(wsName)
-      // 2단계: 같은 도메인으로 재연결
-      set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
-      await workspaceAPI.도메인연결(wsName, domain, jianaVer)
-      message.success(`"${wsName}" 초기화 중...`)
-      폴링시작(wsName, taskId, true)
-      await 목록조회()
-    } catch (err: any) {
-      finishTask(taskId, 'error')
-      message.error(err.response?.data?.detail || '초기화 실패')
-      await 목록조회()
-    }
+    if (selectedWorkspace === wsName) clearWorkspace()
+
+    set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
+
+    await executeReinit(wsName, domain, jianaVer, {
+      onDone: async () => {
+        message.success(`"${wsName}" 초기화 완료`)
+        set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
+        await 목록조회()
+      },
+      onError: async (err) => {
+        message.error(err || '초기화 실패')
+        await 목록조회()
+      },
+    })
+  }
+
+  const 취소핸들러 = async (wsName: string) => {
+    await executeCancel(wsName, {
+      onCancel: async () => {
+        message.info(`"${wsName}" 연결 취소 요청됨`)
+        await 목록조회()
+      },
+      onError: (err) => {
+        message.error(err || '취소 실패')
+      },
+    })
   }
 
   const 색상변경핸들러 = async (wsName: string, color: string) => {
@@ -450,9 +390,8 @@ export default function Workspace() {
         <Row gutter={[16, 16]}>
           {목록.map(ws => {
             const isSelected = selectedWorkspace === ws.name
-            // store에서 직접 읽음 — 로컬 state 없음
             const isMyTask = 연결진행중WS?.name === ws.name
-            // CONNECTING 상태일 때만 progress 표시 (USED/IDLE/FAILED는 절대 표시 안 함)
+            // CONNECTING 상태일 때만 progress 표시
             const isInProgress = ws.status === 'CONNECTING'
             const progressPercent = isMyTask ? 연결진행중WS!.percent : undefined
 
@@ -473,14 +412,7 @@ export default function Workspace() {
                         size="small"
                         danger
                         icon={<StopOutlined />}
-                        onClick={async () => {
-                          try {
-                            await workspaceAPI.연결취소(ws.name)
-                            message.info(`"${ws.name}" 연결 취소 요청됨`)
-                          } catch (err: any) {
-                            message.error(err.response?.data?.detail || '취소 실패')
-                          }
-                        }}
+                        onClick={() => 취소핸들러(ws.name)}
                       >
                         중지
                       </Button>
@@ -593,7 +525,7 @@ export default function Workspace() {
                             type="primary"
                             size="small"
                             icon={<LinkOutlined />}
-                            disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
+                            disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
                             onClick={() => {
                               set연결팝업WS(ws.name)
                               set선택도메인(null)
@@ -608,7 +540,7 @@ export default function Workspace() {
                               okText="삭제"
                               cancelText="취소"
                             >
-                              <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
+                              <Button size="small" danger icon={<DeleteOutlined />} disabled={목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                 삭제
                               </Button>
                             </Popconfirm>
@@ -661,7 +593,7 @@ export default function Workspace() {
                                 okButtonProps={{ danger: true }}
                                 cancelText="취소"
                               >
-                                <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
+                                <Button size="small" icon={<DisconnectOutlined />} disabled={목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                   연결해제
                                 </Button>
                               </Popconfirm>
@@ -675,7 +607,7 @@ export default function Workspace() {
                               cancelText="취소"
                               okButtonProps={{ danger: true }}
                             >
-                              <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
+                              <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }} disabled={목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                 초기화
                               </Button>
                             </Popconfirm>
@@ -744,7 +676,6 @@ export default function Workspace() {
           })}
           onChange={v => {
             set선택도메인(v)
-            // 도메인 선택 시 마지막 사용 jiana 버전 자동 복원
             if (v) {
               workspaceAPI.도메인jiana설정(v).then(res => {
                 const saved = res.data?.jiana_version

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import PageHeader from '../components/PageHeader'
 import {
   Typography, Button, Input, Select, Space, Popconfirm, message,
@@ -144,7 +144,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 export default function DomainManage() {
   const { user: currentUser } = useAuthStore()
   const isSuper = currentUser?.auth === 'A'
-  const { isBlocked, startTask, finishTask, startPolling, currentTask } = useGlobalTaskStore()
+  const { isBlocked, currentTask, executeDomainAdd, executeDomainDelete, restoreDomainPolling } = useGlobalTaskStore()
 
   // 도메인 목록
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -159,15 +159,6 @@ export default function DomainManage() {
   const [old소스목록, setOld소스목록] = useState<string[]>([])
   const [도메인추가로딩, set도메인추가로딩] = useState(false)
   const [도메인표시이름, set도메인표시이름] = useState('')
-  const [도메인복사진행중, set도메인복사진행중] = useState<Record<string, number>>(() => {
-    // 페이지 복귀 시 store에서 즉시 초기값 설정 (0% 깜빡임 방지)
-    const task = useGlobalTaskStore.getState().currentTask
-    if (!task || task.status !== 'running') return {}
-    const match = task.id.match(/^domain-add-(.+?)-(?:\d+|restore)$/)
-    if (!match) return {}
-    return { [match[1]]: task.percent }
-  })
-  const 도메인폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
   const [사전복사소스, set사전복사소스] = useState<string | null>(null)
   const [mysql소스목록, setMysql소스목록] = useState<string[]>([])
@@ -188,6 +179,14 @@ export default function DomainManage() {
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
   const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('create')
 
+  // store에서 직접 파생: 현재 도메인 복사 진행 중인 항목
+  const 도메인복사진행중: Record<string, number> = (() => {
+    if (!currentTask || currentTask.status !== 'running') return {}
+    const match = currentTask.id.match(/^domain-add-(.+?)-\d+$/)
+    if (!match) return {}
+    return { [match[1]]: currentTask.percent }
+  })()
+
   const 목록조회 = async () => {
     set로딩(true)
     try {
@@ -197,85 +196,14 @@ export default function DomainManage() {
       ])
       set도메인목록(dmRes.data)
       set워크스페이스목록(wsRes.data)
-      // 진행 중인 도메인 폴링 복원 (페이지 로드/새로고침 시)
-      const storeState = useGlobalTaskStore.getState()
-      const storeTimers = storeState._timers
-      const storeTask = storeState.currentTask
-      for (const dm of dmRes.data) {
-        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`domain-add-${dm.id}`))
-        if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
-        // store currentTask가 이 도메인 관련이면 스킵 (running/done 모두)
-        if (storeTask && storeTask.id.includes(dm.id)) continue
-        try {
-          const res = await workspaceAPI.도메인추가진행률(dm.id)
-          if (res.data?.status && res.data.status !== 'idle' && res.data.status !== 'done') {
-            const pct = res.data?.percent ?? 0
-            set도메인복사진행중(prev => ({ ...prev, [dm.id]: pct }))
-            const taskId = `domain-add-${dm.id}-${Date.now()}`
-            startTask({ id: taskId, type: '도메인 추가', label: `${dm.id} 추가 중`, percent: pct })
-            도메인폴링시작(dm.id, taskId)
-          }
-        } catch { /* ignore */ }
-      }
+      // 페이지 복귀 시 진행 중인 도메인 폴링 복원 (store에 위임)
+      await restoreDomainPolling(dmRes.data)
     } catch {
       message.error('목록 조회 실패')
     } finally { set로딩(false) }
   }
 
   useEffect(() => { 목록조회() }, [])
-
-  // store ↔ 로컬 도메인복사진행중 동기화 (페이지 이동 후 복귀 시 + 완료 시)
-  useEffect(() => {
-    if (!currentTask) return
-    const match = currentTask.id.match(/^domain-add-(.+?)-(?:\d+|restore)$/)
-    if (!match) return
-    const dmName = match[1]
-    if (currentTask.status === 'done' || currentTask.status === 'error') {
-      // 완료/에러 시 로컬 state에서 제거 (99% 멈춤 방지)
-      set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-    } else if (currentTask.status === 'running') {
-      set도메인복사진행중(prev => ({ ...prev, [dmName]: currentTask.percent }))
-    }
-  }, [currentTask?.status, currentTask?.percent, currentTask?.id])
-
-  const 도메인폴링시작 = (dmName: string, taskId: string) => {
-    // store 폴링: 페이지 이동과 무관하게 유지됨
-    startPolling(
-      taskId,
-      async () => {
-        const res = await workspaceAPI.도메인추가진행률(dmName)
-        const st = res.data?.status
-        if (!st || st === 'idle') {
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          return { percent: 100, done: true, error: false }
-        }
-        if (st === 'dict_copying') {
-          set도메인복사진행중(prev => ({ ...prev, [dmName]: 92 }))
-          return { percent: 92, done: false, error: false }
-        }
-        if (st === 'done') {
-          const elapsed = res.data?.elapsed
-          const fc = res.data?.file_count
-          const dictResult = res.data?.dict_result
-          const dictMsg = dictResult ? ` + 사전 ${Object.values(dictResult).filter(v => typeof v === 'number').reduce((a: number, b) => a + (b as number), 0)}건` : ''
-          message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일${dictMsg}, ${elapsed}초`)
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          return { percent: 100, done: true, error: false }
-        }
-        if (st === 'error') {
-          message.error(`도메인 추가 실패: ${res.data?.message}`)
-          set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          return { percent: 0, done: false, error: true, message: res.data?.message }
-        }
-        const pct = res.data?.percent ?? 0
-        set도메인복사진행중(prev => ({ ...prev, [dmName]: pct }))
-        return { percent: pct, done: false, error: false }
-      },
-      1500,
-      () => { 목록조회(); delete 도메인폴링ref.current[dmName] },
-      () => { 목록조회(); delete 도메인폴링ref.current[dmName] },
-    )
-  }
 
   // 임포트
   const 임포트모달열기 = async () => {
@@ -381,10 +309,16 @@ export default function DomainManage() {
                       <Button icon={<EditOutlined />} disabled={연결됨}
                         onClick={() => { set이름변경대상(dm.id); set변경후이름(dm.id) }}>이름 변경</Button>
                       <Popconfirm title={`도메인 "${dm.id}"을 삭제하시겠습니까?`} onConfirm={async () => {
-                        const taskId = `domain-del-${dm.id}-${Date.now()}`
-                        startTask({ id: taskId, type: '도메인 삭제', label: `${dm.id} 삭제 중`, percent: 50 })
-                        try { await workspaceAPI.도메인삭제(dm.id); message.success(`도메인 "${dm.id}" 삭제 완료`); if (사전도메인 === dm.id) set사전도메인(null); finishTask(taskId, 'done'); await 목록조회() }
-                        catch (err: any) { message.error(err.response?.data?.detail || '삭제 실패'); finishTask(taskId, 'error') }
+                        await executeDomainDelete(dm.id, {
+                          onDone: async () => {
+                            message.success(`도메인 "${dm.id}" 삭제 완료`)
+                            if (사전도메인 === dm.id) set사전도메인(null)
+                            await 목록조회()
+                          },
+                          onError: (err) => {
+                            message.error(err || '삭제 실패')
+                          },
+                        })
                       }} okText="삭제" cancelText="취소">
                         <Button danger icon={<DeleteOutlined />} disabled={연결됨 || Object.keys(도메인복사진행중).length > 0 || isBlocked}>삭제</Button>
                       </Popconfirm>
@@ -431,18 +365,23 @@ export default function DomainManage() {
           if (!도메인신규이름.trim() || !도메인소스이름) { message.warning('이름과 소스를 모두 입력하세요'); return }
           set도메인추가로딩(true)
           const dmName = 도메인신규이름.trim()
-          try {
-            const copyDictFrom = 사전복사모드 === 'sqlite' ? 사전복사소스 : null
-            const mysqlDictFrom = 사전복사모드 === 'mysql' ? 사전복사소스 : null
-            await workspaceAPI.도메인추가(dmName, 도메인소스타입, 도메인소스이름, copyDictFrom, mysqlDictFrom, 도메인표시이름.trim() || undefined)
-            message.info(`도메인 "${dmName}" 복사 시작${사전복사모드 !== 'none' ? ' (사전 포함)' : ''}`)
-            set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null)
-            set도메인복사진행중(prev => ({ ...prev, [dmName]: 0 }))
-            const taskId = `domain-add-${dmName}-${Date.now()}`
-            startTask({ id: taskId, type: '도메인 추가', label: `${dmName} 추가 중`, percent: 0 })
-            도메인폴링시작(dmName, taskId)
-          } catch (err: any) { message.error(err.response?.data?.detail || '추가 실패') }
-          finally { set도메인추가로딩(false) }
+          set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null)
+          await executeDomainAdd(dmName, {
+            base_source: 도메인소스타입,
+            base_name: 도메인소스이름,
+            copy_dict_from: 사전복사모드 === 'sqlite' ? 사전복사소스 : null,
+            mysql_dict_from: 사전복사모드 === 'mysql' ? 사전복사소스 : null,
+            display_name: 도메인표시이름.trim() || undefined,
+          }, {
+            onDone: async () => {
+              message.success(`도메인 "${dmName}" 추가 완료`)
+              await 목록조회()
+            },
+            onError: (err) => {
+              message.error(err || '도메인 추가 실패')
+            },
+          })
+          set도메인추가로딩(false)
         }}
         onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null) }}
         okText="추가" cancelText="취소" confirmLoading={도메인추가로딩} okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 }}>
@@ -472,7 +411,6 @@ export default function DomainManage() {
             onChange={v => {
               set도메인소스이름(v)
               set도메인신규이름(v)
-              // 소스 선택 시 사전 DB 자동 선택 — 콤보박스 목록에 있을 때만
               if (도메인소스타입 === 'domain') {
                 const 존재 = 도메인목록.some(d => d.id === v)
                 set사전복사소스(존재 ? v : null)
@@ -488,7 +426,6 @@ export default function DomainManage() {
             <Radio.Group value={사전복사모드} onChange={e => {
               const newMode = e.target.value
               set사전복사모드(newMode)
-              // 모드 변경 시 자동선택 — 콤보박스 목록에 있을 때만
               if (newMode === 'sqlite' && 도메인소스이름) {
                 const 존재 = 도메인목록.some(d => d.id === 도메인소스이름)
                 set사전복사소스(존재 ? 도메인소스이름 : null)
