@@ -102,30 +102,6 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
-      // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드/새로고침 시)
-      const storeState = useGlobalTaskStore.getState()
-      const storeTimers = storeState._timers
-      const storeTask = storeState.currentTask
-      for (const ws of wsList) {
-        if (ws.status !== 'CONNECTING') continue
-        // store에 이 워크스페이스 관련 폴링 타이머가 살아있으면 완전 스킵
-        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith('ws-') && tid.includes(ws.name))
-        if (existingTaskId) continue
-        // store currentTask가 이 워크스페이스 관련이면 스킵 (running/done 모두 — 2초 후 null 되기 전)
-        if (storeTask && storeTask.id.includes(ws.name)) continue
-        // 새로고침 또는 최초 로드 — 서버 진행률 조회 후 복원
-        try {
-          const pRes = await workspaceAPI.진행률조회(ws.name)
-          const pct = pRes.data?.percent ?? 0
-          const taskId = `ws-connect-${ws.name}-${Date.now()}`
-          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: pct })
-          폴링시작(ws.name, taskId)
-        } catch {
-          const taskId = `ws-connect-${ws.name}-${Date.now()}`
-          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
-          폴링시작(ws.name, taskId)
-        }
-      }
       // FAILED 워크스페이스 에러 메시지 조회
       wsList.filter(ws => ws.status === 'FAILED').forEach(ws => {
         workspaceAPI.진행률조회(ws.name).then(res => {
@@ -145,6 +121,18 @@ export default function Workspace() {
     목록조회()
     // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
+
+  // store에 running task가 있는데 타이머가 없으면 폴링 재시작 (페이지 복귀 시 복원)
+  useEffect(() => {
+    if (!currentTask || currentTask.status !== 'running') return
+    const timers = useGlobalTaskStore.getState()._timers
+    if (timers[currentTask.id]) return
+    const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
+    if (!match) return
+    const wsName = match[1]
+    const isReinit = currentTask.id.startsWith('ws-reinit-')
+    폴링시작(wsName, currentTask.id, isReinit)
+  }, [currentTask?.id, currentTask?.status])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {
@@ -201,14 +189,13 @@ export default function Workspace() {
       },
       2000,
       () => {
-        // onDone: 폴링 ref 정리 후 목록 재조회 (목록조회 내부에서 startTask 재호출 방지)
+        // onDone: 폴링 ref 정리 후 목록 재조회
         delete 폴링ref.current[taskId]
-        // 목록조회는 task가 이미 done/null 상태가 된 후 실행되므로 재호출 없음
-        setTimeout(() => 목록조회(), 500)
+        목록조회()
       },
       () => {
         delete 폴링ref.current[taskId]
-        setTimeout(() => 목록조회(), 500)
+        목록조회()
       },
     )
   }

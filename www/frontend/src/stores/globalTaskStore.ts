@@ -82,13 +82,10 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     const finished = { ...cur, status }
     set({ currentTask: finished, isBlocked: false })
     syncToServer(finished)
-    // 완료 후 2초 뒤 자동 제거 + 서버 초기화
+    syncToServer(null)  // 서버 즉시 null (WS reconnect 시 done task 재수신 방지)
     setTimeout(() => {
       const latest = get().currentTask
-      if (latest?.id === id) {
-        set({ currentTask: null })
-        syncToServer(null)
-      }
+      if (latest?.id === id) set({ currentTask: null })
     }, 2000)
   },
 
@@ -105,10 +102,23 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     if (!task) {
       set({ currentTask: null, isBlocked: false })
     } else {
+      const existing = get().currentTask
+      // 이미 running 중인 동일 task → status만 업데이트 (중복 방지)
+      if (existing?.id === task.id && existing?.status === 'running') {
+        set({ currentTask: { ...task, status: task.status as GlobalTask['status'] }, isBlocked: true })
+        return
+      }
       set({
         currentTask: { ...task, status: task.status as GlobalTask['status'] },
         isBlocked: task.status === 'running',
       })
+      // done/error 원격 task는 2초 후 자동 null (로컬 finishTask와 동일 동작)
+      if (task.status === 'done' || task.status === 'error') {
+        setTimeout(() => {
+          const latest = get().currentTask
+          if (latest?.id === task.id) set({ currentTask: null })
+        }, 2000)
+      }
     }
   },
 
