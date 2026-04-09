@@ -103,12 +103,16 @@ export default function Workspace() {
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
       // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드/새로고침 시)
-      // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
-      const storeTimers = useGlobalTaskStore.getState()._timers
+      const storeState = useGlobalTaskStore.getState()
+      const storeTimers = storeState._timers
+      const storeTask = storeState.currentTask
       for (const ws of wsList) {
         if (ws.status !== 'CONNECTING') continue
+        // store에 이 워크스페이스 관련 폴링 타이머가 살아있으면 완전 스킵
         const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith('ws-') && tid.includes(ws.name))
-        if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
+        if (existingTaskId) continue
+        // store currentTask가 이 워크스페이스 관련이고 running이면 스킵 (타이머만 없고 task는 살아있는 경우)
+        if (storeTask?.status === 'running' && storeTask.id.includes(ws.name)) continue
         // 새로고침 또는 최초 로드 — 서버 진행률 조회 후 복원
         try {
           const pRes = await workspaceAPI.진행률조회(ws.name)
@@ -143,15 +147,19 @@ export default function Workspace() {
     // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
 
-  // store ↔ 로컬 복사진행중 동기화 (페이지 이동 후 복귀 시)
+  // store ↔ 로컬 복사진행중 동기화 (페이지 이동 후 복귀 시 + 완료 시)
   useEffect(() => {
-    if (!currentTask || currentTask.status !== 'running') return
-    // ws-connect-{name}-... 형태의 taskId에서 wsName 추출
+    if (!currentTask) return
     const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
     if (!match) return
     const wsName = match[1]
-    set복사진행중(prev => ({ ...prev, [wsName]: currentTask.percent }))
-  }, [currentTask?.percent, currentTask?.id])
+    if (currentTask.status === 'done' || currentTask.status === 'error') {
+      // 완료/에러 시 로컬 state에서 제거 (99% 멈춤 방지)
+      set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
+    } else if (currentTask.status === 'running') {
+      set복사진행중(prev => ({ ...prev, [wsName]: currentTask.percent }))
+    }
+  }, [currentTask?.status, currentTask?.percent, currentTask?.id])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {

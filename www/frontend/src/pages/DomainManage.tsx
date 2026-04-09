@@ -198,11 +198,14 @@ export default function DomainManage() {
       set도메인목록(dmRes.data)
       set워크스페이스목록(wsRes.data)
       // 진행 중인 도메인 폴링 복원 (페이지 로드/새로고침 시)
-      // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
-      const storeTimers = useGlobalTaskStore.getState()._timers
+      const storeState = useGlobalTaskStore.getState()
+      const storeTimers = storeState._timers
+      const storeTask = storeState.currentTask
       for (const dm of dmRes.data) {
         const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`domain-add-${dm.id}`))
         if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
+        // store currentTask가 이 도메인 관련이고 running이면 스킵
+        if (storeTask?.status === 'running' && storeTask.id.includes(dm.id)) continue
         try {
           const res = await workspaceAPI.도메인추가진행률(dm.id)
           if (res.data?.status && res.data.status !== 'idle' && res.data.status !== 'done') {
@@ -221,14 +224,19 @@ export default function DomainManage() {
 
   useEffect(() => { 목록조회() }, [])
 
-  // store ↔ 로컬 도메인복사진행중 동기화 (페이지 이동 후 복귀 시)
+  // store ↔ 로컬 도메인복사진행중 동기화 (페이지 이동 후 복귀 시 + 완료 시)
   useEffect(() => {
-    if (!currentTask || currentTask.status !== 'running') return
+    if (!currentTask) return
     const match = currentTask.id.match(/^domain-add-(.+?)-(?:\d+|restore)$/)
     if (!match) return
     const dmName = match[1]
-    set도메인복사진행중(prev => ({ ...prev, [dmName]: currentTask.percent }))
-  }, [currentTask?.percent, currentTask?.id])
+    if (currentTask.status === 'done' || currentTask.status === 'error') {
+      // 완료/에러 시 로컬 state에서 제거 (99% 멈춤 방지)
+      set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
+    } else if (currentTask.status === 'running') {
+      set도메인복사진행중(prev => ({ ...prev, [dmName]: currentTask.percent }))
+    }
+  }, [currentTask?.status, currentTask?.percent, currentTask?.id])
 
   const 도메인폴링시작 = (dmName: string, taskId: string) => {
     // store 폴링: 페이지 이동과 무관하게 유지됨
