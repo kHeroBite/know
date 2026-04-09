@@ -68,14 +68,14 @@ export default function Workspace() {
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
   const [선택jiana, set선택jiana] = useState<string>('')
-  const [복사진행중, set복사진행중] = useState<Record<string, number>>(() => {
-    // 페이지 복귀 시 store에서 즉시 초기값 설정 (0% 깜빡임 방지)
-    const task = useGlobalTaskStore.getState().currentTask
-    if (!task || task.status !== 'running') return {}
-    const match = task.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
-    if (!match) return {}
-    return { [match[1]]: task.percent }
-  })
+  // 복사진행중: store에서 직접 파생 (로컬 state 제거 — 충돌 방지)
+  // ws.status === 'CONNECTING' 이고 store에 해당 task가 running이면 percent 표시
+  const 연결진행중WS = (() => {
+    if (!currentTask || currentTask.status !== 'running') return null
+    const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
+    if (!match) return null
+    return { name: match[1], percent: currentTask.percent }
+  })()
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [연결해제중, set연결해제중] = useState(false)
   const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
@@ -102,16 +102,6 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
-      // CONNECTING이 아닌 워크스페이스는 복사진행중에서 제거 (완료 후 잔류 방지)
-      set복사진행중(prev => {
-        const next = { ...prev }
-        for (const ws of wsList) {
-          if (ws.status !== 'CONNECTING' && next[ws.name] !== undefined) {
-            delete next[ws.name]
-          }
-        }
-        return next
-      })
       // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드/새로고침 시)
       const storeState = useGlobalTaskStore.getState()
       const storeTimers = storeState._timers
@@ -127,7 +117,6 @@ export default function Workspace() {
         try {
           const pRes = await workspaceAPI.진행률조회(ws.name)
           const pct = pRes.data?.percent ?? 0
-          set복사진행중(prev => ({ ...prev, [ws.name]: pct }))
           const taskId = `ws-connect-${ws.name}-${Date.now()}`
           startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: pct })
           폴링시작(ws.name, taskId)
@@ -156,20 +145,6 @@ export default function Workspace() {
     목록조회()
     // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
-
-  // store ↔ 로컬 복사진행중 동기화 (페이지 이동 후 복귀 시 + 완료 시)
-  useEffect(() => {
-    if (!currentTask) return
-    const match = currentTask.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
-    if (!match) return
-    const wsName = match[1]
-    if (currentTask.status === 'done' || currentTask.status === 'error') {
-      // 완료/에러 시 로컬 state에서 제거 (99% 멈춤 방지)
-      set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
-    } else if (currentTask.status === 'running') {
-      set복사진행중(prev => ({ ...prev, [wsName]: currentTask.percent }))
-    }
-  }, [currentTask?.status, currentTask?.percent, currentTask?.id])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {
@@ -204,7 +179,6 @@ export default function Workspace() {
           const fileCount = res.data?.file_count
           const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
           message.success(`${isReinit ? '초기화' : '연결'} 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
-          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
           set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
           return { percent: 100, done: true, error: false }
         }
@@ -212,22 +186,17 @@ export default function Workspace() {
           const errMsg = res.data?.message || '알 수 없는 오류'
           set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
           message.error(`연결 실패: ${errMsg}`)
-          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
           return { percent: 0, done: false, error: true, message: errMsg }
         }
         if (st === 'cancelled') {
           message.info(`"${wsName}" 연결이 취소되었습니다`)
-          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
           set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
           return { percent: 0, done: true, error: false }
         }
         if (st === 'idle' || !st) {
-          // idle = 서버에 작업 기록 없음 → 이미 완료됐거나 재시작됨 → 목록 재조회로 확인
-          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
           return { percent: 100, done: true, error: false }
         }
         const percent: number = res.data?.percent ?? 0
-        set복사진행중(prev => ({ ...prev, [wsName]: percent }))
         return { percent, done: false, error: false }
       },
       2000,
@@ -286,8 +255,6 @@ export default function Workspace() {
     const jianaVer = 선택jiana
     const taskId = `ws-connect-${wsName}-${Date.now()}`
     try {
-      // 즉시 UI에 진행률 0% 표시 (서버 응답 전)
-      set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
       set연결팝업WS(null)
       set선택도메인(null)
       startTask({ id: taskId, type: '워크스페이스 연결', label: `${wsName} 연결 중`, percent: 0 })
@@ -296,12 +263,6 @@ export default function Workspace() {
       폴링시작(wsName, taskId)
       await 목록조회()
     } catch (err: any) {
-      // 실패 시 progress 제거
-      set복사진행중(prev => {
-        const next = { ...prev }
-        delete next[wsName]
-        return next
-      })
       finishTask(taskId, 'error')
       const status = err.response?.status
       const detail = err.response?.data?.detail || '연결 실패'
@@ -358,18 +319,12 @@ export default function Workspace() {
       if (selectedWorkspace === wsName) clearWorkspace()
       await workspaceAPI.워크스페이스해제(wsName)
       // 2단계: 같은 도메인으로 재연결
-      set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
       set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
       await workspaceAPI.도메인연결(wsName, domain, jianaVer)
       message.success(`"${wsName}" 초기화 중...`)
       폴링시작(wsName, taskId, true)
       await 목록조회()
     } catch (err: any) {
-      set복사진행중(prev => {
-        const next = { ...prev }
-        delete next[wsName]
-        return next
-      })
       finishTask(taskId, 'error')
       message.error(err.response?.data?.detail || '초기화 실패')
       await 목록조회()
@@ -508,10 +463,11 @@ export default function Workspace() {
         <Row gutter={[16, 16]}>
           {목록.map(ws => {
             const isSelected = selectedWorkspace === ws.name
-            const progressPercent = 복사진행중[ws.name]
-            // CONNECTING 상태이거나 복사진행중 값이 있을 때만 연결 progress 표시
-            // USED/IDLE/FAILED 상태에서는 절대 표시 안 함
-            const isInProgress = ws.status === 'CONNECTING' || (progressPercent !== undefined && ws.status !== 'USED' && ws.status !== 'IDLE' && ws.status !== 'FAILED')
+            // store에서 직접 읽음 — 로컬 state 없음
+            const isMyTask = 연결진행중WS?.name === ws.name
+            // CONNECTING 상태일 때만 progress 표시 (USED/IDLE/FAILED는 절대 표시 안 함)
+            const isInProgress = ws.status === 'CONNECTING'
+            const progressPercent = isMyTask ? 연결진행중WS!.percent : undefined
 
             return (
               <Col xs={24} sm={12} key={ws.name}>
