@@ -159,7 +159,14 @@ export default function DomainManage() {
   const [old소스목록, setOld소스목록] = useState<string[]>([])
   const [도메인추가로딩, set도메인추가로딩] = useState(false)
   const [도메인표시이름, set도메인표시이름] = useState('')
-  const [도메인복사진행중, set도메인복사진행중] = useState<Record<string, number>>({})
+  const [도메인복사진행중, set도메인복사진행중] = useState<Record<string, number>>(() => {
+    // 페이지 복귀 시 store에서 즉시 초기값 설정 (0% 깜빡임 방지)
+    const task = useGlobalTaskStore.getState().currentTask
+    if (!task || task.status !== 'running') return {}
+    const match = task.id.match(/^domain-add-(.+?)-(?:\d+|restore)$/)
+    if (!match) return {}
+    return { [match[1]]: task.percent }
+  })
   const 도메인폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
   const [사전복사소스, set사전복사소스] = useState<string | null>(null)

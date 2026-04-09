@@ -68,7 +68,14 @@ export default function Workspace() {
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
   const [선택jiana, set선택jiana] = useState<string>('')
-  const [복사진행중, set복사진행중] = useState<Record<string, number>>({})
+  const [복사진행중, set복사진행중] = useState<Record<string, number>>(() => {
+    // 페이지 복귀 시 store에서 즉시 초기값 설정 (0% 깜빡임 방지)
+    const task = useGlobalTaskStore.getState().currentTask
+    if (!task || task.status !== 'running') return {}
+    const match = task.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+/)
+    if (!match) return {}
+    return { [match[1]]: task.percent }
+  })
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [연결해제중, set연결해제중] = useState(false)
   const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
