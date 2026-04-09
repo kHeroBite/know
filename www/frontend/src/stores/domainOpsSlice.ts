@@ -32,6 +32,9 @@ export interface DomainOpsSlice {
 
   /** 페이지 복귀 시 진행 중인 도메인 작업 복원 */
   restoreDomainPolling: (domainList: { id: string }[]) => Promise<void>
+
+  /** WS에서 running domain-add task 수신 시 폴링 복원 (새로고침/다중 탭 동기화) */
+  restoreDomainTaskPollingById: (taskId: string, domainName: string) => Promise<void>
 }
 
 export function createDomainOpsSlice(
@@ -118,6 +121,44 @@ export function createDomainOpsSlice(
         get()._finishTask(taskId, 'error')
         const detail = e?.response?.data?.detail || '도메인 삭제 실패'
         callbacks?.onError?.(detail)
+      }
+    },
+
+    restoreDomainTaskPollingById: async (taskId, domainName) => {
+      // 이미 이 task에 대한 폴링이 진행 중이면 스킵
+      if (get()._timers[taskId]) return
+      try {
+        const res = await workspaceAPI.도메인추가진행률(domainName)
+        const st = res.data?.status
+        // 서버가 이미 완료/오류 상태면 task 클리어
+        if (!st || st === 'idle' || st === 'done') {
+          get()._finishTask(taskId, 'done')
+          return
+        }
+        if (st === 'error') {
+          get()._finishTask(taskId, 'error')
+          return
+        }
+        // 아직 running — 폴링 시작
+        get()._startPolling(
+          taskId,
+          async () => {
+            const r = await workspaceAPI.도메인추가진행률(domainName)
+            const s = r.data?.status
+            if (!s || s === 'idle') return { percent: 100, done: true, error: false }
+            if (s === 'dict_copying') return { percent: 92, done: false, error: false }
+            if (s === 'done') return { percent: 100, done: true, error: false }
+            if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }
+            return { percent: r.data?.percent ?? 0, done: false, error: false }
+          },
+          1500,
+          undefined,
+          undefined,
+          600000,
+        )
+      } catch {
+        // 복원 실패 시 안전하게 task 클리어
+        get()._finishTask(taskId, 'error')
       }
     },
 

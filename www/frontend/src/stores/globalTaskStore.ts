@@ -79,9 +79,9 @@ export type GlobalTaskStore = GlobalTaskBase & WorkspaceOpsSlice & DomainOpsSlic
 async function syncToServer(task: GlobalTask | null) {
   try {
     if (!task) {
-      await 클라이언트.put('/api/notifications/global-task', {})
+      await 클라이언트.put('/notifications/global-task', {})
     } else {
-      await 클라이언트.put('/api/notifications/global-task', {
+      await 클라이언트.put('/notifications/global-task', {
         id: task.id,
         type: task.type,
         label: task.label,
@@ -249,6 +249,25 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
       currentTask: { ...task, updatedAt: Date.now() },
       isBlocked: true,
     })
+
+    // ws-connect/reinit task는 폴링 복원 — 새로고침/다중 탭 시 진행률 동기화
+    const wsMatch = task.id.match(/^ws-(?:connect|reinit)-(.+?)-\d+$/)
+    if (wsMatch) {
+      const wsName = wsMatch[1]
+      // setTimeout으로 set 완료 후 실행
+      setTimeout(() => {
+        get().restoreTaskPollingById(task.id, wsName)
+      }, 0)
+    }
+
+    // domain-add task는 폴링 복원 — 새로고침/다중 탭 시 진행률 동기화
+    const domainAddMatch = task.id.match(/^domain-add-(.+?)-\d+$/)
+    if (domainAddMatch) {
+      const domainName = domainAddMatch[1]
+      setTimeout(() => {
+        get().restoreDomainTaskPollingById(task.id, domainName)
+      }, 0)
+    }
   },
 
   // ===== 레거시 호환 (Phase 3 이후 제거 예정) =====

@@ -39,6 +39,8 @@ export interface WorkspaceOpsSlice {
     onError?: (err: string) => void | Promise<void>
   }) => Promise<void>
   restoreWorkspacePolling: (wsList: any[]) => Promise<void>
+  /** WS에서 running ws task 수신 시 폴링 복원 (페이지 새로고침/다중 탭 동기화) */
+  restoreTaskPollingById: (taskId: string, wsName: string) => Promise<void>
 }
 
 export function createWorkspaceOpsSlice(
@@ -270,6 +272,48 @@ export function createWorkspaceOpsSlice(
         },
         600000,
       )
+    },
+
+    restoreTaskPollingById: async (taskId, wsName) => {
+      // 이미 이 task에 대한 폴링이 진행 중이면 스킵
+      if (get()._timers[taskId]) return
+      try {
+        const res = await workspaceAPI.진행률조회(wsName)
+        const st = res.data?.status
+        // 서버가 이미 완료/오류/취소 상태면 task 클리어
+        if (st === 'done' || st === 'idle' || !st) {
+          get()._finishTask(taskId, 'done')
+          return
+        }
+        if (st === 'error') {
+          get()._finishTask(taskId, 'error')
+          return
+        }
+        if (st === 'cancelled') {
+          get()._finishTask(taskId, 'cancelled')
+          return
+        }
+        // 아직 running — 폴링 시작
+        get()._startPolling(
+          taskId,
+          async () => {
+            const r = await workspaceAPI.진행률조회(wsName)
+            const s = r.data?.status
+            if (s === 'done') return { percent: 100, done: true, error: false }
+            if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }
+            if (s === 'cancelled') return { percent: 0, done: true, error: false }
+            if (s === 'idle' || !s) return { percent: 100, done: true, error: false }
+            return { percent: r.data?.percent ?? 0, done: false, error: false }
+          },
+          2000,
+          undefined,
+          undefined,
+          600000,
+        )
+      } catch {
+        // 복원 실패 시 안전하게 task 클리어
+        get()._finishTask(taskId, 'error')
+      }
     },
   }
 }

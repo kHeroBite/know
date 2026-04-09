@@ -10,12 +10,12 @@ export function useNotification(userId: string | null) {
   const connect = useCallback(() => {
     if (!userId) return
     closedIntentionally.current = false
-    const ws = new WebSocket(`ws://${window.location.host}/api/notifications/ws?user_id=${userId}`)
+    const ws = new WebSocket(`ws://${window.location.host}/api/notifications/ws/${userId}`)
 
     ws.onopen = async () => {
       // F4: 연결 수립 시 서버의 현재 전역작업 상태를 즉시 fetch
       try {
-        const res = await 클라이언트.get('/api/notifications/global-task')
+        const res = await 클라이언트.get('/notifications/global-task')
         useGlobalTaskStore.getState().applyRemoteTask(res.data?.task ?? null)
       } catch {
         // fetch 실패는 무시 — WS 메시지로 후속 동기화

@@ -389,8 +389,8 @@ export default function Workspace() {
           {목록.map(ws => {
             const isSelected = selectedWorkspace === ws.name
             const isMyTask = 연결진행중WS?.name === ws.name
-            // CONNECTING 상태일 때만 progress 표시
-            const isInProgress = ws.status === 'CONNECTING'
+            // CONNECTING 상태이거나 globalTaskStore에 이 ws 작업이 running 중이면 progress 표시
+            const isInProgress = ws.status === 'CONNECTING' || isMyTask
             const progressPercent = isMyTask ? 연결진행중WS!.percent : undefined
 
             return (
