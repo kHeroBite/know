@@ -181,7 +181,9 @@ export default function Workspace() {
         const data = res.data
         const total = data?.total_keywords ?? 0
         const completed = data?.completed_keywords ?? 0
-        const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+        // total이 0이면 표시할 의미 없음 — 세팅 안 함
+        if (total === 0) return
+        const percent = Math.round((completed / total) * 100)
         set작업진행률(prev => ({ ...prev, [ws.name]: percent }))
       } catch {
         // 진행률 조회 실패 시 무시
@@ -507,7 +509,9 @@ export default function Workspace() {
           {목록.map(ws => {
             const isSelected = selectedWorkspace === ws.name
             const progressPercent = 복사진행중[ws.name]
-            const isInProgress = progressPercent !== undefined || ws.status === 'CONNECTING'
+            // CONNECTING 상태이거나 복사진행중 값이 있을 때만 연결 progress 표시
+            // USED/IDLE/FAILED 상태에서는 절대 표시 안 함
+            const isInProgress = ws.status === 'CONNECTING' || (progressPercent !== undefined && ws.status !== 'USED' && ws.status !== 'IDLE' && ws.status !== 'FAILED')
 
             return (
               <Col xs={24} sm={12} key={ws.name}>
