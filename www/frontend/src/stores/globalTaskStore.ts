@@ -162,6 +162,7 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     const startTime = Date.now()
 
     const timer = setInterval(async () => {
+      if (get().currentTask?.id !== id) return
       // 타임아웃 체크 (기본 10분)
       if (Date.now() - startTime > timeoutMs) {
         get()._stopPolling(id)

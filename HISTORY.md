@@ -1,5 +1,21 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-09 — 전역작업 단일 큐 완결 구현
+
+### 수정 내용
+- `globalTaskStore.ts`: `_startPolling` 콜백 id 가드 추가 (race condition 방지)
+- `workspaceOpsSlice.ts`: `executeCreate` 추가 (생성도 단일 큐 등록), `executeCancel` 정규식 수정 (부분문자열 오매칭 버그), `restoreWorkspacePolling` 추가
+- `Workspace.tsx`: `생성핸들러`를 `executeCreate` 기반으로 교체, `생성로딩` state 제거 → store 파생
+- `DomainManage.tsx`: 삭제버튼 disabled 조건 단순화 (`도메인복사진행중` 중복 제거)
+- `workspace_service.py`: `add_domain_service`에 도메인 동시 추가 차단 (HTTP 409)
+
+### 배포
+- 백엔드 rsync 배포 완료
+- 프론트 소스 rsync → 서버 npm build → `✓ built in 18.99s`
+- 서비스 재시작 → 헬스체크 `{"status":"ok","db":true}` 확인
+
+---
+
 ## 2026-04-09 — know 프로젝트 전반 개선 — 보안/에러/DB/UX/새기능
 
 ### 수정 내용

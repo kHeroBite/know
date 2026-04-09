@@ -309,6 +309,9 @@ www/
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
+    ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask)
+    ├── src/stores/workspaceOpsSlice.ts # 워크스페이스 작업 슬라이스 (executeCreate/Connect/Cancel/Release/Reinit, restoreWorkspacePolling)
+    └── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)
     └── src/index.css           # 전역 디자인 CSS (glassmorphism, 애니메이션, CSS 변수)
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
 ```

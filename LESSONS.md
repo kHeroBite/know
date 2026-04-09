@@ -4,6 +4,23 @@
 
 ## 교훈 항목
 
+### L-001 (2026-04-09) — 프론트엔드 빌드 미수행으로 변경사항 미반영
+
+**문제**: kdone이 Git 커밋+푸시 완료 후 파이프라인 종료. 그러나 프론트 소스는 서버에 rsync됐지만 `npm run build`를 실행하지 않아 dist/ 가 이전 빌드(1시간 전) 상태로 남음. 사용자가 변경사항이 반영되지 않았다고 보고.
+
+**원인**:
+1. `kinfra_know` 서버빌드 섹션이 존재하지 않는 `build_and_restart.sh`를 참조
+2. kdone_git이 배포(rsync+빌드+재시작)까지 책임지는지 명확하지 않았음
+3. ktest가 서버 배포 후 빌드 완료 여부를 검증하지 않음
+
+**조치**:
+- `kinfra_know` 작업_흐름을 백엔드/프론트 분리하여 필수 순서 명시
+- `서버빌드` 명령을 `npm run build`로 교체 (build_and_restart.sh 제거)
+- dist/index.html 타임스탬프 확인 단계 추가
+- 프론트 변경 시 필수 순서 7단계로 명문화
+
+**재발방지**: kinfra_know 작업_흐름 섹션이 단계별 체크리스트로 명확화됨. 프론트 변경 시 빌드 미완료는 타임스탬프 확인으로 즉시 감지 가능.
+
 ### L-001: kdone 에이전트 완료 보고 없이 소멸 패턴 (2026-03-25)
 
 **현상**: kdone 에이전트가 2회 연속 완료 보고(SendMessage) 없이 소멸.
@@ -394,6 +411,22 @@ elif os.path.isdir(path):
 **Level**: 1 (docs 기록)
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 L-044~L-047 모두 Level 1 (1회성 패턴). hook/스킬 처리 완료 항목 없음. Level 2+ 없으므로 MEMORY.md 반영 없음.
+
+---
+
+## [2026-04-09] 전역작업 단일 큐 완결 구현
+
+> **작업 요약**: 워크스페이스 생성이 전역작업 큐를 우회하는 문제 수정 + executeCancel 정규식 수정 + restoreWorkspacePolling 추가 + 서버측 도메인 동시 차단
+
+### L-048: 신규 함수 작성 시 동일 파일 기존 API 호출 패턴 먼저 확인 (2026-04-09)
+
+**현상**: `restoreWorkspacePolling`에서 `workspaceAPI.진행률조회()` 반환값을 `AxiosResponse.data` 접근 없이 직접 사용 → TypeScript 타입 오류 발생. `_startPolling` 인자 수도 불일치.
+**원인**: 서브에이전트가 신규 함수 작성 시 같은 파일의 기존 동일 API 호출 패턴을 사전 확인하지 않음.
+**해결**: 기존 `executeConnect`의 `res.data?.status` / `res.data?.percent` 패턴으로 수정. `_startPolling(id, pollFn, interval, onDone, onError, timeout)` 시그니처 맞춤.
+**재발방지**: 신규 함수 작성 시 같은 파일에서 동일 API 또는 동일 함수를 호출하는 기존 코드를 먼저 찾아 패턴(반환값 구조, 인자 수)을 확인한 후 작성하라.
+**Level**: 1 (docs 기록)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 L-048 Level 1 (1회성 서브에이전트 패턴 미확인). hook/스킬 처리 불필요. MEMORY.md 반영 없음.
 
 ---
 

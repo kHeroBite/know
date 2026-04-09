@@ -56,14 +56,14 @@ interface 워크스페이스항목 {
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
-  const { isBlocked, currentTask, executeConnect, executeCancel, executeRelease, executeReinit } = useGlobalTaskStore()
+  const { isBlocked, currentTask, executeConnect, executeCancel, executeRelease, executeReinit, executeCreate, restoreWorkspacePolling } = useGlobalTaskStore()
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
   const [로딩, set로딩] = useState(false)
   const [새이름, set새이름] = useState('')
   const [새색상, set새색상] = useState<string | null>(null)
-  const [생성로딩, set생성로딩] = useState(false)
+  const 생성중 = currentTask?.status === 'running' && currentTask.id.startsWith('ws-create-')
   const [연결팝업WS, set연결팝업WS] = useState<string | null>(null)
   const [선택도메인, set선택도메인] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
@@ -92,6 +92,7 @@ export default function Workspace() {
       ])
       const wsList: 워크스페이스항목[] = wsRes.data
       set목록(wsList)
+      await restoreWorkspacePolling(wsList)
       set도메인목록(dmRes.data)
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
@@ -135,22 +136,19 @@ export default function Workspace() {
   }, [목록])
 
   const 생성핸들러 = async () => {
-    if (!새이름.trim()) {
-      message.warning('이름을 입력하세요')
-      return
-    }
-    set생성로딩(true)
-    try {
-      await workspaceAPI.워크스페이스생성(새이름.trim(), 새색상)
-      message.success(`워크스페이스 "${새이름}" 생성 완료`)
-      set새이름('')
-      set새색상(null)
-      await 목록조회()
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '생성 실패')
-    } finally {
-      set생성로딩(false)
-    }
+    if (!새이름.trim()) { message.warning('이름을 입력하세요'); return }
+    await executeCreate(새이름.trim(), 새색상, {
+      onDone: async () => {
+        message.success(`워크스페이스 "${새이름}" 생성 완료`)
+        set새이름('')
+        set새색상(null)
+        await 목록조회()
+      },
+      onError: async (err) => {
+        message.error(err || '생성 실패')
+        await 목록조회()
+      },
+    })
   }
 
   const 삭제핸들러 = async (name: string) => {
@@ -360,7 +358,7 @@ export default function Workspace() {
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={생성핸들러}
-                loading={생성로딩}
+                loading={생성중}
                 disabled={isBlocked}
               >
                 생성

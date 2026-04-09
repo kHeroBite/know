@@ -580,6 +580,14 @@ def add_domain_service(name: str, base_source: str, base_name: str,
               mysql_dict_from: str | None = None,
               display_name: str | None = None) -> dict[str, Any]:
     """도메인 추가 — 비동기 복사 시작 (즉시 반환). 사전 복사 옵션 포함."""
+    if os.path.isdir(DOMAIN_PROGRESS_DIR):
+        for pf in Path(DOMAIN_PROGRESS_DIR).glob("*.json"):
+            prog = _read_domain_progress(pf.stem)
+            if prog and prog.get("status") not in ("done", "error", None):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"다른 도메인({pf.stem})이 추가 중입니다. 완료 후 시도하세요."
+                )
     대상 = os.path.join(DOMAIN_DIR, name)
     if os.path.exists(대상):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이미 존재하는 도메인: {name}")
@@ -644,14 +652,18 @@ def rename_domain(old_name: str, new_name: str) -> dict[str, str]:
 
 
 def list_domains_service() -> list[dict[str, str | None]]:
-    """DOMAIN_DIR 폴더 list_tasks 반환 (id + display_name)."""
+    """DOMAIN_DIR 폴더 list_tasks 반환 (id + display_name). 복사 진행 중인 도메인 제외."""
     os.makedirs(DOMAIN_DIR, exist_ok=True)
     메타 = _read_domain_meta()
-    return [
-        {"id": 항목.name, "name": 메타.get(항목.name)}
-        for 항목 in sorted(Path(DOMAIN_DIR).iterdir())
-        if 항목.is_dir()
-    ]
+    결과 = []
+    for 항목 in sorted(Path(DOMAIN_DIR).iterdir()):
+        if not 항목.is_dir():
+            continue
+        진행 = _read_domain_progress(항목.name)
+        if 진행 and 진행.get("status") not in ("done", "error", None):
+            continue  # 복사 진행 중 — 목록 제외
+        결과.append({"id": 항목.name, "name": 메타.get(항목.name)})
+    return 결과
 
 
 # ============================================================================

@@ -320,7 +320,7 @@ export default function DomainManage() {
                           },
                         })
                       }} okText="삭제" cancelText="취소">
-                        <Button danger icon={<DeleteOutlined />} disabled={연결됨 || Object.keys(도메인복사진행중).length > 0 || isBlocked}>삭제</Button>
+                        <Button danger icon={<DeleteOutlined />} disabled={연결됨 || isBlocked}>삭제</Button>
                       </Popconfirm>
                     </>}
                   </Space>

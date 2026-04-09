@@ -33,6 +33,12 @@ export interface WorkspaceOpsSlice {
     jianaVersion: string | undefined,
     callbacks?: TaskCallbacks,
   ) => Promise<void>
+
+  executeCreate: (wsName: string, color: string | null, callbacks?: {
+    onDone?: () => void | Promise<void>
+    onError?: (err: string) => void | Promise<void>
+  }) => Promise<void>
+  restoreWorkspacePolling: (wsList: any[]) => Promise<void>
 }
 
 export function createWorkspaceOpsSlice(
@@ -97,7 +103,8 @@ export function createWorkspaceOpsSlice(
 
     executeCancel: async (wsName, callbacks) => {
       const current = get().currentTask
-      if (!current || !current.id.includes(wsName) || current.status !== 'running') {
+      const pattern = new RegExp(`^ws-(?:connect|reinit)-${wsName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-\\d+$`)
+      if (!current || !pattern.test(current.id) || current.status !== 'running') {
         callbacks?.onError?.('취소할 작업이 없습니다')
         return
       }
@@ -142,6 +149,72 @@ export function createWorkspaceOpsSlice(
         callbacks?.onError?.(detail)
       }
     },
+
+    executeCreate: async (wsName, color, callbacks) => {
+    const taskId = `ws-create-${wsName}-${Date.now()}`
+    const started = get()._startTask({
+      id: taskId,
+      type: '워크스페이스 생성',
+      label: `${wsName} 생성 중`,
+      percent: 50,
+      status: 'running',
+    })
+    if (!started) {
+      callbacks?.onError?.('이미 다른 작업이 진행 중입니다')
+      return
+    }
+    try {
+      await workspaceAPI.워크스페이스생성(wsName, color)
+      get()._finishTask(taskId, 'done')
+      callbacks?.onDone?.()
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || '생성 실패'
+      workspaceAPI.워크스페이스삭제(wsName).catch(() => {})
+      get()._finishTask(taskId, 'error')
+      callbacks?.onError?.(detail)
+    }
+  },
+  restoreWorkspacePolling: async (wsList) => {
+    const { currentTask } = get()
+    for (const ws of wsList) {
+      if (ws.status !== 'CONNECTING') continue
+      if (currentTask?.id.includes(`-${ws.name}-`) && currentTask.status === 'running') continue
+      try {
+        const prog = await workspaceAPI.진행률조회(ws.name)
+        const progData = prog?.data
+        if (progData && progData.status === 'running') {
+          const taskId = `ws-connect-${ws.name}-${Date.now()}`
+          const wsNameCopy = ws.name
+          get()._startTask({
+            id: taskId,
+            type: '워크스페이스 연결',
+            label: `${wsNameCopy} 연결 중`,
+            percent: progData.percent ?? 0,
+            status: 'running',
+          })
+          get()._startPolling(
+            taskId,
+            async () => {
+              const res = await workspaceAPI.진행률조회(wsNameCopy)
+              const st = res.data?.status
+              if (st === 'done') return { percent: 100, done: true, error: false }
+              if (st === 'error') return { percent: 0, done: false, error: true, message: res.data?.message }
+              if (st === 'cancelled') return { percent: 0, done: true, error: false }
+              if (st === 'idle' || !st) return { percent: 100, done: true, error: false }
+              const percent: number = res.data?.percent ?? 0
+              return { percent, done: false, error: false }
+            },
+            2000,
+            undefined,
+            undefined,
+            600000,
+          )
+        }
+      } catch {
+        // 복원 실패 무시
+      }
+    }
+  },
 
     executeReinit: async (wsName, domain, jianaVersion, callbacks) => {
       const taskId = `ws-reinit-${wsName}-${Date.now()}`
