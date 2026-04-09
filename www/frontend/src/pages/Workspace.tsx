@@ -34,6 +34,7 @@ import { workspaceAPI } from '../api/workspace'
 import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
@@ -55,6 +56,7 @@ interface 워크스페이스항목 {
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
+  const { isBlocked, startTask, updateProgress, finishTask } = useGlobalTaskStore()
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -92,10 +94,12 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
-      // CONNECTING 상태 워크스페이스 자동 폴링
+      // CONNECTING 상태 워크스페이스 자동 폴링 (페이지 로드 시 복원)
       wsList.forEach(ws => {
         if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
-          폴링시작(ws.name)
+          const taskId = `ws-connect-${ws.name}-restore`
+          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
+          폴링시작(ws.name, taskId)
         }
       })
       // FAILED 워크스페이스 에러 메시지 조회
@@ -138,7 +142,7 @@ export default function Workspace() {
     })
   }, [목록])
 
-  const 폴링종료 = async (wsName: string) => {
+  const 폴링종료 = async (wsName: string, taskId?: string, taskStatus: 'done' | 'error' = 'done') => {
     clearInterval(폴링ref.current[wsName])
     delete 폴링ref.current[wsName]
     set복사진행중(prev => {
@@ -152,10 +156,11 @@ export default function Workspace() {
       delete next[wsName + '_mode']
       return next
     })
+    if (taskId) finishTask(taskId, taskStatus)
     await 목록조회()
   }
 
-  const 폴링시작 = (wsName: string) => {
+  const 폴링시작 = (wsName: string, taskId: string) => {
     if (폴링ref.current[wsName]) return
     폴링ref.current[wsName] = setInterval(async () => {
       try {
@@ -167,7 +172,8 @@ export default function Workspace() {
           const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
           const isReinit = 에러메시지[wsName + '_mode'] === 'reinit'
           message.success(`${isReinit ? '초기화' : '연결'} 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
-          await 폴링종료(wsName)
+          updateProgress(taskId, 100)
+          await 폴링종료(wsName, taskId, 'done')
           return
         }
         if (st === 'idle' || st === 'error' || st === 'cancelled') {
@@ -178,16 +184,17 @@ export default function Workspace() {
           } else if (st === 'cancelled') {
             message.info(`"${wsName}" 연결이 취소되었습니다`)
           }
-          await 폴링종료(wsName)
+          await 폴링종료(wsName, taskId, st === 'error' ? 'error' : 'done')
           return
         }
         const percent: number = res.data?.percent ?? 0
         set복사진행중(prev => ({ ...prev, [wsName]: percent }))
+        updateProgress(taskId, percent)
         if (percent >= 100) {
-          await 폴링종료(wsName)
+          await 폴링종료(wsName, taskId, 'done')
         }
       } catch {
-        await 폴링종료(wsName)
+        await 폴링종료(wsName, taskId, 'error')
       }
     }, 2000)
   }
@@ -232,14 +239,16 @@ export default function Workspace() {
     }
     const wsName = 연결팝업WS
     const jianaVer = 선택jiana
+    const taskId = `ws-connect-${wsName}-${Date.now()}`
     try {
       // 즉시 UI에 진행률 0% 표시 (서버 응답 전)
       set복사진행중(prev => ({ ...prev, [wsName]: 0 }))
       set연결팝업WS(null)
       set선택도메인(null)
+      startTask({ id: taskId, type: '워크스페이스 연결', label: `${wsName} 연결 중`, percent: 0 })
       await workspaceAPI.도메인연결(wsName, 선택도메인, jianaVer)
       message.success(`"${wsName}" 도메인 연결 시작 (jiana ${jianaVer})`)
-      폴링시작(wsName)
+      폴링시작(wsName, taskId)
       await 목록조회()
     } catch (err: any) {
       // 실패 시 progress 제거
@@ -248,6 +257,7 @@ export default function Workspace() {
         delete next[wsName]
         return next
       })
+      finishTask(taskId, 'error')
       const status = err.response?.status
       const detail = err.response?.data?.detail || '연결 실패'
       if (status === 404) {
@@ -259,7 +269,9 @@ export default function Workspace() {
   }
 
   const 해제핸들러 = async (wsName: string) => {
+    const taskId = `ws-disconnect-${wsName}-${Date.now()}`
     set연결해제중(true)
+    startTask({ id: taskId, type: '워크스페이스 연결해제', label: `${wsName} 연결해제 중`, percent: 50 })
     try {
       await workspaceAPI.워크스페이스해제(wsName)
       // 선택된 워크스페이스를 연결해제하면 선택도 해제 + 테마 초기화
@@ -267,9 +279,11 @@ export default function Workspace() {
         clearWorkspace()
       }
       message.success(`"${wsName}" 연결해제 완료`)
+      finishTask(taskId, 'done')
       await 목록조회()
     } catch (err: any) {
       message.error(err.response?.data?.detail || '연결해제 실패')
+      finishTask(taskId, 'error')
     } finally {
       set연결해제중(false)
     }
@@ -292,6 +306,8 @@ export default function Workspace() {
       jianaVer = res.data?.jiana_version || undefined
     } catch { /* 없으면 무시 */ }
 
+    const taskId = `ws-reinit-${wsName}-${Date.now()}`
+    startTask({ id: taskId, type: '워크스페이스 초기화', label: `${wsName} 초기화 중`, percent: 0 })
     try {
       // 1단계: 연결해제 (DB 정리 + 파일 정리)
       if (selectedWorkspace === wsName) clearWorkspace()
@@ -301,7 +317,7 @@ export default function Workspace() {
       set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
       await workspaceAPI.도메인연결(wsName, domain, jianaVer)
       message.success(`"${wsName}" 초기화 중...`)
-      폴링시작(wsName)
+      폴링시작(wsName, taskId)
       await 목록조회()
     } catch (err: any) {
       set복사진행중(prev => {
@@ -309,6 +325,7 @@ export default function Workspace() {
         delete next[wsName]
         return next
       })
+      finishTask(taskId, 'error')
       message.error(err.response?.data?.detail || '초기화 실패')
       await 목록조회()
     }
@@ -585,7 +602,7 @@ export default function Workspace() {
                             type="primary"
                             size="small"
                             icon={<LinkOutlined />}
-                            disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING')}
+                            disabled={isInProgress || 연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
                             onClick={() => {
                               set연결팝업WS(ws.name)
                               set선택도메인(null)
@@ -600,7 +617,7 @@ export default function Workspace() {
                               okText="삭제"
                               cancelText="취소"
                             >
-                              <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                              <Button size="small" danger icon={<DeleteOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                 삭제
                               </Button>
                             </Popconfirm>
@@ -653,7 +670,7 @@ export default function Workspace() {
                                 okButtonProps={{ danger: true }}
                                 cancelText="취소"
                               >
-                                <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                                <Button size="small" icon={<DisconnectOutlined />} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                   연결해제
                                 </Button>
                               </Popconfirm>
@@ -667,7 +684,7 @@ export default function Workspace() {
                               cancelText="취소"
                               okButtonProps={{ danger: true }}
                             >
-                              <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING')}>
+                              <Button size="small" icon={<ReloadOutlined />} style={{ color: '#fa8c16', borderColor: '#fa8c16' }} disabled={연결해제중 || 목록.some(w => w.status === 'CONNECTING') || isBlocked}>
                                 초기화
                               </Button>
                             </Popconfirm>

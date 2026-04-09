@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Layout as AntLayout, Menu, Button, Typography, Tooltip, Space } from 'antd'
+import { Layout as AntLayout, Menu, Button, Typography, Tooltip, Space, Progress } from 'antd'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import { workspaceAPI } from '../api/workspace'
 import { isMenuEnabled } from '../App'
 import { useNotification } from '../hooks/useNotification'
@@ -38,6 +39,7 @@ export default function Layout() {
   const location = useLocation()
   const { selectedWorkspace, selectedDomain, selectedColor, phase, myPhase } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
+  const currentTask = useGlobalTaskStore(s => s.currentTask)
 
   // 알림 WebSocket 훅
   useNotification(user?.user_id || null)
@@ -201,6 +203,31 @@ export default function Layout() {
             }}
           />
         </div>
+        {/* 글로벌 작업 진행표시 — 로그아웃 위 */}
+        {currentTask && (
+          <div style={{
+            padding: '8px 12px',
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: 500 }}>
+                {currentTask.label}
+              </Typography.Text>
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10 }}>
+                {currentTask.status === 'done' ? '완료' : currentTask.status === 'error' ? '오류' : `${currentTask.percent}%`}
+              </Typography.Text>
+            </div>
+            <Progress
+              percent={currentTask.percent}
+              size="small"
+              showInfo={false}
+              status={currentTask.status === 'error' ? 'exception' : currentTask.status === 'done' ? 'success' : 'active'}
+              strokeColor={currentTask.status === 'error' ? '#ff4d4f' : currentTask.status === 'done' ? '#52c41a' : 'rgba(255,255,255,0.7)'}
+              trailColor="rgba(255,255,255,0.15)"
+            />
+          </div>
+        )}
         {/* 사용자 정보 + 로그아웃 — 항상 최하단 고정 */}
         <div className="app-sider-footer">
           <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12 }}>
