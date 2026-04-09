@@ -204,8 +204,8 @@ export default function DomainManage() {
       for (const dm of dmRes.data) {
         const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`domain-add-${dm.id}`))
         if (existingTaskId) continue // 이미 store에서 폴링 중 (페이지 이동 후 복귀)
-        // store currentTask가 이 도메인 관련이고 running이면 스킵
-        if (storeTask?.status === 'running' && storeTask.id.includes(dm.id)) continue
+        // store currentTask가 이 도메인 관련이면 스킵 (running/done 모두)
+        if (storeTask && storeTask.id.includes(dm.id)) continue
         try {
           const res = await workspaceAPI.도메인추가진행률(dm.id)
           if (res.data?.status && res.data.status !== 'idle' && res.data.status !== 'done') {

@@ -102,6 +102,16 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
+      // CONNECTING이 아닌 워크스페이스는 복사진행중에서 제거 (완료 후 잔류 방지)
+      set복사진행중(prev => {
+        const next = { ...prev }
+        for (const ws of wsList) {
+          if (ws.status !== 'CONNECTING' && next[ws.name] !== undefined) {
+            delete next[ws.name]
+          }
+        }
+        return next
+      })
       // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드/새로고침 시)
       const storeState = useGlobalTaskStore.getState()
       const storeTimers = storeState._timers
@@ -111,8 +121,8 @@ export default function Workspace() {
         // store에 이 워크스페이스 관련 폴링 타이머가 살아있으면 완전 스킵
         const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith('ws-') && tid.includes(ws.name))
         if (existingTaskId) continue
-        // store currentTask가 이 워크스페이스 관련이고 running이면 스킵 (타이머만 없고 task는 살아있는 경우)
-        if (storeTask?.status === 'running' && storeTask.id.includes(ws.name)) continue
+        // store currentTask가 이 워크스페이스 관련이면 스킵 (running/done 모두 — 2초 후 null 되기 전)
+        if (storeTask && storeTask.id.includes(ws.name)) continue
         // 새로고침 또는 최초 로드 — 서버 진행률 조회 후 복원
         try {
           const pRes = await workspaceAPI.진행률조회(ws.name)
@@ -210,6 +220,7 @@ export default function Workspace() {
           return { percent: 0, done: true, error: false }
         }
         if (st === 'idle' || !st) {
+          // idle = 서버에 작업 기록 없음 → 이미 완료됐거나 재시작됨 → 목록 재조회로 확인
           set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
           return { percent: 100, done: true, error: false }
         }
@@ -218,8 +229,16 @@ export default function Workspace() {
         return { percent, done: false, error: false }
       },
       2000,
-      () => { 목록조회(); delete 폴링ref.current[taskId] },
-      () => { 목록조회(); delete 폴링ref.current[taskId] },
+      () => {
+        // onDone: 폴링 ref 정리 후 목록 재조회 (목록조회 내부에서 startTask 재호출 방지)
+        delete 폴링ref.current[taskId]
+        // 목록조회는 task가 이미 done/null 상태가 된 후 실행되므로 재호출 없음
+        setTimeout(() => 목록조회(), 500)
+      },
+      () => {
+        delete 폴링ref.current[taskId]
+        setTimeout(() => 목록조회(), 500)
+      },
     )
   }
 
