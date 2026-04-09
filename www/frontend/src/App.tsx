@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore'
 import { useWorkspaceStore, type Phase, type MyPhase } from './stores/workspaceStore'
 import Login from './pages/Login'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import DomainList from './pages/DomainList'
 import DictionaryManage from './pages/DictionaryManage'
 import DomainManage from './pages/DomainManage'
@@ -80,7 +81,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+      <Route path="/" element={<PrivateRoute><ErrorBoundary><Layout /></ErrorBoundary></PrivateRoute>}>
         <Route index element={<DefaultRoute />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="workspace" element={<Suspense fallback={null}><Workspace /></Suspense>} />

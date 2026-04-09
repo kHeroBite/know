@@ -162,23 +162,27 @@ def bulk_delete_keywords(
 def initialize(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(db_session), current: dict = Depends(get_current_user)):
     """데이터 전처리 데이터 완전 삭제: keyword_assignments + phase1 + build_history + work_history + 파일."""
-    # 1. phase1_logs 삭제 (phase1_runs 자식 테이블 — 선 삭제)
-    db.execute(text(
-        "DELETE FROM phase1_logs WHERE run_id IN "
-        "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
-    ), {"dom": domain})
+    try:
+        # 1. phase1_logs 삭제 (phase1_runs 자식 테이블 — 선 삭제)
+        db.execute(text(
+            "DELETE FROM phase1_logs WHERE run_id IN "
+            "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
+        ), {"dom": domain})
 
-    # 2. phase1_runs 삭제
-    db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": domain})
+        # 2. phase1_runs 삭제
+        db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": domain})
 
-    # 3. build_history 삭제
-    db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
+        # 3. build_history 삭제
+        db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
 
-    # 4. keyword_assignments 삭제
-    db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
-               {"ws": workspace, "dom": domain})
+        # 4. keyword_assignments 삭제
+        db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
+                   {"ws": workspace, "dom": domain})
 
-    db.commit()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     # 5. work_history 삭제 (서비스 내부에서 commit 처리)
     delete_all_history_service(db, workspace, domain)

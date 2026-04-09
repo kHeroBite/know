@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Typography, Card, Tabs, Input, Button, Modal,
-  message, Spin, Space, Checkbox,
+  message, Spin, Space, Checkbox, Alert,
 } from 'antd'
 import {
   SettingOutlined, CheckCircleOutlined, DeleteOutlined, PlusCircleOutlined, CloseOutlined,
@@ -142,10 +142,46 @@ export default function KnowledgeWork() {
   // 일괄 작업 선택
   const [bulkSelectedKeys, setBulkSelectedKeys] = useState<number[]>([])
 
+  // Auto-save
+  const [autosaveBanner, setAutosaveBanner] = useState(false)
+  const [autosaveData, setAutosaveData] = useState<{ keywordId: number | null; activeTab: string } | null>(null)
+
   // 작업이력
   const historyRef = useRef<WorkHistoryRef>(null)
   const selectLastTokenRef = useRef(false)
   const selectLastLineFirstRef = useRef(false)  // ↑로 이전 키워드: 마지막 줄의 첫 워드
+
+  // ─── Auto-save ──────────────────────────────────────────────
+
+  // 마운트 시 localStorage에서 복구 데이터 확인
+  useEffect(() => {
+    if (!selectedWorkspace || !selectedDomain) return
+    const key = `know_autosave_${selectedWorkspace}_${selectedDomain}`
+    const raw = localStorage.getItem(key)
+    if (!raw) return
+    try {
+      const saved = JSON.parse(raw)
+      setAutosaveData(saved)
+      setAutosaveBanner(true)
+    } catch {
+      localStorage.removeItem(key)
+    }
+  }, [selectedWorkspace, selectedDomain])
+
+  // 30초마다 현재 상태 자동 저장
+  useEffect(() => {
+    if (!selectedWorkspace || !selectedDomain) return
+    const key = `know_autosave_${selectedWorkspace}_${selectedDomain}`
+    const interval = setInterval(() => {
+      if (!selectedWorkspace || !selectedDomain) return
+      const data = {
+        keywordId: selected?.id ?? null,
+        activeTab,
+      }
+      localStorage.setItem(key, JSON.stringify(data))
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [selectedWorkspace, selectedDomain, selected, activeTab])
 
   // ─── 키워드 목록 ────────────────────────────────────────────
 
@@ -1065,6 +1101,42 @@ export default function KnowledgeWork() {
         if (!추천모달열림) setIsCenterFocused(false)
       }}
     >
+      {/* Auto-save 복구 배너 */}
+      {autosaveBanner && autosaveData && (
+        <Alert
+          message="이전 작업이 복구되었습니다."
+          type="info"
+          showIcon
+          style={{ marginBottom: 4 }}
+          action={
+            <Space>
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => {
+                  if (autosaveData.activeTab) setActiveTab(autosaveData.activeTab)
+                  setAutosaveBanner(false)
+                  setAutosaveData(null)
+                }}
+              >
+                적용
+              </Button>
+              <Button
+                size="small"
+                onClick={() => {
+                  const key = `know_autosave_${selectedWorkspace}_${selectedDomain}`
+                  localStorage.removeItem(key)
+                  setAutosaveBanner(false)
+                  setAutosaveData(null)
+                }}
+              >
+                무시
+              </Button>
+            </Space>
+          }
+        />
+      )}
+
       {/* 배너 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',

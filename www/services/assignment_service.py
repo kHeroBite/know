@@ -16,8 +16,15 @@ logger = logging.getLogger(__name__)
 # kw_{workspace} 테이블 관리
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _validate_workspace(ws: str) -> None:
+    """워크스페이스 이름에 허용되지 않는 문자가 있으면 ValueError 발생."""
+    if not _re.match(r'^[A-Za-z0-9_]+$', ws):
+        raise ValueError(f"워크스페이스 이름에 허용되지 않는 문자가 포함되어 있습니다: {ws}")
+
+
 def _kw_table(ws: str) -> str:
     """워크스페이스명을 안전한 테이블명으로 변환 (alphanumeric + underscore만 허용)."""
+    _validate_workspace(ws)
     safe = _re.sub(r'[^a-zA-Z0-9_]', '_', ws)
     return f"kw_{safe}"
 
@@ -91,6 +98,7 @@ def _extract_synonym_keywords(block_lines: list[str]) -> dict:
 
 def parse_synonym(workspace: str) -> list:
     """synonym.txt를 파싱하여 [{keyword, analysis, synonym_info}] 반환."""
+    _validate_workspace(workspace)
     syn_path = os.path.join(WORKSPACE_BASE, workspace, "build", "work", "synonym.txt")
     if not os.path.isfile(syn_path):
         raise HTTPException(400, detail=f"synonym.txt 없음: {syn_path}")

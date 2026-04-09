@@ -5,11 +5,12 @@ import uuid
 import json
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Query, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
 from typing import Optional
 from pydantic import BaseModel
 
 from api.auth import get_current_user
+from core.exceptions import ValidationError, NotFoundError
 
 라우터 = APIRouter()
 ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
@@ -42,21 +43,21 @@ class Phase1실행요청(BaseModel):
 @라우터.get("/preprocess/files/{folder}")
 async def list_phase1_files(folder: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
-        raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
+        raise ValidationError(f"폴더 오류: {folder}")
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.list_phase1_files(folder, workspace)
 
 @라우터.post("/preprocess/files/{folder}")
 async def upload_file_service(folder: str, file: UploadFile = File(...), workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
-        raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
+        raise ValidationError(f"폴더 오류: {folder}")
     safe_name = os.path.basename(file.filename or "")
     ct = file.content_type or ""
     if ct.startswith(("image/", "audio/", "video/")):
-        raise HTTPException(status_code=422, detail=f"텍스트 파일만 허용됩니다: {ct}")
+        raise ValidationError(f"텍스트 파일만 허용됩니다: {ct}")
     content = await file.read()
     if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(status_code=422, detail=f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
+        raise ValidationError(f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
     logger.info(f"파일 업로드: name={safe_name}, size={len(content)}, content_type={ct}, workspace={workspace}")
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.save_file(folder, safe_name, content, workspace)
@@ -64,7 +65,7 @@ async def upload_file_service(folder: str, file: UploadFile = File(...), workspa
 @라우터.delete("/preprocess/files/{folder}/{filename}")
 async def delete_phase1_file(folder: str, filename: str, workspace: str = Query("")):
     if folder not in ALLOWED_FOLDERS:
-        raise HTTPException(status_code=422, detail=f"폴더 오류: {folder}")
+        raise ValidationError(f"폴더 오류: {folder}")
     safe_name = os.path.basename(filename)
     from services.phase1_service import Phase1서비스
     return await Phase1서비스.delete_phase1_file(folder, safe_name, workspace)
@@ -72,7 +73,7 @@ async def delete_phase1_file(folder: str, filename: str, workspace: str = Query(
 @라우터.post("/preprocess/run")
 async def start_execution(요청: Phase1실행요청, background_tasks: BackgroundTasks):
     if 요청.category not in ALLOWED_FOLDERS:
-        raise HTTPException(status_code=422, detail=f"카테고리 오류: {요청.category}")
+        raise ValidationError(f"카테고리 오류: {요청.category}")
     run_id = str(uuid.uuid4())
     from services.phase1_service import Phase1서비스
     await Phase1서비스.register_execution_db(run_id, 요청)
@@ -83,13 +84,13 @@ async def start_execution(요청: Phase1실행요청, background_tasks: Backgrou
 async def view_file(path: str = Query("")):
     """서버 파일 내용 읽기 (work 디렉토리 내 파일만)"""
     if not path or "/work/" not in path:
-        raise HTTPException(status_code=400, detail="work 디렉토리 파일만 조회 가능")
+        raise ValidationError("work 디렉토리 파일만 조회 가능")
     try:
         with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
             content = f.read(100000)  # 최대 100KB
         return {"content": content, "path": path}
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"파일 없음: {path}")
+        raise NotFoundError(f"파일: {path}")
 
 
 @라우터.get("/preprocess/step-status")

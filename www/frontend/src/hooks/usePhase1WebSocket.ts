@@ -18,10 +18,12 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
   const [stepStatuses, setStepStatuses] = useState<Record<number, string>>({})
   const [isConnected, setIsConnected] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
+  const [isReconnecting, setIsReconnecting] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const doneRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stepStatusesRef = useRef<Record<number, string>>({})
 
   useEffect(() => {
@@ -45,7 +47,8 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
     doneRef.current = false
 
     let cancelled = false
-    let retryCount = 0
+    let retryDelay = 1000  // 초기 1초
+    const maxRetryDelay = 30000  // 최대 30초
 
     const doMarkDone = () => {
       if (doneRef.current) return
@@ -120,7 +123,8 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
 
       ws.onopen = () => {
         setIsConnected(true)
-        retryCount = 0
+        setIsReconnecting(false)
+        retryDelay = 1000  // 연결 성공 시 backoff 초기화
         scheduleTimeout()
       }
 
@@ -141,10 +145,13 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
       ws.onclose = () => {
         setIsConnected(false)
         if (doneRef.current || cancelled) return
-        if (retryCount < 2) {
-          retryCount += 1
-          setTimeout(connectWs, retryCount * 1000)
-        }
+        // exponential backoff 재연결 (1s → 2s → 4s → ... → 30s)
+        setIsReconnecting(true)
+        retryTimerRef.current = setTimeout(() => {
+          if (doneRef.current || cancelled) { setIsReconnecting(false); return }
+          retryDelay = Math.min(retryDelay * 2, maxRetryDelay)
+          connectWs()
+        }, retryDelay)
       }
 
       ws.onerror = () => { ws.close() }
@@ -161,10 +168,11 @@ export function usePhase1WebSocket(runId: string | null, startStep?: number) {
     return () => {
       cancelled = true
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
       wsRef.current?.close()
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
   }, [runId])
 
-  return { logs, currentStep, stepStatuses, isConnected, isCompleted }
+  return { logs, currentStep, stepStatuses, isConnected, isCompleted, isReconnecting }
 }

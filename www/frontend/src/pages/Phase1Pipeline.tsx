@@ -79,6 +79,17 @@ export default function Phase1Pipeline() {
   // 단계별 경과시간 + output 경로 집계 (이전 run 정보 보존)
   const [stepElapsed, setStepElapsed] = useState<Record<number, number>>({})
   const [stepOutputs, setStepOutputs] = useState<Record<number, string>>({})
+
+  // 단계별 실시간 진행률 (WebSocket logs의 percent 필드 활용)
+  const stepPercents = useMemo(() => {
+    const result: Record<number, number> = {}
+    for (const entry of ws.logs) {
+      if (entry.step_num >= 1 && entry.percent != null) {
+        result[entry.step_num] = entry.percent
+      }
+    }
+    return result
+  }, [ws.logs])
   useEffect(() => {
     for (const entry of ws.logs) {
       if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
@@ -306,6 +317,7 @@ export default function Phase1Pipeline() {
                 stepStatuses={유효단계상태}
                 stepElapsed={stepElapsed}
                 stepOutputs={stepOutputs}
+                stepPercents={stepPercents}
                 rankEnabled={rankEnabled}
                 rankValue={rankValue}
                 rankPreset={rankPreset}

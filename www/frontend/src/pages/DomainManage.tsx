@@ -415,17 +415,34 @@ export default function DomainManage() {
         <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
           <Input placeholder="도메인이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} />
           <Input placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} />
-          <Select style={{ width: '100%' }} value={도메인소스타입} onChange={v => { set도메인소스타입(v); set도메인소스이름(null) }}
-            options={[{ label: '현재 도메인들', value: 'domain' }, { label: '이전 도메인에서 복사', value: 'old' }]} />
+          <Select style={{ width: '100%' }} value={도메인소스타입} onChange={v => {
+            set도메인소스타입(v)
+            set도메인소스이름(null)
+            if (v === 'domain') {
+              set사전복사모드('sqlite')
+            } else {
+              set사전복사모드('none')
+              set사전복사소스(null)
+            }
+          }}
+            options={[{ label: '현재 도메인에서 복사', value: 'domain' }, { label: '이전 도메인에서 복사', value: 'old' }]} />
           <Select style={{ width: '100%' }} placeholder="소스 선택"
             options={도메인소스타입 === 'old' ? (old소스목록 || []).map(d => ({ label: d, value: d })) : 도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
-            onChange={v => { set도메인소스이름(v); set도메인신규이름(v) }} value={도메인소스이름} />
+            onChange={v => {
+              set도메인소스이름(v)
+              set도메인신규이름(v)
+              if (도메인소스타입 === 'domain') {
+                set사전복사소스(v)
+              } else {
+                set사전복사소스(v)
+              }
+            }} value={도메인소스이름} />
           <div>
             <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>사전 복사 옵션</Text>
             <Radio.Group value={사전복사모드} onChange={e => { set사전복사모드(e.target.value); set사전복사소스(null) }} size="small">
               <Radio value="none">복사 안 함</Radio>
-              <Radio value="sqlite">기존 도메인에서</Radio>
-              <Radio value="mysql">MySQL에서</Radio>
+              <Radio value="sqlite">현재 사전</Radio>
+              <Radio value="mysql">이전 사전 (MySQL)</Radio>
             </Radio.Group>
           </div>
           {사전복사모드 === 'sqlite' && (

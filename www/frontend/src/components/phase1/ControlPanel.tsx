@@ -42,6 +42,7 @@ interface ControlPanelProps {
   stepStatuses: Record<number, string>
   stepElapsed: Record<number, number>
   stepOutputs: Record<number, string>
+  stepPercents?: Record<number, number>
   rankEnabled: boolean
   rankValue: number
   rankPreset: string
@@ -70,6 +71,7 @@ function 경과표시(sec: number): string {
 
 export default function ControlPanel({
   folder, onRun, onStop, onViewFile, isRunning, stepStatuses, stepElapsed, stepOutputs,
+  stepPercents,
   rankEnabled, rankValue, rankPreset, countEnabled, countValue, countPreset,
   combineMode, sortBy,
   onRankEnabledChange, onRankValueChange, onRankPresetChange,
@@ -143,7 +145,15 @@ export default function ControlPanel({
                   {running && (
                     <div style={{ flex: 1 }}>
                       <Text style={{ color: step.color }}><ClockCircleOutlined /> 실행 중</Text>
-                      <Progress percent={50} size="small" status="active" showInfo={false} strokeColor={step.color} style={{ margin: '2px 0 0', maxWidth: 120 }} />
+                      <Progress
+                        percent={stepPercents?.[step.num] ?? 0}
+                        size="small"
+                        status="active"
+                        showInfo={stepPercents?.[step.num] != null}
+                        strokeColor={step.color}
+                        style={{ margin: '2px 0 0', maxWidth: 160 }}
+                        format={(p) => `${p}%`}
+                      />
                     </div>
                   )}
                   {failed && <Text type="danger"><CloseCircleOutlined /> 실패</Text>}

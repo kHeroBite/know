@@ -75,6 +75,14 @@ def create_tables():
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_logs_run ON phase1_logs(run_id)"))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS trg_phase1_runs_delete
+            AFTER DELETE ON phase1_runs
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM phase1_logs WHERE run_id = OLD.run_id;
+            END
+        """))
         
         # 4. keyword_assignments (레거시 호환 유지)
         # NOTE: 신규 데이터는 kw_{workspace} 동적 테이블에 저장됨.
@@ -155,6 +163,8 @@ def create_tables():
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_wh_ws ON work_history(workspace, domain, user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_work_history_ws_domain ON work_history(workspace, domain)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_build_history_domain ON build_history(domain)"))
 
         # 7. llm_usage_log (LLM 사용 로그)
         conn.execute(text("""

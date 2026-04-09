@@ -319,6 +319,10 @@ elif os.path.isdir(path):
 | L-041 | bash_exec python3 heredoc 따옴표 충돌 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
 | L-042 | JSX 포함 파일 .ts 확장자 사용 금지 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
 | L-043 | Agent tool 에이전트 tmux pane 없음 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-044 | SQLite 동적 테이블명 whitelist 검증 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-045 | FastAPI 다중 DML try/except/rollback | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-046 | React ErrorBoundary 흰 화면 방지 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-047 | Axios 에러 인터셉터 한국어 메시지 통일 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
 
 ---
 
@@ -352,6 +356,44 @@ elif os.path.isdir(path):
 **원인**: Agent tool 방식은 pane 없이 실행되므로 kstatus의 tmux pane 기반 진단과 불일치
 **해결**: kstatus Step 7 수량 리포팅에 Agent tool 방식 정상 처리 로직 추가 완료
 **Level**: 2 (스킬 수정)
+
+---
+
+## [2026-04-09] know 프로젝트 전반 개선 — 보안/에러/DB/UX/새기능
+
+### L-044: SQLite 동적 테이블명 보안 — whitelist 정규식 검증 필수 (2026-04-09)
+
+**현상**: workspace 이름이 `kw_{workspace}` 동적 테이블명에 직접 삽입됨. SQL 인젝션 가능성 존재.
+**원인**: ORM 미사용 SQLite raw query에서 사용자 입력을 테이블명/컬럼명에 직접 삽입.
+**해결**: `_validate_workspace()` 함수로 `^[A-Za-z0-9_]+$` whitelist 검증 선행. 위반 시 ValueError 발생.
+**재발방지**: 동적 테이블명/컬럼명에 사용자 입력 삽입 시 정규식 whitelist 검증 필수. parameterized query는 값에만 적용되고 식별자(테이블/컬럼명)에는 적용 불가.
+**Level**: 1 (docs 기록)
+
+### L-045: FastAPI SQLAlchemy 다중 DML — try/except/rollback 패턴 (2026-04-09)
+
+**현상**: 여러 DELETE가 순차 실행될 때 중간 실패 시 부분 삭제 발생. 데이터 불일치 가능성.
+**원인**: try/except 없이 순차 execute → 중간 에러 발생 시 commit 미도달로 롤백 없음.
+**해결**: `try: ... db.commit() / except: db.rollback(); raise` 패턴으로 원자성 보장.
+**재발방지**: 다중 DML(DELETE/INSERT/UPDATE 2개+)은 항상 try/except/rollback 래핑. 단일 db.commit()은 마지막에만.
+**Level**: 1 (docs 기록)
+
+### L-046: React ErrorBoundary — 런타임 에러 흰 화면 방지 (2026-04-09)
+
+**현상**: React 컴포넌트 런타임 에러(null 참조, 타입 에러 등) 발생 시 흰 화면(WSOD) 표시.
+**원인**: 에러 전파를 막는 컴포넌트 경계 없이 루트에서 렌더링.
+**해결**: `ErrorBoundary` class 컴포넌트로 `<App />`을 래핑. 에러 발생 시 폴백 UI 표시.
+**재발방지**: React 앱 루트 및 주요 기능 영역을 ErrorBoundary로 래핑 필수. class 컴포넌트로만 구현 가능(`componentDidCatch` + `getDerivedStateFromError`).
+**Level**: 1 (docs 기록)
+
+### L-047: Axios 에러 인터셉터 — 한국어 메시지 중앙 관리 (2026-04-09)
+
+**현상**: 각 컴포넌트에서 개별 에러 메시지 처리 시 영문/불일치 메시지 혼재.
+**원인**: 에러 처리 로직이 각 컴포넌트에 분산 → 일관성 유지 어려움.
+**해결**: `api/client.ts` interceptors.response에 `HTTP_ERROR_MESSAGES` 맵으로 상태코드별 한국어 메시지 통일 적용. `detail` 필드 없을 때만 폴백.
+**재발방지**: HTTP 에러 메시지는 client.ts 인터셉터에서 통일 처리. 각 컴포넌트에서 개별 에러 메시지 하드코딩 금지.
+**Level**: 1 (docs 기록)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 L-044~L-047 모두 Level 1 (1회성 패턴). hook/스킬 처리 완료 항목 없음. Level 2+ 없으므로 MEMORY.md 반영 없음.
 
 ---
 

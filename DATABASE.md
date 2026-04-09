@@ -198,6 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_kw_{workspace}_status ON kw_{workspace}(status);
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-09 | `trg_phase1_runs_delete` 트리거 추가 (phase1_runs 삭제 시 phase1_logs 자동 연쇄 삭제) + `idx_wh_ws_dom`(work_history), `idx_bh_domain`(build_history) 복합 인덱스 추가 | init_db.py |
 | 2026-04-09 | kw_{workspace} 워크스페이스별 전용 테이블 전환 (keyword_assignments 분리) + 이전단계 이동 시 TRUNCATE | assignment_service.py, workspace_service.py, init_db.py |
 | 2026-04-05 | user_work_phase 테이블 신규 생성 (user_id/domain/phase) | migrations/002_user_work_phase.sql |
 | 2026-04-05 | workspace phase enum 도입 (preprocess→work→build→verify) — isFrozen/isAssigned/isBuildPhase 제거 | workspace_service.py |

@@ -1,5 +1,41 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-09 — know 프로젝트 전반 개선 — 보안/에러/DB/UX/새기능
+
+### 수정 내용
+
+**핵심 변경**: 보안 강화(SQL 인젝션 방어), API 에러 처리 통일, DB 무결성(트리거+인덱스), React ErrorBoundary, WebSocket 재연결, 진행률 표시, Auto-save, 도메인추가창 UI 통일
+
+#### 수정 파일 (총 12개)
+
+**백엔드 (4개)**
+- `www/services/assignment_service.py` — `_validate_workspace()` SQL 인젝션 방어 함수 추가 + `_kw_table()`/`parse_synonym()`에 검증 적용
+- `www/api/phase1.py` — `KnowAPIError` 기반 에러 응답 통일 + try/except/rollback 트랜잭션 패턴 적용
+- `www/api/assignment.py` — `/initialize` 엔드포인트 try/except/rollback 트랜잭션 패턴 적용
+- `www/init_db.py` — `trg_phase1_runs_delete` 트리거 추가 + `idx_wh_ws_dom`, `idx_bh_domain` 인덱스 추가
+
+**프론트엔드 (8개)**
+- `www/frontend/src/components/ErrorBoundary.tsx` (신규) — React ErrorBoundary class 컴포넌트 (흰 화면 방지)
+- `www/frontend/src/App.tsx` — ErrorBoundary로 앱 루트 래핑
+- `www/frontend/src/api/client.ts` — HTTP_ERROR_MESSAGES 맵으로 에러 메시지 한국어 통일
+- `www/frontend/src/pages/DomainManage.tsx` — 도메인추가창 UI 통일 (Add 버튼 → 모달 폼)
+- `www/frontend/src/hooks/usePhase1WebSocket.ts` — exponential backoff 재연결 (초기 1s, 최대 30s) + `isReconnecting` 상태 반환
+- `www/frontend/src/components/phase1/ControlPanel.tsx` — `stepPercents` prop 추가 → 실제 진행률 % 표시
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — `stepPercents` useMemo 추가 → ControlPanel에 전달
+- `www/frontend/src/pages/KnowledgeWork.tsx` — 30초 interval auto-save (localStorage) + 복구 배너
+
+#### 아키텍처 변경
+- **SQL 보안**: 동적 테이블명 생성 시 whitelist 정규식 검증 레이어 추가
+- **에러 처리 통일**: API → `KnowAPIError` 형식, 프론트엔드 → Axios 인터셉터 한국어 메시지
+- **DB 무결성**: `trg_phase1_runs_delete` 트리거(phase1_runs 삭제 시 연관 로그 자동 삭제) + 복합 인덱스 2개
+- **React 안정성**: 루트 ErrorBoundary로 런타임 에러 격리
+- **WebSocket**: 고정 횟수 제한 → exponential backoff 무제한 재시도
+
+#### 커밋
+- 미커밋 (kdone_git에서 처리 예정)
+
+---
+
 ## 2026-04-09 — 전처리 초기화 + 키워드 워크스페이스별 전용테이블 전환
 
 ### 수정 내용

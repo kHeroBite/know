@@ -350,6 +350,26 @@ www/
 
 ---
 
+## 최근 변경사항 요약 (2026-04-09, know 프로젝트 전반 개선)
+
+### 신규 파일
+- `frontend/src/components/ErrorBoundary.tsx` — React ErrorBoundary class 컴포넌트 (흰 화면 방지 폴백 UI)
+
+### 수정 파일
+- `services/assignment_service.py` — `_validate_workspace()` SQL 인젝션 방어 함수 추가
+- `api/phase1.py` — KnowAPIError 에러 응답 통일 + 트랜잭션 패턴
+- `api/assignment.py` — `/initialize` 트랜잭션 패턴 (try/except/rollback)
+- `init_db.py` — `trg_phase1_runs_delete` 트리거 + `idx_wh_ws_dom`, `idx_bh_domain` 인덱스 추가
+- `App.tsx` — ErrorBoundary로 앱 루트 래핑
+- `api/client.ts` — HTTP_ERROR_MESSAGES 한국어 메시지 맵 + 인터셉터 통일 처리
+- `pages/DomainManage.tsx` — 도메인 추가 UI 모달 통일
+- `hooks/usePhase1WebSocket.ts` — exponential backoff 재연결 구현
+- `components/phase1/ControlPanel.tsx` — stepPercents prop으로 실제 진행률 % 표시
+- `pages/Phase1Pipeline.tsx` — stepPercents useMemo 추가
+- `pages/KnowledgeWork.tsx` — 30초 auto-save (localStorage) + 복구 배너
+
+---
+
 ## 최근 변경사항 요약 (2026-04-09, 전처리 초기화 + kw_{workspace} 전환)
 
 ### 핵심 변경
