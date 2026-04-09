@@ -56,7 +56,7 @@ interface 워크스페이스항목 {
 export default function Workspace() {
   const { user: currentUser } = useAuthStore()
   const { selectedWorkspace, setWorkspace, clearWorkspace, phase, myPhase } = useWorkspaceStore()
-  const { isBlocked, startTask, updateProgress, finishTask } = useGlobalTaskStore()
+  const { isBlocked, startTask, updateProgress, finishTask, startPolling } = useGlobalTaskStore()
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -73,7 +73,8 @@ export default function Workspace() {
   const [연결해제중, set연결해제중] = useState(false)
   const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
   const [작업진행률, set작업진행률] = useState<Record<string, number>>({})
-  const 폴링ref = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  // 페이지 이동 후 복원용: 진행 중인 taskId → wsName 매핑 (로컬 UI 상태 복원용)
+  const 폴링ref = useRef<Record<string, string>>({})
 
   const isSuper = currentUser?.auth === 'A'
 
@@ -94,13 +95,16 @@ export default function Workspace() {
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
-      // CONNECTING 상태 워크스페이스 자동 폴링 (페이지 로드 시 복원)
+      // CONNECTING 상태 워크스페이스 폴링 복원 (페이지 로드 시)
+      // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
+      const storeTimers = useGlobalTaskStore.getState()._timers
       wsList.forEach(ws => {
-        if (ws.status === 'CONNECTING' && !폴링ref.current[ws.name]) {
-          const taskId = `ws-connect-${ws.name}-restore`
-          startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
-          폴링시작(ws.name, taskId)
-        }
+        if (ws.status !== 'CONNECTING') return
+        const existingTaskId = Object.keys(storeTimers).find(tid => tid.startsWith(`ws-`) && tid.includes(ws.name))
+        if (existingTaskId) return // 이미 store에서 폴링 중
+        const taskId = `ws-connect-${ws.name}-restore`
+        startTask({ id: taskId, type: '워크스페이스 연결', label: `${ws.name} 연결 중`, percent: 0 })
+        폴링시작(ws.name, taskId)
       })
       // FAILED 워크스페이스 에러 메시지 조회
       wsList.filter(ws => ws.status === 'FAILED').forEach(ws => {
@@ -119,9 +123,7 @@ export default function Workspace() {
 
   useEffect(() => {
     목록조회()
-    return () => {
-      Object.values(폴링ref.current).forEach(clearInterval)
-    }
+    // 폴링은 globalTaskStore가 관리 — 언마운트 시 중단하지 않음
   }, [])
 
   // USED 상태 워크스페이스 작업 진행률 로드
@@ -142,61 +144,48 @@ export default function Workspace() {
     })
   }, [목록])
 
-  const 폴링종료 = async (wsName: string, taskId?: string, taskStatus: 'done' | 'error' = 'done') => {
-    clearInterval(폴링ref.current[wsName])
-    delete 폴링ref.current[wsName]
-    set복사진행중(prev => {
-      const next = { ...prev }
-      delete next[wsName]
-      return next
-    })
-    // 초기화 모드 플래그 정리
-    set에러메시지(prev => {
-      const next = { ...prev }
-      delete next[wsName + '_mode']
-      return next
-    })
-    if (taskId) finishTask(taskId, taskStatus)
-    await 목록조회()
-  }
-
-  const 폴링시작 = (wsName: string, taskId: string) => {
-    if (폴링ref.current[wsName]) return
-    폴링ref.current[wsName] = setInterval(async () => {
-      try {
+  const 폴링시작 = (wsName: string, taskId: string, isReinit?: boolean) => {
+    // store 폴링: 페이지 이동과 무관하게 유지됨
+    폴링ref.current[taskId] = wsName
+    startPolling(
+      taskId,
+      async () => {
         const res = await workspaceAPI.진행률조회(wsName)
         const st = res.data?.status
         if (st === 'done') {
           const elapsed = res.data?.elapsed
           const fileCount = res.data?.file_count
           const timeStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${Math.round(elapsed % 60)}초` : `${elapsed}초`
-          const isReinit = 에러메시지[wsName + '_mode'] === 'reinit'
           message.success(`${isReinit ? '초기화' : '연결'} 완료 — ${fileCount ?? 0}개 파일, ${timeStr}`)
-          updateProgress(taskId, 100)
-          await 폴링종료(wsName, taskId, 'done')
-          return
+          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
+          set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
+          return { percent: 100, done: true, error: false }
         }
-        if (st === 'idle' || st === 'error' || st === 'cancelled') {
-          if (st === 'error') {
-            const errMsg = res.data?.message || '알 수 없는 오류'
-            set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
-            message.error(`연결 실패: ${errMsg}`)
-          } else if (st === 'cancelled') {
-            message.info(`"${wsName}" 연결이 취소되었습니다`)
-          }
-          await 폴링종료(wsName, taskId, st === 'error' ? 'error' : 'done')
-          return
+        if (st === 'error') {
+          const errMsg = res.data?.message || '알 수 없는 오류'
+          set에러메시지(prev => ({ ...prev, [wsName]: errMsg }))
+          message.error(`연결 실패: ${errMsg}`)
+          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
+          return { percent: 0, done: false, error: true, message: errMsg }
+        }
+        if (st === 'cancelled') {
+          message.info(`"${wsName}" 연결이 취소되었습니다`)
+          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
+          set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
+          return { percent: 0, done: true, error: false }
+        }
+        if (st === 'idle' || !st) {
+          set복사진행중(prev => { const n = { ...prev }; delete n[wsName]; return n })
+          return { percent: 100, done: true, error: false }
         }
         const percent: number = res.data?.percent ?? 0
         set복사진행중(prev => ({ ...prev, [wsName]: percent }))
-        updateProgress(taskId, percent)
-        if (percent >= 100) {
-          await 폴링종료(wsName, taskId, 'done')
-        }
-      } catch {
-        await 폴링종료(wsName, taskId, 'error')
-      }
-    }, 2000)
+        return { percent, done: false, error: false }
+      },
+      2000,
+      () => { 목록조회(); delete 폴링ref.current[taskId] },
+      () => { 목록조회(); delete 폴링ref.current[taskId] },
+    )
   }
 
   const 생성핸들러 = async () => {
@@ -317,7 +306,7 @@ export default function Workspace() {
       set에러메시지(prev => ({ ...prev, [wsName + '_mode']: 'reinit' }))
       await workspaceAPI.도메인연결(wsName, domain, jianaVer)
       message.success(`"${wsName}" 초기화 중...`)
-      폴링시작(wsName, taskId)
+      폴링시작(wsName, taskId, true)
       await 목록조회()
     } catch (err: any) {
       set복사진행중(prev => {

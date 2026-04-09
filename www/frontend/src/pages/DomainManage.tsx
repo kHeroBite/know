@@ -144,7 +144,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 export default function DomainManage() {
   const { user: currentUser } = useAuthStore()
   const isSuper = currentUser?.auth === 'A'
-  const { isBlocked, startTask, updateProgress, finishTask } = useGlobalTaskStore()
+  const { isBlocked, startTask, finishTask, startPolling } = useGlobalTaskStore()
 
   // 도메인 목록
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -191,8 +191,12 @@ export default function DomainManage() {
       set도메인목록(dmRes.data)
       set워크스페이스목록(wsRes.data)
       // 진행 중인 도메인 폴링 복원 (페이지 로드 시)
+      // globalTaskStore에 이미 폴링 중인 것은 스킵 (페이지 이동 후 복귀 시)
+      const storeTimers = useGlobalTaskStore.getState()._timers
       for (const dm of dmRes.data) {
         if (도메인폴링ref.current[dm.id]) continue
+        const existingTaskId = Object.keys(storeTimers).find(tid => tid.includes(`domain-add-${dm.id}`))
+        if (existingTaskId) continue // 이미 store에서 폴링 중
         try {
           const res = await workspaceAPI.도메인추가진행률(dm.id)
           if (res.data?.status && res.data.status !== 'idle' && res.data.status !== 'done') {
@@ -211,23 +215,20 @@ export default function DomainManage() {
   useEffect(() => { 목록조회() }, [])
 
   const 도메인폴링시작 = (dmName: string, taskId: string) => {
-    if (도메인폴링ref.current[dmName]) return
-    도메인폴링ref.current[dmName] = setInterval(async () => {
-      try {
+    // store 폴링: 페이지 이동과 무관하게 유지됨
+    도메인폴링ref.current[dmName] = taskId as any
+    startPolling(
+      taskId,
+      async () => {
         const res = await workspaceAPI.도메인추가진행률(dmName)
         const st = res.data?.status
         if (!st || st === 'idle') {
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
           set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          finishTask(taskId, 'done')
-          await 목록조회()
-          return
+          return { percent: 100, done: true, error: false }
         }
         if (st === 'dict_copying') {
           set도메인복사진행중(prev => ({ ...prev, [dmName]: 92 }))
-          updateProgress(taskId, 92)
-          return
+          return { percent: 92, done: false, error: false }
         }
         if (st === 'done') {
           const elapsed = res.data?.elapsed
@@ -235,31 +236,22 @@ export default function DomainManage() {
           const dictResult = res.data?.dict_result
           const dictMsg = dictResult ? ` + 사전 ${Object.values(dictResult).filter(v => typeof v === 'number').reduce((a: number, b) => a + (b as number), 0)}건` : ''
           message.success(`도메인 "${dmName}" 추가 완료 — ${fc ?? 0}개 파일${dictMsg}, ${elapsed}초`)
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
           set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          finishTask(taskId, 'done')
-          await 목록조회()
-          return
+          return { percent: 100, done: true, error: false }
         }
         if (st === 'error') {
           message.error(`도메인 추가 실패: ${res.data?.message}`)
-          clearInterval(도메인폴링ref.current[dmName])
-          delete 도메인폴링ref.current[dmName]
           set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-          finishTask(taskId, 'error')
-          return
+          return { percent: 0, done: false, error: true, message: res.data?.message }
         }
         const pct = res.data?.percent ?? 0
         set도메인복사진행중(prev => ({ ...prev, [dmName]: pct }))
-        updateProgress(taskId, pct)
-      } catch {
-        clearInterval(도메인폴링ref.current[dmName])
-        delete 도메인폴링ref.current[dmName]
-        set도메인복사진행중(prev => { const n = { ...prev }; delete n[dmName]; return n })
-        finishTask(taskId, 'error')
-      }
-    }, 1500)
+        return { percent: pct, done: false, error: false }
+      },
+      1500,
+      () => { 목록조회(); delete 도메인폴링ref.current[dmName] },
+      () => { 목록조회(); delete 도메인폴링ref.current[dmName] },
+    )
   }
 
   // 임포트
@@ -359,6 +351,7 @@ export default function DomainManage() {
                   </div>
                   <Space size={8}>
                     <Button icon={<BookOutlined />} type={선택됨 ? 'primary' : 'default'}
+                      disabled={isBlocked}
                       onClick={() => { set사전도메인(선택됨 ? null : dm.id); setDicKey(k => k + 1) }}
                     >사전 관리</Button>
                     {isSuper && <>
@@ -388,7 +381,7 @@ export default function DomainManage() {
           <Divider />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Title level={5} style={{ margin: 0 }}><BookOutlined /> {사전도메인} 사전 관리</Title>
-            <Button icon={<ImportOutlined />} onClick={임포트모달열기}>파일에서 가져오기</Button>
+            <Button icon={<ImportOutlined />} disabled={isBlocked} onClick={임포트모달열기}>파일에서 가져오기</Button>
           </div>
           <Row gutter={16} key={dicKey}>
             <Col span={8}><DicColumn dicType="udic" 선택도메인={사전도메인} /></Col>
