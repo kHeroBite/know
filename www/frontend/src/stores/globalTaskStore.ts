@@ -245,8 +245,13 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
     // 클라이언트가 폴링 중인 task는 덮어쓰지 않음 (applyRemoteTask 덮어쓰기 버그 방지)
     const isPolling = !!state._timers[task.id]
     if (isPolling) return
+    // 기존 같은 task의 percent보다 낮은 값은 덮어쓰지 않음 (페이지 이동 시 0% 깜빡임 방지)
+    const safePercent =
+      state.currentTask?.id === task.id
+        ? Math.max(task.percent ?? 0, state.currentTask.percent)
+        : (task.percent ?? 0)
     set({
-      currentTask: { ...task, updatedAt: Date.now() },
+      currentTask: { ...task, percent: safePercent, updatedAt: Date.now() },
       isBlocked: true,
     })
 
