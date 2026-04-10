@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from models.pipeline import TaskAssignment
 
 logger = logging.getLogger(__name__)
-_UPLOAD_DIR = "/home/know/apps/know-api/uploads/"
+_UPLOAD_DIR = "/home/know/apps/know-ops/www/uploads/"
 
 # upload_file_service 시 미리보기 행 수
 _PREVIEW_ROWS = 5

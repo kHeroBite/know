@@ -39,8 +39,8 @@
 ### 2.1 최초 설치
 
     ssh know@133.186.132.245
-    cd /home/know/apps/know-api
-    source venv/bin/activate
+    cd /home/know/apps/know-ops/www
+    source /home/know/miniconda3/bin/activate
     pip install -r requirements.txt
     python3 init_db.py
 
@@ -230,7 +230,7 @@
 
 서버에서 직접 실행하는 명령줄 도구입니다.
 
-    cd /home/know/apps/know-api
+    cd /home/know/apps/know-ops/www
 
 ### 13.1 DB 초기화
 

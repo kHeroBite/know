@@ -7,23 +7,23 @@ Requires=redis.service
 Type=forking
 User=know
 Group=know
-WorkingDirectory=/home/know/apps/know-api
-Environment="PATH=/home/know/apps/know-api/venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/know/apps/know-api/venv/bin/celery \
+WorkingDirectory=/home/know/apps/know-ops/www
+Environment="PATH=/home/know/miniconda3/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/know/miniconda3/bin/celery \
     -A core.celery worker \
     --loglevel=info \
     --concurrency=1 \
-    --logfile=/home/know/apps/know-api/logs/celery.log \
-    --pidfile=/home/know/apps/know-api/logs/celery.pid \
+    --logfile=/home/know/apps/know-ops/www/logs/celery.log \
+    --pidfile=/home/know/apps/know-ops/www/logs/celery.pid \
     --detach
-ExecStop=/home/know/apps/know-api/venv/bin/celery \
+ExecStop=/home/know/miniconda3/bin/celery \
     -A core.celery control shutdown
 ExecReload=/bin/kill -s HUP $MAINPID
-PIDFile=/home/know/apps/know-api/logs/celery.pid
+PIDFile=/home/know/apps/know-ops/www/logs/celery.pid
 Restart=on-failure
 RestartSec=10s
-StandardOutput=append:/home/know/apps/know-api/logs/celery-stdout.log
-StandardError=append:/home/know/apps/know-api/logs/celery-stderr.log
+StandardOutput=append:/home/know/apps/know-ops/www/logs/celery-stdout.log
+StandardError=append:/home/know/apps/know-ops/www/logs/celery-stderr.log
 
 [Install]
 WantedBy=multi-user.target

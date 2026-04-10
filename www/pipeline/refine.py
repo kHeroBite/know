@@ -16,7 +16,7 @@ from typing import Dict, Any
 logger = logging.getLogger(__name__)
 
 # 정제 결과 저장 기본 디렉토리
-OUTPUT_DIR = "/home/know/apps/know-api/uploads/refined"
+OUTPUT_DIR = "/home/know/apps/know-ops/www/uploads/refined"
 
 
 def refine_search_log(file_path: str, pipeline_id: int = None) -> Dict[str, Any]:
