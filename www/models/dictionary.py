@@ -61,7 +61,7 @@ def get_dict_table(site: str, dic_type: str, metadata: MetaData) -> Table:
         return Table(
             table_name, metadata,
             Column("_WORD", String(128), primary_key=True),
-            Column("_DISPLAY_CATEGORY", String(128)),
+            Column("_DISPLAY_CATEGORY", String(1024)),
             Column("_DELETE_CATEGORY", String(128)),
             Column("_USER_ID", String(32)),
             Column("_UPDATED", DateTime),

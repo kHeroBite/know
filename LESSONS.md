@@ -460,3 +460,21 @@ elif os.path.isdir(path):
 **Level**: 1 (1회 발생, docs 기록)
 
 **MEMORY.md 점검 결과**: L-049, L-050 모두 Level 1 (1회성 실수, hook 정상 차단). 이미 hook이 물리 차단하므로 MEMORY.md 추가 반영 없음.
+
+---
+
+## [2026-04-10] MySQL 사전 4종 정합성 수정 (CATEGORY 누락 + 컬럼 불일치)
+
+> **작업 요약**: MySQL→SQLite 마이그레이션/복사/건수조회 함수 4개에 CATEGORY 추가 + MySQL Java 원본 스키마 기반 컬럼 방어적 SELECT 수정
+
+### L-316: MySQL-SQLite 마이그레이션 코드에서 외부 스키마 미확인으로 컬럼 불일치 발생 (2026-04-10)
+
+**현상**: dictionary_service.py의 migrate_dict_from_mysql()에서 `SELECT _WORD, _MEMO, _USER_ID FROM {mysql_tbl}` 실행 시 MySQL 원본에 `_MEMO`, `_USER_ID` 컬럼이 없어 에러 발생 위험.
+**원인**: tobe SQLite 스키마 기준으로 SELECT 컬럼을 작성하고, Java 원본 MySQL 스키마를 별도로 확인하지 않음.
+**해결**: Java 소스에서 MySQL 테이블 컬럼 목록 확인 후 실제 존재하는 컬럼(_WORD 단독, _HEAD_WORD+_TAIL_WORD)만 SELECT하도록 수정.
+**재발방지**: MySQL(외부 시스템) 연동 코드 작성 시 Java 원본 소스/마이그레이션 스크립트에서 실제 컬럼 목록 먼저 확인 필수. 내부 tobe 스키마와 외부 소스 스키마가 다를 수 있음에 유의.
+**Level**: 2 (재발 가능성 높음 — MySQL 연동 코드 작성 시마다 발생 가능, MEMORY.md 반영)
+
+**추가 교훈**: 사전 타입 확장 시 dictionary_service.py 내 타입 열거 위치 4곳(get_mysql_dict_count/migrate_dict_from_mysql/copy_domain_dict/get_dict_db_count) 동시 수정 필수. 하나라도 누락 시 기능 불일치 발생.
+
+**MEMORY.md 점검 결과**: L-316은 Level 2 (외부 MySQL 스키마 미확인 패턴 — 재발 가능성 높음). MEMORY.md에 반영.

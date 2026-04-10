@@ -318,10 +318,10 @@ def _extra_search_paths(site: str) -> List[str]:
 
 
 def get_dict_db_count(db: Session, site: str) -> dict:
-    """도메인 사전 DB 건수 반환 (udic/cndic/thesaurus)."""
+    """도메인 사전 DB 건수 반환 (udic/cndic/thesaurus/category)."""
     from sqlalchemy import func, select
-    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
-    for dic_type in ("udic", "cndic", "thesaurus"):
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    for dic_type in ("udic", "cndic", "thesaurus", "category"):
         try:
             tbl = _dict_table(db, site, dic_type)
             결과[dic_type] = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
@@ -332,7 +332,7 @@ def get_dict_db_count(db: Session, site: str) -> dict:
 
 def preview_dict_file_count(site: str) -> dict:
     """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
-    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
     추가경로 = _extra_search_paths(site)
     if not os.path.isdir(도메인경로) and not 추가경로:
@@ -659,11 +659,11 @@ def import_dict_from_file(db: Session, site: str, user_id: Optional[str] = None)
 # ─── 도메인 사전 복사 ─────────────────────────────────────────────
 
 def copy_domain_dict(db: Session, source_site: str, target_site: str) -> dict:
-    """기존 SQLite 도메인의 사전 3종(UDIC/CNDIC/THESAURUS)을 새 도메인으로 복사."""
+    """기존 SQLite 도메인의 사전 4종(UDIC/CNDIC/THESAURUS/CATEGORY)을 새 도메인으로 복사."""
     validate_site_name(source_site)
     validate_site_name(target_site)
     결과 = {}
-    for dic_type in ("udic", "cndic", "thesaurus"):
+    for dic_type in ("udic", "cndic", "thesaurus", "category"):
         src_tbl = _dict_table(db, source_site, dic_type)
         tgt_tbl = _dict_table(db, target_site, dic_type)
         db.execute(delete(tgt_tbl))
@@ -674,11 +674,19 @@ def copy_domain_dict(db: Session, source_site: str, target_site: str) -> dict:
                     _WORD=r["_WORD"], _MEMO=r.get("_MEMO"),
                     _USER_ID=r.get("_USER_ID"), _UPDATED=datetime.now(),
                 ))
-        else:  # thesaurus
+        elif dic_type == "thesaurus":
             for r in rows:
                 db.execute(insert(tgt_tbl).values(
                     _HEAD_WORD=r["_HEAD_WORD"], _TAIL_WORD=r.get("_TAIL_WORD"),
                     _MEMO=r.get("_MEMO"), _USER_ID=r.get("_USER_ID"), _UPDATED=datetime.now(),
+                ))
+        else:  # category
+            for r in rows:
+                db.execute(insert(tgt_tbl).values(
+                    _WORD=r["_WORD"],
+                    _DISPLAY_CATEGORY=r.get("_DISPLAY_CATEGORY"),
+                    _DELETE_CATEGORY=r.get("_DELETE_CATEGORY"),
+                    _USER_ID=r.get("_USER_ID"), _UPDATED=datetime.now(),
                 ))
         결과[dic_type] = len(rows)
     db.commit()
@@ -707,16 +715,16 @@ def list_mysql_domains() -> list:
 
 
 def get_mysql_dict_count(site: str) -> dict:
-    """MySQL에서 도메인 사전 3종 건수 반환 (udic/cndic/thesaurus)."""
+    """MySQL에서 도메인 사전 4종 건수 반환 (udic/cndic/thesaurus/category)."""
     import pymysql
-    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     try:
         conn = pymysql.connect(
             host="localhost", user="root", password="@!roqkftjqj#",
             database="know_mng", charset="utf8",
         )
         cur = conn.cursor()
-        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS")]:
+        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS"), ("category", "_CATEGORY")]:
             try:
                 cur.execute(f"SELECT COUNT(*) FROM `{site}{suffix}`")
                 결과[dic_type] = cur.fetchone()[0]
@@ -729,7 +737,7 @@ def get_mysql_dict_count(site: str) -> dict:
 
 
 def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
-    """MySQL의 사전 3종(UDIC/CNDIC/THESAURUS)을 SQLite 새 도메인으로 마이그레이션."""
+    """MySQL의 사전 4종(UDIC/CNDIC/THESAURUS/CATEGORY)을 SQLite 새 도메인으로 마이그레이션."""
     import pymysql
     from core.database import 세션팩토리
 
@@ -743,7 +751,7 @@ def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
 
     결과 = {}
     try:
-        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS")]:
+        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS"), ("category", "_CATEGORY")]:
             mysql_tbl = f"{mysql_site}{suffix}"
             tgt_tbl = _dict_table(db, target_site, dic_type)
 
@@ -759,20 +767,26 @@ def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
                 db.execute(delete(tgt_tbl))
 
                 if dic_type in ("udic", "cndic"):
-                    cur.execute(f"SELECT _WORD, _MEMO, _USER_ID FROM `{mysql_tbl}`")
+                    cur.execute(f"SELECT _WORD FROM `{mysql_tbl}`")
                     rows = cur.fetchall()
                     for r in rows:
                         db.execute(insert(tgt_tbl).values(
-                            _WORD=r[0], _MEMO=r[1],
-                            _USER_ID=r[2], _UPDATED=datetime.now(),
+                            _WORD=r[0], _UPDATED=datetime.now(),
                         ))
-                else:  # thesaurus
-                    cur.execute(f"SELECT _HEAD_WORD, _TAIL_WORD, _MEMO, _USER_ID FROM `{mysql_tbl}`")
+                elif dic_type == "thesaurus":
+                    cur.execute(f"SELECT _HEAD_WORD, _TAIL_WORD FROM `{mysql_tbl}`")
                     rows = cur.fetchall()
                     for r in rows:
                         db.execute(insert(tgt_tbl).values(
-                            _HEAD_WORD=r[0], _TAIL_WORD=r[1],
-                            _MEMO=r[2], _USER_ID=r[3], _UPDATED=datetime.now(),
+                            _HEAD_WORD=r[0], _TAIL_WORD=r[1], _UPDATED=datetime.now(),
+                        ))
+                else:  # category
+                    cur.execute(f"SELECT _WORD, _DISPLAY_CATEGORY, _DELETE_CATEGORY FROM `{mysql_tbl}`")
+                    rows = cur.fetchall()
+                    for r in rows:
+                        db.execute(insert(tgt_tbl).values(
+                            _WORD=r[0], _DISPLAY_CATEGORY=r[1],
+                            _DELETE_CATEGORY=r[2], _UPDATED=datetime.now(),
                         ))
 
                 db.commit()

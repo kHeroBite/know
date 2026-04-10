@@ -33,3 +33,15 @@
 - 각 증거 파일은 해당 스킬에서만 생성 (대리 생성 금지)
 - ktest_build → build_done, ktest → ui_test_done 등
 
+
+---
+
+## MySQL 외부 시스템 연동 패턴
+
+### MySQL 원본 스키마 vs tobe SQLite 스키마 불일치 주의 (L-316)
+- MySQL(Java 원본) 연동 코드 작성 시 **Java 소스에서 실제 컬럼 목록 먼저 확인** 필수
+- tobe SQLite 스키마와 MySQL 원본 스키마가 다를 수 있음:
+  - UDIC/CNDIC: MySQL에 `_WORD`만 존재 (tobe에는 `_MEMO`, `_USER_ID` 추가됨)
+  - THESAURUS: MySQL에 `_HEAD_WORD`, `_TAIL_WORD`만 존재
+- **사전 타입 확장 시** dictionary_service.py 내 4곳 동시 수정 필수:
+  `get_mysql_dict_count` / `migrate_dict_from_mysql` / `copy_domain_dict` / `get_dict_db_count`

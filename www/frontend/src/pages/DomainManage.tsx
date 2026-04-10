@@ -162,7 +162,7 @@ export default function DomainManage() {
   const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
   const [사전복사소스, set사전복사소스] = useState<string | null>(null)
   const [mysql소스목록, setMysql소스목록] = useState<string[]>([])
-  const [복사소스사전건수, set복사소스사전건수] = useState<{udic: number, cndic: number, thesaurus: number} | null>(null)
+  const [복사소스사전건수, set복사소스사전건수] = useState<{udic: number, cndic: number, thesaurus: number, category: number} | null>(null)
   const 도메인이름입력ref = useRef<any>(null)
 
   // 이름 변경 (display_name 전용 — 도메인ID는 고정)
@@ -476,7 +476,7 @@ export default function DomainManage() {
               try {
                 if (도메인소스타입 === 'domain') {
                   const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
-                  set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                  set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0, category: 0 })
                 } else {
                   const res = await 클라이언트.get(`/dictionaries/${v}/mysql-count`)
                   set복사소스사전건수(res.data)
@@ -497,7 +497,10 @@ export default function DomainManage() {
               <Text style={{ fontSize: 12, color: '#fa8c16' }}>
                 🔗 {복사소스사전건수.thesaurus.toLocaleString()}
               </Text>
-              <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>👤사용자 📚복합명사 🔗유사어</Text>
+              <Text style={{ fontSize: 12, color: 복사소스사전건수.category ? '#722ed1' : '#bbb' }}>
+                📂 {복사소스사전건수.category.toLocaleString()}
+              </Text>
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>👤사용자 📚복합명사 🔗유사어 📂카테고리</Text>
             </div>
           )}
           <Input ref={도메인이름입력ref} placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} autoComplete="off" />
@@ -531,12 +534,12 @@ export default function DomainManage() {
                   set복사소스사전건수(null)
                   try {
                     const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
-                    set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                    set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0, category: 0 })
                   } catch { /* 무시 */ }
                 }} value={사전복사소스} />  {/* sqlite는 항상 SQLite DB 건수 */}
               {사전복사소스 && 복사소스사전건수 && (
                 <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
-                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
+                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()} 📂{복사소스사전건수.category.toLocaleString()}
                 </Text>
               )}
             </div>
@@ -555,7 +558,7 @@ export default function DomainManage() {
                 }} value={사전복사소스} />  {/* mysql은 항상 MySQL 건수 */}
               {사전복사소스 && 복사소스사전건수 && (
                 <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
-                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
+                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()} 📂{복사소스사전건수.category.toLocaleString()}
                 </Text>
               )}
             </div>

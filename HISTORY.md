@@ -916,3 +916,28 @@
 - 다중 탭/PC 환경에서 전역작업 큐가 탭별로 독립 상태로 분기되는 문제 발생
 - `_finishTask`에서 `syncToServer(null)`을 즉시 호출하면 다른 탭의 WS가 null을 수신하기 전에 isBlocked를 해제하여 race condition 유발
 - WS 재연결 후 초기 상태를 서버에서 fetch하지 않아 재연결 시 이전 상태 유실 문제
+
+---
+
+## 2026-04-10 — MySQL 사전 4종 정합성 수정 (CATEGORY 누락 + 컬럼 불일치)
+
+### 수정 내용
+- **www/services/dictionary_service.py**:
+  - `get_mysql_dict_count()`: 사전 3종 → 4종 (CATEGORY `_CATEGORY` 접미사 추가)
+  - `get_dict_db_count()`: 3종 → 4종 (category 키 추가)
+  - `preview_dict_file_count()`: 결과 dict에 category:0 추가
+  - `copy_domain_dict()`: 3종 → 4종 복사 + category 전용 컬럼(_WORD/_DISPLAY_CATEGORY/_DELETE_CATEGORY) 처리
+  - `migrate_dict_from_mysql()`: 3종 → 4종 마이그레이션 + MySQL Java 원본 스키마 기반 컬럼 방어적 SELECT
+    - UDIC/CNDIC: `SELECT _WORD` (Java 원본에 _MEMO/_USER_ID 없음)
+    - THESAURUS: `SELECT _HEAD_WORD, _TAIL_WORD` (Java 원본에 _MEMO/_USER_ID 없음)
+    - CATEGORY(신규): `SELECT _WORD, _DISPLAY_CATEGORY, _DELETE_CATEGORY`
+- **www/models/dictionary.py**:
+  - `_DISPLAY_CATEGORY` 컬럼: `String(128)` → `String(1024)` (Java 원본 varchar(1024) 맞춤)
+- **www/frontend/src/pages/DomainManage.tsx**:
+  - 복사소스 사전건수 타입에 `category` 추가
+  - 사전건수 표시 UI에 category 항목 추가 (📂 아이콘)
+
+### 배경
+- MySQL → SQLite 마이그레이션 시 CATEGORY 사전 타입이 누락되어 있었음
+- Java 원본 MySQL 스키마(_MEMO/_USER_ID 컬럼 없음) 미확인으로 잘못된 SELECT 구문 작성 위험
+- know_mng DB 현재 비어있어 실 테스트는 DB 복원 후 필요 (Java 스키마 기반 방어적 구현 적용)
