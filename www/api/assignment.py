@@ -158,6 +158,40 @@ def bulk_delete_keywords(
     return {"deleted": deleted, "errors": errors}
 
 
+
+@라우터.get("/keyword/{keyword_id}")
+def get_keyword(
+    keyword_id: int,
+    workspace: str = Query(...),
+    db: Session = Depends(db_session),
+    _: dict = Depends(get_current_user),
+):
+    """키워드 단건 조회 — 빌드 완료 후 분석결과 즉시 갱신용."""
+    row = db.execute(
+        text(
+            "SELECT id, line_num, keyword, analysis, full_analysis, status, "
+            "assigned_to, assigned_at, completed_at, flag "
+            "FROM keyword_assignments "
+            "WHERE workspace=:ws AND id=:kid"
+        ),
+        {"ws": workspace, "kid": keyword_id},
+    ).fetchone()
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="키워드를 찾을 수 없습니다")
+    return {
+        "id": row[0],
+        "line_num": row[1],
+        "keyword": row[2],
+        "analysis": row[3] or "",
+        "full_analysis": row[4] or "",
+        "status": row[5],
+        "assigned_to": row[6],
+        "assigned_at": str(row[7]) if row[7] else None,
+        "completed_at": str(row[8]) if row[8] else None,
+        "flag": row[9] or "",
+    }
+
 @라우터.post("/reset")
 def initialize(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(db_session), current: dict = Depends(get_current_user)):

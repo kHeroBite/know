@@ -11,8 +11,8 @@ import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
+import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import 클라이언트 from '../api/client'
-import { 빌드API } from '../api/pipeline'
 import AIAnalysis from '../components/workspace/AIAnalysis'
 import WorkHistory, { WorkHistoryRef, WorkHistoryItem } from '../components/workspace/WorkHistory'
 import HotkeySettings from '../components/workspace/HotkeySettings'
@@ -75,8 +75,8 @@ export default function KnowledgeWork() {
   const [analysisRightTab, setAnalysisRightTab] = useState<'morpheme' | 'ai'>('morpheme')
   const [fullTokenIdx, setFullTokenIdx] = useState(-1)
 
-  // 사전 빌드 상태
-  const [buildLoading, setBuildLoading] = useState(false)
+  // 사전 빌드 — globalTaskStore
+  const { executeBuild, isBlocked } = useGlobalTaskStore()
 
   // 핫키
   const [hotkeys, setHotkeys] = useState<Record<string, string>>(기본핫키맵)
@@ -488,34 +488,24 @@ export default function KnowledgeWork() {
 
   // ─── 사전 빌드 ──────────────────────────────────────────────
 
-  const 사전빌드실행 = useCallback(async () => {
-    if (!selectedDomain || buildLoading) return
-    setBuildLoading(true)
-    try {
-      await 빌드API.빌드시작(selectedDomain, selectedWorkspace || undefined)
-      // 빌드 상태 폴링 (최대 60초)
-      let done = false
-      for (let i = 0; i < 12; i++) {
-        await new Promise(r => setTimeout(r, 5000))
-        try {
-          const { data } = await 빌드API.상태조회(selectedDomain)
-          const status = data?.status
-          if (status === 'completed' || status === 'success') { done = true; break }
-          if (status === 'failed') { message.error('빌드 실패'); return }
-        } catch { break }
-      }
-      if (done) {
-        message.success('사전 빌드 완료')
-        // 분석결과는 DB에서 자동 갱신 (키워드 목록 reload로 처리)
-      } else {
-        message.warning('빌드가 진행 중입니다. 잠시 후 확인하세요.')
-      }
-    } catch {
-      message.error('빌드 요청 실패')
-    } finally {
-      setBuildLoading(false)
-    }
-  }, [selectedDomain, selectedWorkspace, buildLoading, selected, analysisTab])
+  const 사전빌드실행 = useCallback(() => {
+    if (!selectedDomain || isBlocked) return
+    executeBuild(selectedDomain, selectedWorkspace, {
+      onDone: () => {
+        message.success('사전 빌드 완료 — 분석결과를 갱신합니다.')
+        // 현재 선택된 키워드 단건 갱신 후 목록 전체 재로드
+        if (selected && selectedWorkspace) {
+          assignmentApi.키워드단건(selectedWorkspace, selected.id)
+            .then(({ data }) => setSelected(data))
+            .catch(() => {})
+        }
+        목록초기화()
+      },
+      onError: (msg) => {
+        message.error(msg || '빌드 실패')
+      },
+    })
+  }, [selectedDomain, selectedWorkspace, isBlocked, executeBuild, 목록초기화, selected])
 
   // ─── 추천 검색 ───────────────────────────────────────────────
 
@@ -1094,7 +1084,7 @@ export default function KnowledgeWork() {
 
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0 }}
+      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)', gap: 0, overflow: 'hidden' }}
       onClick={() => {
         // 방금(100ms 이내) 열린 메뉴는 닫지 않음
         set컨텍스트메뉴(prev => (Date.now() - prev.ts < 100) ? prev : { ...prev, open: false })
@@ -1107,7 +1097,7 @@ export default function KnowledgeWork() {
           message="이전 작업이 복구되었습니다."
           type="info"
           showIcon
-          style={{ marginBottom: 4 }}
+          style={{ flexShrink: 0 }}
           action={
             <Space>
               <Button
@@ -1140,8 +1130,9 @@ export default function KnowledgeWork() {
       {/* 배너 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '8px 16px', marginBottom: 8,
+        padding: '8px 16px',
         background: '#fafafa', borderBottom: '1px solid #f0f0f0', borderRadius: 6,
+        flexShrink: 0,
       }}>
         <span style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>작업실</span>
         <Space wrap>
@@ -1176,11 +1167,11 @@ export default function KnowledgeWork() {
             </>
           )}
           <Button
-            loading={buildLoading}
-            disabled={!selectedDomain || buildLoading}
+            loading={isBlocked}
+            disabled={!selectedDomain || isBlocked}
             onClick={(e) => { e.stopPropagation(); 사전빌드실행() }}
           >
-            {buildLoading ? '빌드 중...' : '사전 빌드'}
+            {isBlocked ? '빌드 중...' : '사전 빌드'}
           </Button>
           <Button
             icon={<SettingOutlined />}

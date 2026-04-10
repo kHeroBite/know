@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import 클라이언트 from '../api/client'
 import { createWorkspaceOpsSlice, type WorkspaceOpsSlice } from './workspaceOpsSlice'
 import { createDomainOpsSlice, type DomainOpsSlice } from './domainOpsSlice'
+import { createBuildOpsSlice, type BuildOpsSlice } from './buildOpsSlice'
 
 // ===== 타입 =====
 
@@ -73,7 +74,7 @@ interface GlobalTaskBase {
   stopPolling: (id: string) => void
 }
 
-export type GlobalTaskStore = GlobalTaskBase & WorkspaceOpsSlice & DomainOpsSlice
+export type GlobalTaskStore = GlobalTaskBase & WorkspaceOpsSlice & DomainOpsSlice & BuildOpsSlice
 
 /** 서버에 전역작업 상태 동기화 (fire-and-forget) */
 async function syncToServer(task: GlobalTask | null) {
@@ -304,4 +305,5 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
   // ===== slice 합성 =====
   ...createWorkspaceOpsSlice(set, get),
   ...createDomainOpsSlice(set, get),
+  ...createBuildOpsSlice(set, get),
 }))
