@@ -66,6 +66,9 @@ export const workspaceAPI = {
   도메인이름변경: (name: string, new_name: string) =>
     클라이언트.put(`/workspace-domains/${name}/rename`, { new_name }),
 
+  도메인표시이름변경: (name: string, display_name: string) =>
+    클라이언트.put(`/workspace-domains/${name}/display-name`, { display_name }),
+
   // 작업이력
   fetchWorkHistory: (workspace: string, domain: string) =>
     클라이언트.get('/work-history', { params: { workspace, domain } }),

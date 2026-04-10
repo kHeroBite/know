@@ -724,6 +724,21 @@ def rename_domain(old_name: str, new_name: str) -> dict[str, str]:
     return {"old_name": old_name, "new_name": new_name}
 
 
+def rename_domain_display(domain_id: str, display_name: str) -> dict[str, str]:
+    """도메인 표시이름(한글명)만 변경 — 도메인 ID/폴더는 그대로 유지."""
+    domain_path = os.path.join(DOMAIN_DIR, domain_id)
+    if not os.path.isdir(domain_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"도메인을 찾을 수 없습니다: {domain_id}")
+    메타 = _read_domain_meta()
+    if display_name.strip():
+        메타[domain_id] = display_name.strip()
+    else:
+        # 빈 문자열이면 표시이름 제거 (ID로만 표시)
+        메타.pop(domain_id, None)
+    _write_domain_meta(메타)
+    return {"domain_id": domain_id, "display_name": display_name.strip()}
+
+
 def list_domains_service() -> list[dict[str, str | None]]:
     """DOMAIN_DIR 폴더 list_tasks 반환 (id + display_name). 복사 진행 중인 도메인 제외."""
     os.makedirs(DOMAIN_DIR, exist_ok=True)

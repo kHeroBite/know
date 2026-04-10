@@ -23,6 +23,7 @@ from services.workspace_service import (
     link_domain,
     delete_domain_ws,
     rename_domain,
+    rename_domain_display,
     add_domain_service,
     cancel_domain_add_service,
     get_domain_add_progress_service,
@@ -85,6 +86,10 @@ class 도메인추가요청(BaseModel):
 
 class 도메인이름변경요청(BaseModel):
     new_name: str
+
+
+class 도메인표시이름변경요청(BaseModel):
+    display_name: str
 
 
 def _check_super(current: dict) -> None:
@@ -252,6 +257,17 @@ def rename_domain_handler(
     """도메인 이름 변경 (super 전용, 연결 중 차단)."""
     _check_super(current)
     return rename_domain(name, 요청.new_name)
+
+
+@도메인관리라우터.put("/{name}/display-name")
+def rename_display_name_handler(
+    name: str,
+    요청: 도메인표시이름변경요청,
+    current: dict = Depends(get_current_user),
+) -> Dict[str, str]:
+    """도메인 표시이름(한글명) 변경 — 도메인 ID는 고정 (super 전용)."""
+    _check_super(current)
+    return rename_domain_display(name, 요청.display_name)
 
 
 # ─── 워크스페이스 CRUD ───

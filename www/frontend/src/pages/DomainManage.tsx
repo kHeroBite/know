@@ -162,9 +162,11 @@ export default function DomainManage() {
   const [사전복사모드, set사전복사모드] = useState<'none' | 'sqlite' | 'mysql'>('none')
   const [사전복사소스, set사전복사소스] = useState<string | null>(null)
   const [mysql소스목록, setMysql소스목록] = useState<string[]>([])
+  const [복사소스사전건수, set복사소스사전건수] = useState<{udic: number, cndic: number, thesaurus: number} | null>(null)
+  const 도메인이름입력ref = useRef<any>(null)
 
-  // 이름 변경
-  const [이름변경대상, set이름변경대상] = useState<string | null>(null)
+  // 이름 변경 (display_name 전용 — 도메인ID는 고정)
+  const [이름변경대상, set이름변경대상] = useState<{id: string, name: string | null} | null>(null)
   const [변경후이름, set변경후이름] = useState('')
 
   // 사전관리 선택
@@ -337,7 +339,7 @@ export default function DomainManage() {
                     >사전 관리</Button>
                     {isSuper && <>
                       <Button icon={<EditOutlined />} disabled={연결됨}
-                        onClick={() => { set이름변경대상(dm.id); set변경후이름(dm.id) }}>이름 변경</Button>
+                        onClick={() => { set이름변경대상(dm); set변경후이름(dm.name ?? '') }}>이름 변경</Button>
                       <Popconfirm title={`도메인 "${dm.id}"을 삭제하시겠습니까?`} onConfirm={async () => {
                         await executeDomainDelete(dm.id, {
                           onDone: async () => {
@@ -378,15 +380,35 @@ export default function DomainManage() {
         </>
       )}
 
-      {/* ─── 이름 변경 모달 ─── */}
-      <Modal title={`도메인 이름 변경 — ${이름변경대상}`} open={!!이름변경대상}
+      {/* ─── 이름 변경 모달 (display_name 전용 — 도메인 ID 고정) ─── */}
+      <Modal title="도메인 이름 변경" open={!!이름변경대상}
         onOk={async () => {
-          if (!이름변경대상 || !변경후이름.trim()) return
-          try { await workspaceAPI.도메인이름변경(이름변경대상, 변경후이름.trim()); message.success('이름 변경 완료'); set이름변경대상(null); set변경후이름(''); await 목록조회() }
+          if (!이름변경대상) return
+          try {
+            await workspaceAPI.도메인표시이름변경(이름변경대상.id, 변경후이름.trim())
+            message.success('이름 변경 완료')
+            set이름변경대상(null); set변경후이름('')
+            await 목록조회()
+          }
           catch (err: any) { message.error(err.response?.data?.detail || '이름 변경 실패') }
         }}
-        onCancel={() => { set이름변경대상(null); set변경후이름('') }} okText="변경" cancelText="취소" okButtonProps={{ disabled: !변경후이름.trim() }}>
-        <Input placeholder="새 도메인 이름" value={변경후이름} onChange={e => set변경후이름(e.target.value)} style={{ marginTop: 8 }} />
+        onCancel={() => { set이름변경대상(null); set변경후이름('') }} okText="변경" cancelText="취소">
+        <Space direction="vertical" style={{ width: '100%', marginTop: 8 }} size={8}>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>도메인 ID (변경 불가)</Text>
+            <Input value={이름변경대상?.id ?? ''} disabled style={{ marginTop: 4 }} />
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>표시 이름 (한글 가능, 비우면 ID로 표시)</Text>
+            <Input
+              placeholder="새 표시 이름 입력"
+              value={변경후이름}
+              onChange={e => set변경후이름(e.target.value)}
+              style={{ marginTop: 4 }}
+              autoFocus
+            />
+          </div>
+        </Space>
       </Modal>
 
       {/* ─── 도메인 추가 모달 ─── */}
@@ -395,7 +417,7 @@ export default function DomainManage() {
           if (!도메인신규이름.trim() || !도메인소스이름) { message.warning('이름과 소스를 모두 입력하세요'); return }
           set도메인추가로딩(true)
           const dmName = 도메인신규이름.trim()
-          set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null)
+          set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null); set복사소스사전건수(null)
           await executeDomainAdd(dmName, {
             base_source: 도메인소스타입,
             base_name: 도메인소스이름,
@@ -416,20 +438,16 @@ export default function DomainManage() {
           })
           set도메인추가로딩(false)
         }}
-        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null) }}
+        onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null); set복사소스사전건수(null) }}
         okText="추가" cancelText="취소" confirmLoading={도메인추가로딩} okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 }}>
         <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
-          <Input placeholder="도메인이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} autoComplete="off" />
-          <Input placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} autoComplete="off" />
+          {/* 순서: 소스타입(3) → 소스선택(4) → 도메인ID(2) → 표시이름(1) */}
           <Select style={{ width: '100%' }} value={도메인소스타입} onChange={v => {
             set도메인소스타입(v)
             set도메인소스이름(null)
             set사전복사소스(null)
-            if (v === 'domain') {
-              set사전복사모드('sqlite')
-            } else {
-              set사전복사모드('mysql')
-            }
+            set복사소스사전건수(null)
+            set사전복사모드(v === 'domain' ? 'sqlite' : 'mysql')
           }}
             options={[{ label: '현재 도메인에서 복사', value: 'domain' }, { label: '이전 도메인에서 복사', value: 'old' }]} />
           <Select style={{ width: '100%' }} placeholder="소스 선택"
@@ -441,7 +459,7 @@ export default function DomainManage() {
                 ...사전없음.map(d => ({ label: <span style={{ color: '#bbb' }}>{d}</span>, value: d })),
               ]
             })() : 도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
-            onChange={v => {
+            onChange={async v => {
               set도메인소스이름(v)
               set도메인신규이름(v)
               if (도메인소스타입 === 'domain') {
@@ -453,7 +471,32 @@ export default function DomainManage() {
                 set사전복사소스(존재 ? v : null)
                 set사전복사모드('mysql')
               }
+              // 사전 건수 조회
+              set복사소스사전건수(null)
+              try {
+                const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
+                set복사소스사전건수(res.data.db ?? { udic: res.data.udic ?? 0, cndic: res.data.cndic ?? 0, thesaurus: res.data.thesaurus ?? 0 })
+              } catch { /* 조회 실패 시 무시 */ }
+              // 도메인ID 입력란으로 포커싱
+              setTimeout(() => 도메인이름입력ref.current?.focus(), 50)
             }} value={도메인소스이름} />
+          {/* 사전 복사 소스 선택 시 건수 표시 */}
+          {도메인소스이름 && 복사소스사전건수 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+              <Text style={{ fontSize: 12, color: '#52c41a' }}>
+                👤 {복사소스사전건수.udic.toLocaleString()}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#1677ff' }}>
+                📚 {복사소스사전건수.cndic.toLocaleString()}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#fa8c16' }}>
+                🔗 {복사소스사전건수.thesaurus.toLocaleString()}
+              </Text>
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>👤사용자 📚복합명사 🔗유사어</Text>
+            </div>
+          )}
+          <Input ref={도메인이름입력ref} placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} autoComplete="off" />
+          <Input placeholder="도메인 표시이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} autoComplete="off" />
           <div>
             <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>사전 복사 옵션</Text>
             <Radio.Group value={사전복사모드} onChange={e => {
@@ -475,12 +518,42 @@ export default function DomainManage() {
             </Radio.Group>
           </div>
           {사전복사모드 === 'sqlite' && (
-            <Select style={{ width: '100%' }} placeholder="사전 복사할 기존 도메인 선택"
-              options={도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))} onChange={v => set사전복사소스(v)} value={사전복사소스} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Select style={{ flex: 1, minWidth: 0 }} placeholder="사전 복사할 기존 도메인 선택"
+                options={도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
+                onChange={async v => {
+                  set사전복사소스(v)
+                  set복사소스사전건수(null)
+                  try {
+                    const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
+                    set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                  } catch { /* 무시 */ }
+                }} value={사전복사소스} />
+              {사전복사소스 && 복사소스사전건수 && (
+                <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
+                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
+                </Text>
+              )}
+            </div>
           )}
           {사전복사모드 === 'mysql' && (
-            <Select style={{ width: '100%' }} placeholder="MySQL 도메인 선택" showSearch
-              options={mysql소스목록.map(d => ({ label: d, value: d }))} onChange={v => set사전복사소스(v)} value={사전복사소스} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Select style={{ flex: 1, minWidth: 0 }} placeholder="MySQL 도메인 선택" showSearch
+                options={mysql소스목록.map(d => ({ label: d, value: d }))}
+                onChange={async v => {
+                  set사전복사소스(v)
+                  set복사소스사전건수(null)
+                  try {
+                    const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
+                    set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                  } catch { /* 무시 */ }
+                }} value={사전복사소스} />
+              {사전복사소스 && 복사소스사전건수 && (
+                <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
+                  👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
+                </Text>
+              )}
+            </div>
           )}
         </Space>
       </Modal>
