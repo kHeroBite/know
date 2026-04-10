@@ -28,6 +28,7 @@ from services.dictionary_service import (
     bulk_add_synonyms_service,
     preview_dict_file_count,
     get_dict_db_count,
+    get_mysql_dict_count,
     start_async_file_import,
     get_import_progress_service,
 )
@@ -62,6 +63,12 @@ def preview_file_count(domain: str, db: Session = Depends(db_session), _: dict =
         "cndic": 파일["cndic"],
         "thesaurus": 파일["thesaurus"],
     }
+
+
+@라우터.get("/{domain}/mysql-count")
+def get_mysql_count(domain: str, _: dict = Depends(get_current_user)):
+    """MySQL 도메인 사전 3종 건수 조회 (이전 사전 소스 선택 시 사용)."""
+    return get_mysql_dict_count(domain.upper())
 
 
 @라우터.post("/{domain}/import-from-files")

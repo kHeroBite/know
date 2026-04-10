@@ -702,6 +702,28 @@ def list_mysql_domains() -> list:
         return []
 
 
+def get_mysql_dict_count(site: str) -> dict:
+    """MySQL에서 도메인 사전 3종 건수 반환 (udic/cndic/thesaurus)."""
+    import pymysql
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    try:
+        conn = pymysql.connect(
+            host="localhost", user="root", password="@!roqkftjqj#",
+            database="know_mng", charset="utf8",
+        )
+        cur = conn.cursor()
+        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS")]:
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM `{site}{suffix}`")
+                결과[dic_type] = cur.fetchone()[0]
+            except Exception:
+                결과[dic_type] = 0
+        conn.close()
+    except Exception:
+        pass
+    return 결과
+
+
 def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
     """MySQL의 사전 3종(UDIC/CNDIC/THESAURUS)을 SQLite 새 도메인으로 마이그레이션."""
     import pymysql

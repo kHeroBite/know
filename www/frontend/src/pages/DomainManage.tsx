@@ -471,11 +471,16 @@ export default function DomainManage() {
                 set사전복사소스(존재 ? v : null)
                 set사전복사모드('mysql')
               }
-              // 사전 건수 조회
+              // 사전 건수 조회 (소스타입에 따라 SQLite or MySQL)
               set복사소스사전건수(null)
               try {
-                const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
-                set복사소스사전건수(res.data.db ?? { udic: res.data.udic ?? 0, cndic: res.data.cndic ?? 0, thesaurus: res.data.thesaurus ?? 0 })
+                if (도메인소스타입 === 'domain') {
+                  const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
+                  set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                } else {
+                  const res = await 클라이언트.get(`/dictionaries/${v}/mysql-count`)
+                  set복사소스사전건수(res.data)
+                }
               } catch { /* 조회 실패 시 무시 */ }
               // 도메인ID 입력란으로 포커싱
               setTimeout(() => 도메인이름입력ref.current?.focus(), 50)
@@ -528,7 +533,7 @@ export default function DomainManage() {
                     const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
                     set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
                   } catch { /* 무시 */ }
-                }} value={사전복사소스} />
+                }} value={사전복사소스} />  {/* sqlite는 항상 SQLite DB 건수 */}
               {사전복사소스 && 복사소스사전건수 && (
                 <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
                   👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
@@ -544,10 +549,10 @@ export default function DomainManage() {
                   set사전복사소스(v)
                   set복사소스사전건수(null)
                   try {
-                    const res = await 클라이언트.get(`/dictionaries/${v}/file-preview`)
-                    set복사소스사전건수(res.data.db ?? { udic: 0, cndic: 0, thesaurus: 0 })
+                    const res = await 클라이언트.get(`/dictionaries/${v}/mysql-count`)
+                    set복사소스사전건수(res.data)
                   } catch { /* 무시 */ }
-                }} value={사전복사소스} />
+                }} value={사전복사소스} />  {/* mysql은 항상 MySQL 건수 */}
               {사전복사소스 && 복사소스사전건수 && (
                 <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#666' }}>
                   👤{복사소스사전건수.udic.toLocaleString()} 📚{복사소스사전건수.cndic.toLocaleString()} 🔗{복사소스사전건수.thesaurus.toLocaleString()}
