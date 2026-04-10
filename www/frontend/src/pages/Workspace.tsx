@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Typography,
   Button,
@@ -115,6 +115,18 @@ export default function Workspace() {
   useEffect(() => {
     목록조회()
   }, [])
+
+  // task 완료/취소 시 목록 자동 갱신
+  const prevTaskStatusRef = useRef<string | null>(null)
+  useEffect(() => {
+    const status = currentTask?.status ?? null
+    const prev = prevTaskStatusRef.current
+    // running → done/error/cancelled 전환 시 목록 재조회
+    if (prev === 'running' && (status === 'done' || status === 'error' || status === 'cancelled')) {
+      목록조회()
+    }
+    prevTaskStatusRef.current = status
+  }, [currentTask?.status])
 
   // USED 상태 워크스페이스 작업 진행률 로드
   useEffect(() => {
