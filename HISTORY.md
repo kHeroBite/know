@@ -941,3 +941,40 @@
 - MySQL → SQLite 마이그레이션 시 CATEGORY 사전 타입이 누락되어 있었음
 - Java 원본 MySQL 스키마(_MEMO/_USER_ID 컬럼 없음) 미확인으로 잘못된 SELECT 구문 작성 위험
 - know_mng DB 현재 비어있어 실 테스트는 DB 복원 후 필요 (Java 스키마 기반 방어적 구현 적용)
+
+---
+
+## 2026-04-11 — 사전빌드 globalTaskStore 이관 + 작업실 스크롤 수정 + 분석결과 재조회
+
+### 수정 내용
+- **www/frontend/src/stores/buildOpsSlice.ts** (신규):
+  - `executeBuild(domain, workspace, callbacks)`: 사전빌드 시작 → 5초 폴링 → 완료 콜백(onDone) / 에러 콜백(onError)
+  - `cancelBuild(domain)`: 빌드 폴링 중단 + 취소 API 호출
+  - `_startTask`/`_startPolling`/`_finishTask` 패턴 (domainOpsSlice 동일 패턴)
+- **www/frontend/src/stores/globalTaskStore.ts**:
+  - `BuildOpsSlice` import 추가
+  - `GlobalTaskStore` 타입에 `BuildOpsSlice` 합성
+  - `createBuildOpsSlice(set, get)` slice 추가
+- **www/frontend/src/pages/KnowledgeWork.tsx**:
+  - `buildLoading` 로컬 state 제거 → `isBlocked`/`executeBuild` globalTaskStore 연동
+  - 사전빌드실행: 완료 후 `assignmentApi.키워드단건` 호출로 선택된 키워드의 분석결과 즉시 갱신
+  - 버튼 disabled 조건: `buildLoading` → `isBlocked` (다른 전역작업 진행 중에도 비활성)
+  - 스크롤 수정: 최상위 div `overflow: hidden` 추가, 배너 `flexShrink: 0` / `marginBottom` 제거
+- **www/api/assignment.py**:
+  - `GET /assignments/keyword/{keyword_id}` 단건 조회 엔드포인트 추가 (빌드 완료 후 분석결과 갱신용)
+- **www/frontend/src/api/assignment.ts**:
+  - `키워드단건(workspace, id)` API 메서드 추가
+- **www/frontend/src/pages/DomainManage.tsx** (추가 수정):
+  - 복사소스 사전건수 표시 UI 제거 (건수 표시 패널 삭제)
+  - 사전복사 Select 너비: `flex: 1, minWidth: 0` → `width: 280` 고정
+- **www/services/dictionary_service.py** (추가 수정):
+  - `_find_dict_file()`: 2단계 하위 디렉토리 탐색 추가 (`*/*` 패턴)
+
+### 배경
+- 사전빌드가 로컬 state(`buildLoading`)로 관리되어 DomainManage 등 다른 화면에서 중복 실행 차단 불가
+- 빌드 완료 후 분석결과가 화면에 즉시 반영되지 않는 UX 문제
+- 작업실(KnowledgeWork) 화면에서 불필요한 세로 스크롤바 표시 문제
+- dictionary 파일이 2단계 하위 디렉토리에 위치하는 경우 탐색 실패 케이스 보완
+
+### 커밋
+- `cd886f3` ✨ 사전빌드 globalTaskStore 이관 + 작업실 스크롤 수정 + 분석결과 재조회

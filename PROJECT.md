@@ -268,7 +268,7 @@ www/
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
-│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag)
+│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id})
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
@@ -311,7 +311,8 @@ www/
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
     ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask) — 다중 PC WS 동기화 race condition 수정 완료
     ├── src/stores/workspaceOpsSlice.ts # 워크스페이스 작업 슬라이스 (executeCreate/Connect/Cancel/Release/Reinit, restoreWorkspacePolling)
-    └── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)
+    ├── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)
+    ├── src/stores/buildOpsSlice.ts  # 사전빌드 작업 슬라이스 (executeBuild/cancelBuild — 5초 폴링, 완료 콜백)
     └── src/index.css           # 전역 디자인 CSS (glassmorphism, 애니메이션, CSS 변수)
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
 ```
@@ -338,6 +339,7 @@ www/
 | /assignments | 키워드 할당 목록 조회 (GET) |
 | /assignments/flag | 키워드 읽음/작업 flag 업데이트 (PUT) — R/W/'' |
 | /assignments/complete-with-mode | 키워드 완료 처리 모드 선택 (POST) |
+| /assignments/keyword/{keyword_id} | 키워드 단건 조회 (GET) — 빌드 완료 후 분석결과 갱신용 |
 | /ai-analysis/search | AI 분석 검색 — LLM+Wikipedia (GET) |
 | /llm-settings | LLM 설정 4종 조회 (GET) |
 | /llm-settings/{provider} | LLM 설정 저장 (PUT) — openai/claude/gemini/local |
@@ -416,3 +418,12 @@ www/
 - `components/GlobalSearch.tsx` 신규 (통합 검색)
 - `Layout.tsx`: disabled Tooltip + GlobalSearch 헤더 통합
 - `Workspace.tsx`: 진행률 표시 개선
+
+### Phase 5: 사전빌드 globalTaskStore 이관 (2026-04-11)
+- `stores/buildOpsSlice.ts` 신규: 사전빌드 전역작업 슬라이스 (executeBuild/cancelBuild — 5초 폴링)
+- `stores/globalTaskStore.ts`: BuildOpsSlice 합성 추가
+- `pages/KnowledgeWork.tsx`: buildLoading 로컬 state 제거 → isBlocked/executeBuild 연동, 빌드 완료 후 키워드 단건 갱신, overflow:hidden 스크롤 수정
+- `api/assignment.py`: `GET /assignments/keyword/{keyword_id}` 단건 조회 엔드포인트 추가
+- `api/assignment.ts`: `키워드단건(workspace, id)` API 메서드 추가
+- `pages/DomainManage.tsx`: 복사소스 사전건수 표시 UI 제거, Select 너비 280px 고정
+- `services/dictionary_service.py`: `_find_dict_file()` 2단계 하위 디렉토리 탐색 추가

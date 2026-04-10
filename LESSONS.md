@@ -478,3 +478,12 @@ elif os.path.isdir(path):
 **추가 교훈**: 사전 타입 확장 시 dictionary_service.py 내 타입 열거 위치 4곳(get_mysql_dict_count/migrate_dict_from_mysql/copy_domain_dict/get_dict_db_count) 동시 수정 필수. 하나라도 누락 시 기능 불일치 발생.
 
 **MEMORY.md 점검 결과**: L-316은 Level 2 (외부 MySQL 스키마 미확인 패턴 — 재발 가능성 높음). MEMORY.md에 반영.
+
+---
+
+## [2026-04-11] 사전빌드 globalTaskStore 이관 + 작업실 스크롤 수정 + 분석결과 재조회
+
+> **작업 요약**: buildOpsSlice 신설로 사전빌드를 전역작업으로 이관. KnowledgeWork 스크롤 수정. 빌드 완료 후 분석결과 즉시 갱신. assignment 단건 조회 API 추가.
+> **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 1건 (ktest_done_guard 정상 차단)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 정상 구현 완료. hook 정상 차단 1건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.

@@ -283,6 +283,10 @@ def _find_dict_file(도메인경로: str, patterns: List[str], 추가경로: Opt
             matches = glob.glob(os.path.join(경로, "*", pattern))
             if matches:
                 return sorted(matches)[-1]
+            # 2단계 하위 디렉토리에서 탐색
+            matches = glob.glob(os.path.join(경로, "*", "*", pattern))
+            if matches:
+                return sorted(matches)[-1]
     return None
 
 

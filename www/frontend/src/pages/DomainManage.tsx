@@ -485,24 +485,7 @@ export default function DomainManage() {
               // 도메인ID 입력란으로 포커싱
               setTimeout(() => 도메인이름입력ref.current?.focus(), 50)
             }} value={도메인소스이름} />
-          {/* 사전 복사 소스 선택 시 건수 표시 */}
-          {도메인소스이름 && 복사소스사전건수 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
-              <Text style={{ fontSize: 12, color: '#52c41a' }}>
-                👤 {복사소스사전건수.udic.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#1677ff' }}>
-                📚 {복사소스사전건수.cndic.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#fa8c16' }}>
-                🔗 {복사소스사전건수.thesaurus.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 12, color: 복사소스사전건수.category ? '#722ed1' : '#bbb' }}>
-                📂 {복사소스사전건수.category.toLocaleString()}
-              </Text>
-              <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>👤사용자 📚복합명사 🔗유사어 📂카테고리</Text>
-            </div>
-          )}
+
           <Input ref={도메인이름입력ref} placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} autoComplete="off" />
           <Input placeholder="도메인 표시이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} autoComplete="off" />
           <div>
@@ -527,7 +510,7 @@ export default function DomainManage() {
           </div>
           {사전복사모드 === 'sqlite' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Select style={{ flex: 1, minWidth: 0 }} placeholder="사전 복사할 기존 도메인 선택"
+              <Select style={{ width: 280 }} placeholder="사전 복사할 기존 도메인 선택"
                 options={도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
                 onChange={async v => {
                   set사전복사소스(v)
@@ -546,7 +529,7 @@ export default function DomainManage() {
           )}
           {사전복사모드 === 'mysql' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Select style={{ flex: 1, minWidth: 0 }} placeholder="MySQL 도메인 선택" showSearch
+              <Select style={{ width: 280 }} placeholder="MySQL 도메인 선택" showSearch
                 options={mysql소스목록.map(d => ({ label: d, value: d }))}
                 onChange={async v => {
                   set사전복사소스(v)
