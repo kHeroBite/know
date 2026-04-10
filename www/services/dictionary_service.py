@@ -686,7 +686,7 @@ def copy_domain_dict(db: Session, source_site: str, target_site: str) -> dict:
 
 
 def list_mysql_domains() -> list:
-    """MySQL know_mng DOMAIN_MNG 테이블에서 _SITE 목록 반환."""
+    """MySQL know_mng에서 _THESAURUS 테이블이 존재하는 도메인명 목록 반환."""
     import pymysql
     try:
         conn = pymysql.connect(
@@ -694,8 +694,12 @@ def list_mysql_domains() -> list:
             database="know_mng", charset="utf8",
         )
         cur = conn.cursor()
-        cur.execute("SELECT _SITE FROM DOMAIN_MNG ORDER BY _SITE")
-        domains = [r[0] for r in cur.fetchall()]
+        cur.execute(
+            "SELECT DISTINCT REPLACE(TABLE_NAME, '_THESAURUS', '') "
+            "FROM information_schema.tables "
+            "WHERE TABLE_SCHEMA = 'know_mng' AND TABLE_NAME LIKE '%\\_THESAURUS'"
+        )
+        domains = sorted(r[0] for r in cur.fetchall())
         conn.close()
         return domains
     except Exception:
