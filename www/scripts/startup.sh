@@ -22,7 +22,7 @@ fi
 if pgrep -f "uvicorn.*main" > /dev/null 2>&1; then
     echo "[SKIP] uvicorn 이미 실행 중 (PID: $(pgrep -f 'uvicorn.*main' | head -1))"
 else
-    cd /home/know/apps/know-api
+    cd /home/know/apps/know-ops/www
     nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 1 > /tmp/know-api.log 2>&1 &
     sleep 3
     echo "[OK] uvicorn 시작 (PID: $!)"
