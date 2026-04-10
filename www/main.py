@@ -72,6 +72,11 @@ async def _lifespan(app: FastAPI):
             db.close()
     except Exception as e:
         print(f"[phase 자동마이그레이션] 실패: {e}")
+    try:
+        from services.workspace_service import reset_domain_progress_on_startup
+        reset_domain_progress_on_startup()
+    except Exception as e:
+        print(f"[도메인 progress 초기화] 실패: {e}")
     yield
 
 

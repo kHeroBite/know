@@ -506,6 +506,25 @@ def list_old_domains() -> list[str]:
 
 
 
+def reset_domain_progress_on_startup() -> None:
+    """서버 시작 시 진행 중 상태인 progress 파일을 error로 초기화.
+    서버가 강제 종료되면 copying/dict_copying 상태가 영구 잔류해 다음 추가를 차단하는 문제 방지.
+    """
+    if not os.path.isdir(DOMAIN_PROGRESS_DIR):
+        return
+    for pf in Path(DOMAIN_PROGRESS_DIR).glob("*.json"):
+        try:
+            with open(pf, "r") as f:
+                prog = json.load(f)
+            if prog.get("status") not in ("done", "error", None):
+                prog["status"] = "error"
+                prog["message"] = "서버 재시작으로 중단됨"
+                with open(pf, "w") as f:
+                    json.dump(prog, f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
+
+
 def _write_domain_progress(name: str, data: dict[str, Any]) -> None:
     """진행률을 파일에 기록 (멀티워커 간 공유)."""
     os.makedirs(DOMAIN_PROGRESS_DIR, exist_ok=True)
