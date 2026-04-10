@@ -541,6 +541,33 @@ def _read_domain_progress(name: str) -> dict[str, Any] | None:
         return None
 
 
+def _is_cancel_requested(name: str) -> bool:
+    """취소 플래그 파일 존재 여부 확인."""
+    cancel_path = os.path.join(DOMAIN_PROGRESS_DIR, f"{name}.cancel")
+    return os.path.exists(cancel_path)
+
+
+def _clear_cancel_flag(name: str) -> None:
+    """취소 플래그 파일 제거."""
+    cancel_path = os.path.join(DOMAIN_PROGRESS_DIR, f"{name}.cancel")
+    try:
+        os.remove(cancel_path)
+    except FileNotFoundError:
+        pass
+
+
+def cancel_domain_add_service(name: str) -> dict[str, Any]:
+    """도메인 추가 취소 — 취소 플래그 파일 생성."""
+    prog = _read_domain_progress(name)
+    if not prog or prog.get("status") not in ("copying", "dict_copying"):
+        return {"status": "not_running"}
+    os.makedirs(DOMAIN_PROGRESS_DIR, exist_ok=True)
+    cancel_path = os.path.join(DOMAIN_PROGRESS_DIR, f"{name}.cancel")
+    with open(cancel_path, "w") as f:
+        f.write("cancel")
+    return {"status": "cancel_requested"}
+
+
 def _copy_domain_task(name: str, 원본: str, 대상: str,
                    copy_dict_from: str | None = None,
                    mysql_dict_from: str | None = None) -> None:
@@ -559,6 +586,12 @@ def _copy_domain_task(name: str, 원본: str, 대상: str,
                 대상디렉토리 = os.path.join(대상, 상대경로) if 상대경로 != "." else 대상
                 os.makedirs(대상디렉토리, exist_ok=True)
                 for 파일명 in filenames:
+                    if _is_cancel_requested(name):
+                        _clear_cancel_flag(name)
+                        _write_domain_progress(name, {"percent": 0, "status": "cancelled"})
+                        if os.path.exists(대상):
+                            shutil.rmtree(대상, ignore_errors=True)
+                        return
                     shutil.copy2(os.path.join(dirpath, 파일명), os.path.join(대상디렉토리, 파일명))
                     복사complete += 1
                     _write_domain_progress(name, {"percent": int(복사complete / 전체파일수 * 90), "status": "copying", "file_count": 전체파일수})
@@ -601,15 +634,24 @@ def add_domain_service(name: str, base_source: str, base_name: str,
     """도메인 추가 — 비동기 복사 시작 (즉시 반환). 사전 복사 옵션 포함."""
     if os.path.isdir(DOMAIN_PROGRESS_DIR):
         for pf in Path(DOMAIN_PROGRESS_DIR).glob("*.json"):
+            if pf.stem == name:
+                continue  # 같은 도메인 재추가 시 기존 progress 무시
             prog = _read_domain_progress(pf.stem)
-            if prog and prog.get("status") not in ("done", "error", None):
+            if prog and prog.get("status") not in ("done", "error", "cancelled", None):
                 raise HTTPException(
                     status_code=409,
                     detail=f"다른 도메인({pf.stem})이 추가 중입니다. 완료 후 시도하세요."
                 )
     대상 = os.path.join(DOMAIN_DIR, name)
     if os.path.exists(대상):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이미 존재하는 도메인: {name}")
+        # 취소 후 재추가: progress가 완료/취소/오류/진행 중(취소 타이밍)이면 부분 폴더 정리 후 재시도 허용
+        prev_prog = _read_domain_progress(name)
+        prev_status = prev_prog.get("status") if prev_prog else None
+        if prev_status in ("cancelled", "error", "copying", "dict_copying"):
+            _clear_cancel_flag(name)  # 혹시 남은 취소 플래그도 정리
+            shutil.rmtree(대상, ignore_errors=True)
+        else:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이미 존재하는 도메인: {name}")
     if base_source == "old":
         원본 = os.path.join(OLD_DOMAIN_DIR, base_name)
     else:
@@ -632,6 +674,18 @@ def add_domain_service(name: str, base_source: str, base_name: str,
 def get_domain_add_progress_service(name: str) -> dict[str, Any] | None:
     """도메인 복사 진행률 반환 (파일 기반)."""
     return _read_domain_progress(name)
+
+
+def list_active_domain_adds() -> list[dict[str, Any]]:
+    """현재 copying/dict_copying 상태인 도메인 추가 목록 반환 (페이지 복귀 시 폴링 복원용)."""
+    if not os.path.isdir(DOMAIN_PROGRESS_DIR):
+        return []
+    결과 = []
+    for pf in Path(DOMAIN_PROGRESS_DIR).glob("*.json"):
+        prog = _read_domain_progress(pf.stem)
+        if prog and prog.get("status") in ("copying", "dict_copying"):
+            결과.append({"name": pf.stem, "percent": prog.get("percent", 0), "status": prog["status"]})
+    return 결과
 
 
 def delete_domain_ws(name: str) -> None:
@@ -679,7 +733,7 @@ def list_domains_service() -> list[dict[str, str | None]]:
         if not 항목.is_dir():
             continue
         진행 = _read_domain_progress(항목.name)
-        if 진행 and 진행.get("status") not in ("done", "error", None):
+        if 진행 and 진행.get("status") not in ("done", "error", "cancelled", None):
             continue  # 복사 진행 중 — 목록 제외
         결과.append({"id": 항목.name, "name": 메타.get(항목.name)})
     return 결과

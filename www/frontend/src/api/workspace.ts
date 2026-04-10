@@ -54,6 +54,12 @@ export const workspaceAPI = {
   도메인추가진행률: (name: string) =>
     클라이언트.get(`/workspace-domains/${name}/progress`),
 
+  진행중도메인추가목록: () =>
+    클라이언트.get('/workspace-domains/active-adds'),
+
+  도메인추가취소: (name: string) =>
+    클라이언트.post(`/workspace-domains/${name}/cancel-add`),
+
   도메인삭제: (name: string) =>
     클라이언트.delete(`/workspace-domains/${name}`),
 

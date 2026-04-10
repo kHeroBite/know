@@ -24,7 +24,9 @@ from services.workspace_service import (
     delete_domain_ws,
     rename_domain,
     add_domain_service,
+    cancel_domain_add_service,
     get_domain_add_progress_service,
+    list_active_domain_adds,
     get_domain_jiana_version,
     list_jiana_versions_service,
     unlink_domain_service,
@@ -188,6 +190,14 @@ def add_domain_handler(
                      display_name=요청.display_name)
 
 
+@도메인관리라우터.get("/active-adds")
+def get_active_domain_adds(
+    _current: dict = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """현재 진행 중(copying/dict_copying)인 도메인 추가 목록 조회."""
+    return list_active_domain_adds()
+
+
 @도메인관리라우터.get("/{name}/progress")
 def get_domain_add_progress(
     name: str,
@@ -200,6 +210,15 @@ def get_domain_add_progress(
     return 진행
 
 
+@도메인관리라우터.post("/{name}/cancel-add")
+def cancel_domain_add(
+    name: str,
+    _current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """도메인 추가(파일 복사) 취소."""
+    return cancel_domain_add_service(name)
+
+
 @도메인관리라우터.delete("/{name}")
 def delete_domain_handler(
     name: str,
@@ -208,9 +227,18 @@ def delete_domain_handler(
 ) -> Dict[str, str]:
     """도메인 삭제 (super 전용, 연결 중 차단)."""
     _check_super(current)
-    # 잔존 keyword_assignments 정리
-    db.execute(text("DELETE FROM keyword_assignments WHERE domain=:dom"), {"dom": name})
-    db.commit()
+    # 잔존 keyword_assignments 정리 (DB 락 시 재시도)
+    import time as _time
+    for _retry in range(10):
+        try:
+            db.execute(text("DELETE FROM keyword_assignments WHERE domain=:dom"), {"dom": name})
+            db.commit()
+            break
+        except Exception as _e:
+            db.rollback()
+            if _retry >= 9:
+                raise
+            _time.sleep(1)
     delete_domain_ws(name)
     return {"message": f"도메인 삭제 complete: {name}"}
 

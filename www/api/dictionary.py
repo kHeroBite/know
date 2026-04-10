@@ -27,6 +27,7 @@ from services.dictionary_service import (
     delete_synonym_service,
     bulk_add_synonyms_service,
     preview_dict_file_count,
+    get_dict_db_count,
     start_async_file_import,
     get_import_progress_service,
 )
@@ -48,9 +49,19 @@ def _resolve_site(domain: str, workspace: str | None = None) -> str:
 
 
 @라우터.get("/{domain}/file-preview")
-def preview_file_count(domain: str, _: dict = Depends(get_current_user)):
-    """도메인 사전 파일의 예상 건수 조회."""
-    return preview_dict_file_count(domain.upper())
+def preview_file_count(domain: str, db: Session = Depends(db_session), _: dict = Depends(get_current_user)):
+    """도메인 사전 파일의 예상 건수 + 현재 DB 건수 함께 조회."""
+    site = domain.upper()
+    파일 = preview_dict_file_count(site)
+    db건수 = get_dict_db_count(db, site)
+    return {
+        "file": 파일,
+        "db": db건수,
+        # 하위 호환: 기존 파일건수 필드 유지
+        "udic": 파일["udic"],
+        "cndic": 파일["cndic"],
+        "thesaurus": 파일["thesaurus"],
+    }
 
 
 @라우터.post("/{domain}/import-from-files")

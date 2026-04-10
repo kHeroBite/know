@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import PageHeader from '../components/PageHeader'
 import {
   Typography, Button, Input, Select, Space, Popconfirm, message,
   Card, Row, Col, Progress, Modal, Form, Table, Radio,
-  Descriptions, Alert, Checkbox, Divider,
+  Alert, Checkbox, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, FolderOutlined,
@@ -144,7 +144,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 export default function DomainManage() {
   const { user: currentUser } = useAuthStore()
   const isSuper = currentUser?.auth === 'A'
-  const { isBlocked, currentTask, executeDomainAdd, executeDomainDelete, restoreDomainPolling } = useGlobalTaskStore()
+  const { isBlocked, currentTask, executeDomainAdd, cancelDomainAdd, executeDomainDelete, restoreDomainPolling } = useGlobalTaskStore()
 
   // 도메인 목록
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
@@ -173,7 +173,7 @@ export default function DomainManage() {
 
   // 임포트
   const [임포트모달, set임포트모달] = useState(false)
-  const [파일건수, set파일건수] = useState<{udic: number; cndic: number; thesaurus: number} | null>(null)
+  const [파일건수, set파일건수] = useState<{udic: number; cndic: number; thesaurus: number; file?: {udic: number; cndic: number; thesaurus: number}; db?: {udic: number; cndic: number; thesaurus: number}} | null>(null)
   const [임포트중, set임포트중] = useState(false)
   const [진행률, set진행률] = useState<{percent: number; stage: string; status: string; current: number} | null>(null)
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
@@ -204,6 +204,18 @@ export default function DomainManage() {
   }
 
   useEffect(() => { 목록조회() }, [])
+
+  // domain-add task 완료 시 목록 갱신 (WS로 done 수신 시 onDone 콜백 미실행 케이스 보완)
+  const 이전태스크ID = useRef<string | null>(null)
+  useEffect(() => {
+    if (!currentTask) { 이전태스크ID.current = null; return }
+    if (!currentTask.id.startsWith('domain-add-')) return
+    if (이전태스크ID.current === currentTask.id) return
+    if (currentTask.status === 'done' || currentTask.status === 'error' || currentTask.status === 'cancelled') {
+      이전태스크ID.current = currentTask.id
+      if (currentTask.status !== 'cancelled') 목록조회()
+    }
+  }, [currentTask])
 
   // 임포트
   const 임포트모달열기 = async () => {
@@ -282,9 +294,13 @@ export default function DomainManage() {
       >
         {/* 진행률 */}
         {Object.entries(도메인복사진행중).map(([dm, pct]) => (
-          <div key={dm} style={{ marginBottom: 8 }}>
-            <Text style={{ fontSize: 12, marginRight: 8 }}>{dm} 생성 중</Text>
-            <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block' }} />
+          <div key={dm} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 12 }}>{dm} 생성 중</Text>
+            <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block', flex: 1 }} />
+            <Button size="small" danger onClick={async () => {
+              await cancelDomainAdd(dm)
+              message.info(`${dm} 도메인 추가 취소 요청됨`)
+            }}>취소</Button>
           </div>
         ))}
 
@@ -391,6 +407,9 @@ export default function DomainManage() {
               message.success(`도메인 "${dmName}" 추가 완료`)
               await 목록조회()
             },
+            onCancel: () => {
+              message.info(`도메인 "${dmName}" 추가 취소됨`)
+            },
             onError: (err) => {
               message.error(err || '도메인 추가 실패')
             },
@@ -400,8 +419,8 @@ export default function DomainManage() {
         onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null) }}
         okText="추가" cancelText="취소" confirmLoading={도메인추가로딩} okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 }}>
         <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
-          <Input placeholder="도메인이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} />
-          <Input placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} />
+          <Input placeholder="도메인이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} autoComplete="off" />
+          <Input placeholder="도메인 ID (영문, 필수)" value={도메인신규이름} onChange={e => set도메인신규이름(e.target.value)} autoComplete="off" />
           <Select style={{ width: '100%' }} value={도메인소스타입} onChange={v => {
             set도메인소스타입(v)
             set도메인소스이름(null)
@@ -491,14 +510,64 @@ export default function DomainManage() {
             {임포트모드 === 'create' && <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />}
             {임포트모드 === 'overwrite' && <Alert message="기존 데이터를 유지하면서 파일의 동일 키워드를 업데이트합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
             {임포트모드 === 'append' && <Alert message="기존 데이터를 유지하면서 새로운 키워드만 추가합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label={<Checkbox checked={임포트옵션.udic} disabled={파일건수.udic === 0} onChange={e => set임포트옵션({...임포트옵션, udic: e.target.checked})}>사용자사전</Checkbox>}>{파일건수.udic.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label={<Checkbox checked={임포트옵션.cndic} disabled={파일건수.cndic === 0} onChange={e => set임포트옵션({...임포트옵션, cndic: e.target.checked})}>복합명사사전</Checkbox>}>{파일건수.cndic.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label={<Checkbox checked={임포트옵션.thesaurus} disabled={파일건수.thesaurus === 0} onChange={e => set임포트옵션({...임포트옵션, thesaurus: e.target.checked})}>유사어사전</Checkbox>}>{파일건수.thesaurus.toLocaleString()} 건</Descriptions.Item>
-              <Descriptions.Item label="합계">
-                {((임포트옵션.udic ? 파일건수.udic : 0) + (임포트옵션.cndic ? 파일건수.cndic : 0) + (임포트옵션.thesaurus ? 파일건수.thesaurus : 0)).toLocaleString()} 건 (선택) / {(파일건수.udic + 파일건수.cndic + 파일건수.thesaurus).toLocaleString()} 건 (전체)
-              </Descriptions.Item>
-            </Descriptions>
+            {(() => {
+              const 파일 = 파일건수.file ?? { udic: 파일건수.udic, cndic: 파일건수.cndic, thesaurus: 파일건수.thesaurus }
+              const DB = 파일건수.db ?? { udic: 0, cndic: 0, thesaurus: 0 }
+              const 변경후 = (db: number, file: number, 선택: boolean): number => {
+                if (!선택) return db
+                if (임포트모드 === 'create') return file
+                return db + file  // overwrite/append: 서버가 중복 처리하므로 최대 예상값
+              }
+              const rows: { key: 'udic' | 'cndic' | 'thesaurus'; label: string }[] = [
+                { key: 'udic', label: '사용자사전' },
+                { key: 'cndic', label: '복합명사사전' },
+                { key: 'thesaurus', label: '유사어사전' },
+              ]
+              return (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#fafafa' }}>
+                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500 }}>사전</th>
+                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>현재 DB</th>
+                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>파일</th>
+                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>변경 후 (예상)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ key, label }) => {
+                      const 선택 = 임포트옵션[key]
+                      const after = 변경후(DB[key], 파일[key], 선택)
+                      const diff = after - DB[key]
+                      return (
+                        <tr key={key}>
+                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0' }}>
+                            <Checkbox checked={선택} disabled={파일[key] === 0} onChange={e => set임포트옵션({ ...임포트옵션, [key]: e.target.checked })}>{label}</Checkbox>
+                          </td>
+                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#888' }}>{DB[key].toLocaleString()}</td>
+                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>{파일[key].toLocaleString()}</td>
+                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>
+                            {선택 ? (
+                              <span>
+                                {after.toLocaleString()}
+                                {diff !== 0 && <span style={{ marginLeft: 6, fontSize: 11, color: diff > 0 ? '#52c41a' : '#ff4d4f' }}>({diff > 0 ? '+' : ''}{diff.toLocaleString()})</span>}
+                              </span>
+                            ) : <span style={{ color: '#bbb' }}>—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    <tr style={{ background: '#fafafa', fontWeight: 500 }}>
+                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0' }}>합계</td>
+                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#888' }}>{(DB.udic + DB.cndic + DB.thesaurus).toLocaleString()}</td>
+                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
+                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>
+                        {(변경후(DB.udic, 파일.udic, 임포트옵션.udic) + 변경후(DB.cndic, 파일.cndic, 임포트옵션.cndic) + 변경후(DB.thesaurus, 파일.thesaurus, 임포트옵션.thesaurus)).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )
+            })()}
           </div>
         )}
         {!임포트중 && !파일건수 && <div style={{ textAlign: 'center', padding: 24 }}><Text type="secondary">파일 건수 조회 중...</Text></div>}

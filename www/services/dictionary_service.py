@@ -317,6 +317,19 @@ def _extra_search_paths(site: str) -> List[str]:
     return [db경로] if os.path.isdir(db경로) else []
 
 
+def get_dict_db_count(db: Session, site: str) -> dict:
+    """도메인 사전 DB 건수 반환 (udic/cndic/thesaurus)."""
+    from sqlalchemy import func, select
+    결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
+    for dic_type in ("udic", "cndic", "thesaurus"):
+        try:
+            tbl = _dict_table(db, site, dic_type)
+            결과[dic_type] = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
+        except Exception:
+            pass
+    return 결과
+
+
 def preview_dict_file_count(site: str) -> dict:
     """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0}
