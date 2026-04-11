@@ -5,7 +5,7 @@ import {
   message, Spin, Space, Checkbox, Alert,
 } from 'antd'
 import {
-  SettingOutlined, CheckCircleOutlined, DeleteOutlined, PlusCircleOutlined, CloseOutlined,
+  SettingOutlined, CheckCircleOutlined, DeleteOutlined, PlusCircleOutlined, CloseOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import { assignmentApi, KeywordItem } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
@@ -339,15 +339,6 @@ export default function KnowledgeWork() {
     }
   }, [selected, 키워드필터])
 
-  // items 갱신 시 selected 자동 동기화
-  useEffect(() => {
-    if (!selected) return
-    const updated = items.find(it => it.id === selected.id)
-    if (updated && updated !== selected) {
-      setSelected(updated)
-    }
-  }, [items])
-
   // ─── 필터링된 키워드 목록 (검색 + 네비게이션) ─────────────
   const filteredItems = 키워드필터 ? items.filter(r => r.keyword.includes(키워드필터)) : items
 
@@ -461,29 +452,26 @@ export default function KnowledgeWork() {
 
   // ─── 사전 빌드 ──────────────────────────────────────────────
 
+  const 키워드새로고침 = useCallback(() => {
+    목록초기화()
+    if (selected) {
+      setMorphPrefillKw(selected.keyword)
+      setMorphTrigger(prev => prev + 1)
+    }
+  }, [목록초기화, selected, setMorphPrefillKw, setMorphTrigger])
+
   const 사전빌드실행 = useCallback(() => {
     if (!selectedDomain || isBlocked) return
     executeBuild(selectedDomain, selectedWorkspace, {
       onDone: () => {
         message.success('사전 빌드 완료 — 분석결과를 갱신합니다.')
-        // 현재 선택된 키워드 단건 갱신 후 목록 전체 재로드
-        if (selected && selectedWorkspace) {
-          assignmentApi.키워드단건(selectedWorkspace, selected.id)
-            .then(({ data }) => setSelected(data))
-            .catch(() => {})
-        }
-        목록초기화()
-        // 사전빌드 완료 시 키워드분석 자동 실행
-        if (selected) {
-          setMorphPrefillKw(selected.keyword)
-          setMorphTrigger(prev => prev + 1)
-        }
+        키워드새로고침()
       },
       onError: (msg) => {
         message.error(msg || '빌드 실패')
       },
     })
-  }, [selectedDomain, selectedWorkspace, isBlocked, executeBuild, 목록초기화, selected])
+  }, [selectedDomain, selectedWorkspace, isBlocked, executeBuild, 키워드새로고침])
 
   // ─── 추천 검색 ───────────────────────────────────────────────
 
@@ -1136,7 +1124,19 @@ export default function KnowledgeWork() {
         {/* 좌측열: 키워드목록 + 키워드분석 */}
         <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
-            title={`작업키워드(${workedCount}/${totalCount})`}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{`작업키워드(${workedCount}/${totalCount})`}</span>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  disabled={loading}
+                  onClick={키워드새로고침}
+                  style={{ marginRight: -8 }}
+                />
+              </div>
+            }
             size="small"
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' } }}
