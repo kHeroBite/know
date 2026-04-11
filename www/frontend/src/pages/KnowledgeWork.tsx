@@ -1135,7 +1135,7 @@ export default function KnowledgeWork() {
                   icon={<ReloadOutlined />}
                   disabled={loading}
                   onClick={키워드새로고침}
-                  style={{ marginRight: -8 }}
+                  style={{ marginRight: 4 }}
                 />
               </div>
             }
@@ -1503,7 +1503,7 @@ export default function KnowledgeWork() {
                 {
                   key: 'morpheme',
                   label: <span>키워드 분석 <KbdKey>{displayTabKey(derivedHotkeys.tabMorpheme)}</KbdKey></span>,
-                  children: <div style={{ padding: '4px 12px 12px' }}><MorphemeTab domain={selectedDomain} workspace={selectedWorkspace || undefined} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} autoFocusTrigger={morphFocusTrigger} /></div>,
+                  children: <div style={{ padding: '4px 12px 12px' }}><MorphemeTab domain={selectedDomain} workspace={selectedWorkspace || undefined} prefillKeyword={morphPrefillKw} prefillTrigger={morphTrigger} autoFocusTrigger={morphFocusTrigger} onAnalysisDone={목록초기화} /></div>,
                 },
                 {
                   key: 'ai',

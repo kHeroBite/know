@@ -8,6 +8,7 @@ export interface MorphemeTabProps {
   prefillKeyword?: string
   prefillTrigger?: number
   autoFocusTrigger?: number
+  onAnalysisDone?: () => void
 }
 
 /**
@@ -16,7 +17,7 @@ export interface MorphemeTabProps {
  * - 외부에서 키워드 주입 + 자동 분석 지원
  */
 export default function MorphemeTab({
-  domain, workspace, prefillKeyword, prefillTrigger, autoFocusTrigger,
+  domain, workspace, prefillKeyword, prefillTrigger, autoFocusTrigger, onAnalysisDone,
 }: MorphemeTabProps) {
   const [keyword, setKeyword] = useState('')
   const morphInputRef = useRef<any>(null)
@@ -30,6 +31,7 @@ export default function MorphemeTab({
     try {
       const { data } = await 클라이언트.post('/morpheme/analyze', { keyword: kw, domain, workspace })
       setResult(data.result || '결과 없음')
+      onAnalysisDone?.()
     } catch {
       message.error('형태소분석 실패')
       setResult(null)
