@@ -340,6 +340,9 @@ elif os.path.isdir(path):
 | L-045 | FastAPI 다중 DML try/except/rollback | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
 | L-046 | React ErrorBoundary 흰 화면 방지 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
 | L-047 | Axios 에러 인터셉터 한국어 메시지 통일 | LESSONS | LESSONS.md | 2026-04-09 | ✅ |
+| L-048 | 신규 사전 타입 추가 시 export 함수 분기 쌍으로 작업 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
+| L-049 | WS 사전 작업이력 workspace 기반 동적 테이블명 사용 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
+| L-050 | 사전 UI 변경은 work_history 기록 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
 
 ---
 
@@ -488,6 +491,27 @@ elif os.path.isdir(path):
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 정상 구현 완료. hook 정상 차단 1건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
 
+### L-048: 신규 사전 타입 추가 시 export 함수 분기 쌍으로 작업 필수 (2026-04-11)
+
+**현상**: build_service.py의 `ws_export_dict_file()`이 DICT/SYNONYM 타입만 처리하고 THESAURUS 타입을 synonym.UTF-8로 export하는 분기가 누락되어 사전빌드 시 유사어 미반영.
+**원인**: `DictType` enum에 신규 타입(THESAURUS)을 추가할 때 export 함수에 대응 분기를 함께 추가해야 하는 원칙 미준수.
+**재발방지**: `DictType` enum 확장 시 `ws_export_dict_file()`에 해당 타입 export 분기도 반드시 쌍으로 추가. 신규 사전 타입 체크리스트 항목으로 등록.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-049: WS 사전 작업이력에서 workspace 기반 동적 테이블명 사용 필수 (2026-04-11)
+
+**현상**: `work_history_service.py`의 `cancel_history_service()`에서 WS 사전 복원 시 workspace별 동적 테이블명을 사용하지 않고 고정 테이블명으로 접근하여 되돌리기 버그 발생.
+**원인**: workspace 다중 지원 구조에서 WS 사전 테이블은 `ws_{workspace}_dict` 형태의 동적 테이블명을 사용하는데, 작업이력 서비스에서 이를 무시하고 고정 테이블명 접근.
+**재발방지**: WS 사전 관련 작업이력 서비스에서 테이블 접근 시 항상 workspace 파라미터로 동적 테이블명 생성 패턴 준수.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-050: 사전 UI 변경(등록/삭제/유사어) 작업은 work_history 기록 필수 (2026-04-11)
+
+**현상**: `DicTab.tsx`의 단어 저장, 삭제, 유사어 일괄저장 동작이 work_history에 기록되지 않아 되돌리기 기능 불작동.
+**원인**: 사전 변경 작업은 모두 work_history에 기록해야 하는 원칙이 프론트엔드 컴포넌트 구현 시 누락됨.
+**재발방지**: 사전(단어/유사어) 등록/수정/삭제 UI 액션 구현 시 work_history API 호출 포함 필수. 신규 사전 관련 기능 추가 시 체크리스트로 확인.
+**Level**: 2 (MEMORY.md 반영)
+
 ---
 
 ## [2026-04-11] auto-save 제거 + 사전빌드 재분석/percent 개선
@@ -529,3 +553,14 @@ elif os.path.isdir(path):
 - 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 4건 (방어 체계 정상 작동)
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 스킬 인프라 통합 작업. hook 정상 차단 4건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
+
+
+---
+
+## [2026-04-11] 사전빌드 유사어 미반영 + 작업이력 되돌리기 버그 수정
+
+> **작업 요약**: build_service.py THESAURUS export 분기 추가. work_history_service.py workspace 기반 WS 사전 접근 수정. DicTab.tsx 등록/삭제/유사어일괄저장에 work_history 기록 추가.
+> **교훈 결과**: 3건 (L-048~L-050, Level 2 — MEMORY.md 반영)
+
+**MEMORY.md 점검 결과**: Level 2 항목 3건 — 신규 사전 타입 추가 절차, WS 사전 작업이력 테이블 접근 패턴, 사전 UI work_history 기록 원칙 모두 MEMORY.md에 반영됨.
+

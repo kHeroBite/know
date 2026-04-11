@@ -156,6 +156,16 @@ export default function DicTab({
       const word = dicType === 'thesaurus' ? record.head_word : record.word
       await dicDel(`/dictionaries/${domain}/${dicType}/${encodeURIComponent(word)}`)
       message.success('삭제 완료')
+      if (workspace) {
+        await 클라이언트.post('/work-history', {
+          workspace, domain,
+          action_type: 'delete',
+          dic_type: dicType,
+          word: dicType !== 'thesaurus' ? word : undefined,
+          head_word: dicType === 'thesaurus' ? record.head_word : undefined,
+          tail_word: dicType === 'thesaurus' ? record.tail_word : undefined,
+        }).catch(() => {})
+      }
       데이터조회()
     } catch { message.error('삭제 실패') }
   }
@@ -278,6 +288,15 @@ export default function DicTab({
           await dicDel(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`)
         } catch { /* 미존재 무시 */ }
         message.success(`"${headWord}" 유사어 세트 삭제됨`)
+        if (workspace) {
+          await 클라이언트.post('/work-history', {
+            workspace, domain,
+            action_type: 'delete',
+            dic_type: 'thesaurus',
+            head_word: headWord,
+            tail_word: undefined,
+          }).catch(() => {})
+        }
       } else {
         try {
           await dicPut(`/dictionaries/${domain}/thesaurus/${encodeURIComponent(headWord)}`, {
@@ -307,6 +326,15 @@ export default function DicTab({
           }
         }
         message.success(`"${headWord}" 유사어 저장 완료${양방향 ? ' (양방향)' : ''}`)
+        if (workspace && currentList.length > 0) {
+          await 클라이언트.post('/work-history', {
+            workspace, domain,
+            action_type: 'add',
+            dic_type: 'thesaurus',
+            head_word: headWord,
+            tail_word: currentList.join(','),
+          }).catch(() => {})
+        }
       }
       데이터조회()
       set유사어모달열림(false)
@@ -321,6 +349,15 @@ export default function DicTab({
       set저장중(true)
       await dicPost(`/dictionaries/${domain}/${dicType}`, values)
       message.success('추가 완료')
+      if (workspace) {
+        await 클라이언트.post('/work-history', {
+          workspace, domain,
+          action_type: 'add',
+          dic_type: dicType,
+          word: values.word,
+          memo: values.memo,
+        }).catch(() => {})
+      }
       set모달열림(false)
       form.resetFields()
       데이터조회()

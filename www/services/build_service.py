@@ -58,6 +58,23 @@ def ws_export_dict_file(db, workspace: str, domain: str, jiana_home: str) -> dic
         logger.warning("CNDIC export 실패: %s", e)
         결과["cndic_error"] = str(e)
 
+    # THESAURUS → synonym.UTF-8 (공백 구분 형식: head tail1 tail2 ...)
+    synonym_path = os.path.join(jiana_home, "synonym.UTF-8")
+    try:
+        rows = db.execute(text(f"SELECT _HEAD_WORD, _TAIL_WORD FROM {site}_THESAURUS")).fetchall()
+        with open(synonym_path, "w", encoding="utf-8") as f:
+            for head, tail in rows:
+                if not head:
+                    continue
+                tails = [t.strip() for t in (tail or "").split(",") if t.strip()]
+                if tails:
+                    f.write(head.strip() + " " + " ".join(tails) + "\n")
+        결과["thesaurus"] = len(rows)
+        logger.info("사전 export: %s_THESAURUS → %s (%d건)", site, synonym_path, len(rows))
+    except Exception as e:
+        logger.warning("THESAURUS export 실패: %s", e)
+        결과["thesaurus_error"] = str(e)
+
     return 결과
 
 

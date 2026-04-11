@@ -9,7 +9,7 @@ from sqlalchemy import MetaData, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from models.dictionary import get_dict_table
+from models.dictionary import get_dict_table, ws_dict_site_name
 
 
 def get_history_list(db: Session, workspace: str, domain: str, user_id: str) -> dict:
@@ -97,12 +97,14 @@ def cancel_history_service(db: Session, history_id: int, user_id: str) -> dict:
         )
 
     domain = row["domain"]
+    workspace = row["workspace"]
     dic_type = row["dic_type"]
     action_type = row["action_type"]
     meta = MetaData()
 
     if dic_type in ("udic", "cndic"):
-        tbl = get_dict_table(domain.upper(), dic_type, meta)
+        site = ws_dict_site_name(workspace, domain) if workspace else domain.upper()
+        tbl = get_dict_table(site, dic_type, meta)
         # word NULL 시 head_word → tail_word 순서로 fallback
         word_to_use = row["word"] or row["head_word"] or row["tail_word"]
         try:
@@ -122,7 +124,8 @@ def cancel_history_service(db: Session, history_id: int, user_id: str) -> dict:
         except OperationalError:
             pass  # 테이블 미존재 시 graceful 처리
     elif dic_type == "thesaurus":
-        tbl = get_dict_table(domain.upper(), "thesaurus", meta)
+        site = ws_dict_site_name(workspace, domain) if workspace else domain.upper()
+        tbl = get_dict_table(site, "thesaurus", meta)
         try:
             if action_type == "add":
                 db.execute(tbl.delete().where(tbl.c._HEAD_WORD == row["head_word"]))

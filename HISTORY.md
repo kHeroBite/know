@@ -1,5 +1,21 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-11] 사전빌드 유사어 미반영 + 작업이력 되돌리기 버그 수정
+
+> **작업 요약**: 버그 3개 수정 — ① 사전빌드 시 THESAURUS export 누락, ② 작업이력 되돌리기 WS 사전 테이블 접근 오류, ③ DicTab 등록/삭제 시 work_history 미기록
+
+### 수정 파일
+- `www/services/build_service.py` — `ws_export_dict_file()`에 THESAURUS → synonym.UTF-8 export 분기 추가
+- `www/services/work_history_service.py` — `cancel_history_service()`에서 workspace 기반 WS 사전 테이블 접근 수정
+- `www/frontend/src/components/workspace/DicTab.tsx` — 삭제/저장/유사어일괄저장 시 work_history 기록 추가
+
+### 교훈
+- L-048: 신규 사전 타입 추가 시 export 함수 분기 쌍으로 작업 필수
+- L-049: WS 사전 작업이력에서 workspace 기반 동적 테이블명 사용 필수
+- L-050: 사전 UI 변경(등록/삭제/유사어)은 work_history 기록 필수
+
+---
+
 ## [2026-04-11] kstatus + kfinish_cleanup → kfinish 단일 스킬 통합
 
 > **작업 요약**: 3단 레이어(kfinish → kfinish_cleanup → kstatus) 구조를 kfinish 단일 스킬로 통합. pane 진단·물리 정리·TeamDelete·파일 정리·serena 정리를 Step 1-A~H로 통합.
