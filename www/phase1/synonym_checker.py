@@ -43,7 +43,9 @@ def _load_synonym_dict(synonym_path: Path) -> dict:
     # 포맷 감지: 첫 50줄 중 콤마가 있으면 CSV
     sample = lines[:50]
     csv_count = sum(1 for l in sample if "," in l)
+    space_count = sum(1 for l in sample if " " in l and "," not in l)
     is_csv = csv_count > len(sample) * 0.3
+    is_space = not is_csv and space_count > len(sample) * 0.3
 
     if is_csv:
         # CSV 포맷: head,syn1,syn2,...
@@ -56,6 +58,14 @@ def _load_synonym_dict(synonym_path: Path) -> dict:
                 syns = [p.strip() for p in parts[1:3] if p.strip()]
                 if syns:
                     사전[head] = ", ".join(syns)
+    elif is_space:
+        # 공백 구분 포맷: head tail1 tail2 ... (synonym.UTF-8)
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 2:
+                head = parts[0]
+                syns = parts[1:3]
+                사전[head] = ", ".join(syns)
     else:
         # 그룹 포맷: HEAD가 연속 2줄 동일 → 이후 줄이 유사어
         current_head = None
@@ -93,7 +103,7 @@ def _batch_morpheme_analyze(설정값, 유사어list_tasks: list, work_dir: Path
         {키워드: [변환결과줄, ...]} — comp 라인 포함
     """
     _ensure_know_ops_path()
-    from know.pipeline.분석.analyze_morpheme래퍼 import analyze_morpheme래퍼
+    from know.pipeline.분석.형태소분석래퍼 import 형태소분석래퍼 as analyze_morpheme래퍼
     from know.pipeline.변환.형태소결과변환기 import 형태소결과변환기
 
     tmp_input = work_dir / "_syn_morph_input.txt"
