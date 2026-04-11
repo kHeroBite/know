@@ -1098,7 +1098,7 @@ export default function KnowledgeWork() {
 
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', height: '100vh', gap: 0, overflow: 'hidden' }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0, overflow: 'hidden' }}
       onClick={() => {
         // 방금(100ms 이내) 열린 메뉴는 닫지 않음
         set컨텍스트메뉴(prev => (Date.now() - prev.ts < 100) ? prev : { ...prev, open: false })

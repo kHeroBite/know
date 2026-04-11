@@ -246,7 +246,7 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        <Content style={{ margin: 0, marginLeft: 200, marginTop: 0, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh' }}>
+        <Content style={{ margin: 0, marginLeft: 200, marginTop: 0, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh', boxSizing: 'border-box' }}>
           {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />
