@@ -1,5 +1,31 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-11] kstatus + kfinish_cleanup → kfinish 단일 스킬 통합
+
+> **작업 요약**: 3단 레이어(kfinish → kfinish_cleanup → kstatus) 구조를 kfinish 단일 스킬로 통합. pane 진단·물리 정리·TeamDelete·파일 정리·serena 정리를 Step 1-A~H로 통합.
+
+### 수정/삭제 파일
+- `.claude/skills/kstatus/` — 삭제
+- `.claude/skills/kfinish_cleanup/` — 삭제
+- `.claude/skills/kfinish/SKILL.md` — pane 진단+물리정리+TeamDelete+파일정리+serena정리 전부 통합 (Step 1-A~H)
+- `.claude/skills/kresume/SKILL.md` — kfinish_cleanup 참조 제거
+- `.claude/skills/ko/SKILL.md` — kfinish_cleanup 참조 제거
+- `.claude/skills/kdone_cleanup/SKILL.md` — kfinish 참조로 업데이트
+- `.claude/skills/ki/SKILL.md` — kfinish 참조로 업데이트
+- `.claude/skills/kdev_parallel/SKILL.md` — kfinish 참조로 업데이트
+- `.claude/skills/kfinish/references/CLEANUP_FILES.md` — 업데이트
+- `.claude/skills/kexit/SKILL.md` — kfinish 참조로 업데이트
+- `.claude/skills/ko/SHUTDOWN_PROCEDURE.md` — 업데이트
+- `.claude/skills/ko/references/SHUTDOWN_PROTOCOL.md` — 업데이트
+
+### 교훈
+- 3단 레이어 제거로 파이프라인 종료 절차 단순화 — kfinish가 pane 진단부터 IDLE 전환까지 단일 책임 보유
+- 교훈 결과: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 4건 (방어 체계 정상 작동)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 스킬 인프라 통합 작업. hook 정상 차단 4건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
+
+---
+
 ## 2026-04-11 — 키워드 마지막 선택 기억 기능
 
 ### 수정 내용

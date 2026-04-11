@@ -516,3 +516,16 @@ elif os.path.isdir(path):
 > **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 1건 (ktest_done_guard 정상 차단)
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. hook 정상 차단 1건(HOOK_BLOCK_OK — 방어 체계 정상 작동). 1회성 이슈 없음. MEMORY.md 반영 없음.
+
+---
+
+## [2026-04-11] kstatus + kfinish_cleanup → kfinish 단일 스킬 통합
+
+> **작업 요약**: kfinish_cleanup·kstatus 삭제, kfinish 단일 스킬에 pane 진단~IDLE 전환 전체 통합 (Step 1-A~H).
+
+**교훈**:
+- 3단 레이어(kfinish → kfinish_cleanup → kstatus) 제거로 파이프라인 종료 절차 단순화
+- kfinish가 pane 진단부터 IDLE 전환까지 단일 책임 보유 — 중간 스킬 호출 불필요
+- 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 4건 (방어 체계 정상 작동)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 스킬 인프라 통합 작업. hook 정상 차단 4건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
