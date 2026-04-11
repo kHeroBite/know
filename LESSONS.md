@@ -487,3 +487,12 @@ elif os.path.isdir(path):
 > **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 1건 (ktest_done_guard 정상 차단)
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. 정상 구현 완료. hook 정상 차단 1건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
+
+---
+
+## [2026-04-11] auto-save 제거 + 사전빌드 재분석/percent 개선
+
+> **작업 요약**: KnowledgeWork auto-save 완전 제거. reanalyze_from_db() 신규. build_service percent 추가. buildOpsSlice 백엔드 percent 활용.
+> **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 2건 (파이프라인 순서 정상 차단)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. hook 정상 차단 2건(HOOK_BLOCK_OK — 방어 체계 정상 작동). 1회성 이슈 없음. MEMORY.md 반영 없음.

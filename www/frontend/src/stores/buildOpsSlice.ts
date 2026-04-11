@@ -62,8 +62,9 @@ export function createBuildOpsSlice(
           if (status === 'failed') {
             return { percent: 0, done: false, error: true, message: '빌드 실패' }
           }
-          // running 상태 — 진행률은 status에서 추정
-          return { percent: 50, done: false, error: false }
+          // running 상태 — 백엔드 percent 활용 (없으면 50 fallback)
+          const backendPercent = res.data?.percent ?? 50
+          return { percent: backendPercent, done: false, error: false }
         },
         5000,      // 5초 간격
         () => {

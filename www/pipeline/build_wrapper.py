@@ -155,15 +155,15 @@ def run_build(
         logger.info("빌드 complete: domain=%s, entry_count=%s, file_size=%s",
                     domain, entry_count, file_size)
 
-        # 빌드 완료 후 새 사전 기반으로 keyword_assignments 재분석
+        # 빌드 완료 후 DB 기반으로 keyword_assignments 재분석 (refine.txt 없어도 동작)
         if workspace:
             try:
-                from services.assignment_service import reanalyze_after_build
-                reanalyze_result = reanalyze_after_build(workspace, domain)
-                logger.info("재분석 complete: %s", reanalyze_result)
+                from services.assignment_service import reanalyze_from_db
+                reanalyze_result = reanalyze_from_db(workspace, domain)
+                logger.info("DB 기반 재분석 complete: %s", reanalyze_result)
                 _update_build_history(_bh_id, log_text=(result.get("log", "") + f"\n[재분석] {reanalyze_result}"))
             except Exception as e:
-                logger.warning("재분석 실패 (빌드 결과 유지): %s", e)
+                logger.warning("DB 기반 재분석 실패 (빌드 결과 유지): %s", e)
 
         return {
             "output_path": data_tar,

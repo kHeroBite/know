@@ -550,3 +550,44 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
         }
     finally:
         db.close()
+
+
+def reanalyze_from_db(workspace: str, domain: str) -> dict:
+    """DB kw_{ws} 테이블 키워드를 refine.txt로 복원 후 재분석 실행.
+
+    사전빌드 후 파일 없이 DB 기반으로 형태소분석+유사어확장+DB업데이트를 수행.
+    reanalyze_after_build()가 refine.txt 파일 의존성 때문에 스킵되는 문제를 해결.
+    """
+    from core.database import 세션팩토리
+    from phase1.executor import WORKSPACE_BASE
+
+    db = 세션팩토리()
+    try:
+        tbl = _kw_table(workspace)
+        ensure_kw_table(db, workspace)
+        # kw_{ws}에서 해당 domain 키워드 목록 가져오기 (line_num 순 정렬)
+        rows = db.execute(text(f"""
+            SELECT keyword FROM {tbl}
+            WHERE domain=:dom ORDER BY line_num
+        """), {"dom": domain}).fetchall()
+        keywords = [r[0] for r in rows if r[0]]
+    finally:
+        db.close()
+
+    if not keywords:
+        logger.warning("reanalyze_from_db: DB에 키워드 없음 — workspace=%s, domain=%s", workspace, domain)
+        return {"skipped": True, "reason": "DB에 키워드 없음"}
+
+    # refine.txt 재생성 (기존 파일이 없어도 DB 키워드로 복원)
+    workspace_dir = os.path.join(WORKSPACE_BASE, workspace)
+    work_dir = os.path.join(workspace_dir, "build", "work")
+    os.makedirs(work_dir, exist_ok=True)
+    refine_path = os.path.join(work_dir, "refine.txt")
+    with open(refine_path, "w", encoding="utf-8") as f:
+        for kw in keywords:
+            f.write(kw + "\n")
+
+    logger.info("reanalyze_from_db: refine.txt 재생성 — %d건 (workspace=%s, domain=%s)", len(keywords), workspace, domain)
+
+    # refine.txt 생성 후 기존 재분석 로직 재사용
+    return reanalyze_after_build(workspace, domain)

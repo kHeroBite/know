@@ -279,7 +279,7 @@ www/
 │   ├── tasks.py               # Celery 태스크 정의
 │   ├── refine.py              # 검색로그 정제 태스크
 │   ├── morpheme.py            # 형태소분석 태스크
-│   └── build_wrapper.py       # 사전빌드 래퍼 태스크 (빌드 완료 후 reanalyze_after_build() 호출)
+│   └── build_wrapper.py       # 사전빌드 래퍼 태스크 (빌드 완료 후 reanalyze_from_db() 호출 — DB 기반 재분석)
 ├── config/
 │   └── ai_prompt.json         # AI 분석 기본 프롬프트 설정 (관리자 수정 가능)
 ├── scripts/
@@ -312,7 +312,7 @@ www/
     ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask) — 다중 PC WS 동기화 race condition 수정 완료
     ├── src/stores/workspaceOpsSlice.ts # 워크스페이스 작업 슬라이스 (executeCreate/Connect/Cancel/Release/Reinit, restoreWorkspacePolling)
     ├── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)
-    ├── src/stores/buildOpsSlice.ts  # 사전빌드 작업 슬라이스 (executeBuild/cancelBuild — 5초 폴링, 완료 콜백)
+    ├── src/stores/buildOpsSlice.ts  # 사전빌드 작업 슬라이스 (executeBuild/cancelBuild — 5초 폴링, 백엔드 percent 활용)
     └── src/index.css           # 전역 디자인 CSS (glassmorphism, 애니메이션, CSS 변수)
     └── dist/                  # 빌드 결과 (FastAPI StaticFiles로 서빙)
 ```
@@ -427,3 +427,10 @@ www/
 - `api/assignment.ts`: `키워드단건(workspace, id)` API 메서드 추가
 - `pages/DomainManage.tsx`: 복사소스 사전건수 표시 UI 제거, Select 너비 280px 고정
 - `services/dictionary_service.py`: `_find_dict_file()` 2단계 하위 디렉토리 탐색 추가
+
+### Phase 6: auto-save 제거 + 사전빌드 재분석/percent 개선 (2026-04-11)
+- `pages/KnowledgeWork.tsx`: auto-save state/useEffect×2/JSX Alert 완전 제거 (사용자 미요청 기능)
+- `services/assignment_service.py`: `reanalyze_from_db()` 신규 — DB `kw_{workspace}` 기반 형태소분석+유사어확장+refine.txt 재생성
+- `pipeline/build_wrapper.py`: 빌드 완료 후 `reanalyze_from_db()` 호출로 교체 (DB 기반 재분석)
+- `services/build_service.py`: `_estimate_build_percent()` 신규 + 빌드 상태 응답에 `percent` 필드 추가
+- `stores/buildOpsSlice.ts`: 백엔드 `percent` 값 활용하여 progressbar 단계적 진행 표시

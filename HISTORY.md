@@ -978,3 +978,31 @@
 
 ### 커밋
 - `cd886f3` ✨ 사전빌드 globalTaskStore 이관 + 작업실 스크롤 수정 + 분석결과 재조회
+
+---
+
+## [2026-04-11] auto-save 제거 + 사전빌드 재분석/percent 개선
+
+> **작업 요약**: KnowledgeWork auto-save 기능 완전 제거. 사전빌드 완료 후 형태소분석+유사어확장+DB업데이트 재실행. progressbar 단계적 percent 표시.
+
+### 변경 파일
+- **www/frontend/src/pages/KnowledgeWork.tsx**:
+  - auto-save state(autoSaveStatus)/useEffect×2/JSX Alert 완전 제거
+  - 사용자가 요청하지 않은 기능(30초 자동 저장 + 복구 배너) 제거
+- **www/services/assignment_service.py**:
+  - `reanalyze_from_db()` 신규 추가: DB `kw_{workspace}` 기반으로 형태소분석+유사어확장+refine.txt 재생성
+- **www/pipeline/build_wrapper.py**:
+  - 사전빌드 완료 후 `reanalyze_after_build()` → `reanalyze_from_db()` 호출로 교체
+- **www/services/build_service.py**:
+  - `_estimate_build_percent()` 신규: 빌드 단계별 백분율 추정 함수
+  - 빌드 상태 응답에 `percent` 필드 추가 (단계적 progressbar 지원)
+- **www/frontend/src/stores/buildOpsSlice.ts**:
+  - 백엔드 `percent` 값 활용하여 progressbar 단계적 진행 표시
+
+### 배경
+- KnowledgeWork에 자동으로 추가된 auto-save 기능(사용자 미요청)을 완전 제거 요청
+- 사전빌드 완료 후 DB 기반 형태소분석/유사어확장 재실행으로 refine.txt 최신화 필요
+- progressbar가 고정값으로 표시되어 단계적 진행 표시로 개선
+
+### 커밋
+- (커밋 후 업데이트 예정)

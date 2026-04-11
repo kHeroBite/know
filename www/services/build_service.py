@@ -294,6 +294,30 @@ class BuildService:
 # 내부 유틸
 # ──────────────────────────────────────────────────────────
 
+def _estimate_build_percent(status: str, log_text: str) -> int:
+    """log_text 단계 마커로 빌드 진행률(0~100) 추정."""
+    if status in ("completed", "success"):
+        return 100
+    if status in ("failed", "cancelled"):
+        return 0
+    # running 상태에서 log 분석 (단계 마커 순서대로 체크)
+    if "[재분석]" in log_text:
+        return 95
+    if "[3/3] data.tar 생성 complete" in log_text:
+        return 90
+    if "[3/3] data.tar 생성" in log_text:
+        return 75
+    if "[2/3]" in log_text:
+        return 60
+    if "[1/3] ant dic 컴파일 complete" in log_text:
+        return 50
+    if "[OUT]" in log_text:
+        return 30  # ant dic 컴파일 진행 중
+    if "[thesaurus export]" in log_text or "[1/3]" in log_text:
+        return 15
+    return 5  # 시작 직후
+
+
 def _bh_to_dict(bh: BuildHistory) -> dict:
     """BuildHistory → dict 변환 (프론트엔드 스펙 준수).
 
@@ -305,6 +329,7 @@ def _bh_to_dict(bh: BuildHistory) -> dict:
         "domain": bh.domain,
         "build_type": bh.build_type,
         "status": bh.status,
+        "percent": _estimate_build_percent(bh.status, bh.log_text or ""),
         "row_count": bh.entry_count,          # entry_count → row_count (프론트 스펙)
         "prev_row_count": None,               # get_build_history_service() 에서 채움
         "started_at": bh.started_at.isoformat() if bh.started_at else None,
