@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Layout as AntLayout, Menu, Button, Typography, Tooltip, Space, Progress } from 'antd'
+import { Layout as AntLayout, Menu, Button, Typography, Tooltip, Progress } from 'antd'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
@@ -13,7 +13,7 @@ import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import { workspaceAPI } from '../api/workspace'
 import { isMenuEnabled } from '../App'
 import { useNotification } from '../hooks/useNotification'
-import GlobalSearch from './GlobalSearch'
+
 
 const { Sider, Content } = AntLayout
 
@@ -246,26 +246,7 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        {/* 상단 검색 바 */}
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 200,
-          right: 0,
-          height: 44,
-          background: '#fff',
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 16px',
-          zIndex: 99,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-        }}>
-          <Space>
-            <GlobalSearch />
-          </Space>
-        </div>
-        <Content style={{ margin: 0, marginLeft: 200, marginTop: 44, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: 'calc(100vh - 44px)' }}>
+        <Content style={{ margin: 0, marginLeft: 200, marginTop: 0, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh' }}>
           {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />
