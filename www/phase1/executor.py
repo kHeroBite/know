@@ -254,26 +254,27 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
     os.makedirs(work_dir, exist_ok=True)
     입력 = work_dir / "transform.txt"
     출력 = work_dir / "synonym.txt"
-    # synonym 사전 찾기: 워크스페이스 → 도메인 순 (확장자 있음/없음 모두)
-    domain_dir = Path(WORKSPACE_BASE).parent / "domain" / domain
-    syn_candidates = [
-        ws / "synonym_full_v2.txt", ws / "synonym_full_v2",
-        ws / "synonym_full.txt", ws / "synonym_full",
-        domain_dir / "synonym_full_v2.txt", domain_dir / "synonym_full_v2",
-        domain_dir / "synonym_full.txt", domain_dir / "synonym_full",
-    ]
-    syn_path = Path("/dev/null")
-    for p in syn_candidates:
-        if p.exists():
-            syn_path = p
-            break
-    # 파일 사전이 없으면 DB thesaurus에서 자동 내보내기
-    if syn_path == Path("/dev/null"):
-        db_syn_path = ws / "synonym_full_v2.txt"
-        cnt = _export_db_thesaurus_to_file(ws_name, domain, db_syn_path)
-        if cnt > 0:
-            syn_path = db_syn_path
-            logger.info(f"DB thesaurus → {db_syn_path} 내보내기 complete: {cnt}건")
+    # synonym 사전: WS DB thesaurus 우선 내보내기 → 실패 시 파일 폴백
+    db_syn_path = ws / "synonym_full_v2.txt"
+    cnt = _export_db_thesaurus_to_file(ws_name, domain, db_syn_path)
+    if cnt > 0:
+        syn_path = db_syn_path
+        logger.info(f"WS DB thesaurus({ws_name}/{domain}) → {db_syn_path}: {cnt}건")
+    else:
+        # DB 내보내기 실패 시 파일 폴백
+        domain_dir = Path(WORKSPACE_BASE).parent / "domain" / domain
+        syn_candidates = [
+            ws / "jiana" / "synonym.UTF-8",
+            ws / "synonym_full_v2.txt", ws / "synonym_full_v2",
+            ws / "synonym_full.txt", ws / "synonym_full",
+            domain_dir / "synonym_full_v2.txt", domain_dir / "synonym_full_v2",
+            domain_dir / "synonym_full.txt", domain_dir / "synonym_full",
+        ]
+        syn_path = Path("/dev/null")
+        for p in syn_candidates:
+            if p.exists():
+                syn_path = p
+                break
     설정값 = _make_config(workspace_dir)
     result = check_synonyms(입력, syn_path, 출력, 설정값=설정값)
     import re

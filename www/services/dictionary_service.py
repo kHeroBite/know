@@ -308,10 +308,12 @@ def _read_file(파일경로: str) -> List[str]:
 
 # ─── 파일 건수 미리보기 ──────────────────────────────────────────
 
+# thesaurus 절대 경로: /home/know/apps/know-ops/domain/{site}/txt_resrc/synonym.UTF-8
+# (DOMAIN_DIR = /home/know/apps/know-ops/domain, _find_dict_file이 DOMAIN_DIR/{site}/ 기준 탐색)
 _사전파일패턴 = {
     "udic": ["user.ks", "user*.ks"],
     "cndic": ["cnlist.ks", "cnlist*.ks"],
-    "thesaurus": ["txt_resrc/synonym.UTF-8"],
+    "thesaurus": ["txt_resrc/synonym.UTF-8"],  # DOMAIN_DIR/{site}/ 기준 상대 경로
 }
 
 
