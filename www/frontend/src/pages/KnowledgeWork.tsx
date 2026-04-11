@@ -918,6 +918,8 @@ export default function KnowledgeWork() {
           set추천모달열림(true)
           추천검색(selectedWord)
           setActiveTab('thesaurus')
+          // 유사어사전 탭 자동 검색 — externalSearch 트리거
+          setThesaurusSearch(selectedWord)
           // 등록 키워드셋 조회 (head/tail 정확일치)
           클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: selectedWord, size: 100, ...(selectedWorkspace ? { workspace: selectedWorkspace } : {}) } })
             .then(({ data }) => {
@@ -1475,6 +1477,7 @@ export default function KnowledgeWork() {
                   set추천키워드(컨텍스트메뉴.word); set추천결과([]); setLlm결과([]); setLlm모델별결과([]); set등록키워드셋([])
                   set추천포커스({ section: 0, item: 0 })
                   set추천모달열림(true); 추천검색(컨텍스트메뉴.word); setActiveTab('thesaurus')
+                  setThesaurusSearch(컨텍스트메뉴.word)
                   클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: 컨텍스트메뉴.word, size: 100, ...(selectedWorkspace ? { workspace: selectedWorkspace } : {}) } })
                     .then(({ data }) => {
                       const items = (data?.items || []).filter((i: any) => i.head_word === 컨텍스트메뉴.word)

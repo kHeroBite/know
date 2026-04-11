@@ -139,6 +139,8 @@ export default function ThesaurusRecommendModal({
   추천프롬프트모달, set추천프롬프트모달,
   setThesaurusExternalOpen,
 }: ThesaurusRecommendModalProps) {
+  const 등록있음 = 등록키워드셋.length > 0
+  const dimStyle: React.CSSProperties = 등록있음 ? { opacity: 0.35, filter: 'grayscale(0.3)', transition: 'opacity 0.2s' } : {}
   return (
     <Modal
       title={
@@ -156,15 +158,15 @@ export default function ThesaurusRecommendModal({
       destroyOnClose
     >
       {/* 등록 키워드셋 */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 등록키워드셋.length > 0 ? '#C62828' : '#999', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 3, height: 12, background: 등록키워드셋.length > 0 ? '#EF5350' : '#ddd', borderRadius: 2 }} />
+      <div style={{ marginBottom: 16, ...(등록있음 ? { padding: 8, border: '2px solid #EF5350', borderRadius: 6, background: '#FFF8E1', boxShadow: '0 2px 8px rgba(239,83,80,0.25)' } : {}) }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 등록있음 ? '#C62828' : '#999', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 3, height: 12, background: 등록있음 ? '#EF5350' : '#ddd', borderRadius: 2 }} />
           등록 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({등록키워드셋.length})</span>
         </div>
         {등록키워드셋.length === 0 ? (
           <Text type="secondary" style={{ fontSize: 11, paddingLeft: 12 }}>등록된 유사어 없음</Text>
         ) : (
-          <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 150, overflowY: 'auto', background: 등록키워드셋.length > 0 ? '#FFEBEE' : undefined }}>
+          <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, maxHeight: 150, overflowY: 'auto', background: '#FFEBEE' }}>
             {등록키워드셋.map((item: any, idx: number) => (
               <div key={idx} data-recommend-section={0} data-recommend-item={idx}
                 style={{ padding: '5px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 추천포커스.section === 0 && 추천포커스.item === idx ? '#E6F4FF' : undefined }}
@@ -183,7 +185,7 @@ export default function ThesaurusRecommendModal({
       </div>
 
       {/* 추천 키워드셋 */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, ...dimStyle }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#558B2F', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 3, height: 12, background: '#8BC34A', borderRadius: 2 }} />
           추천 키워드셋 <span style={{ fontSize: 10, color: '#999' }}>({추천결과.filter((i: any) => i.head_word !== keyword).length})</span>
@@ -214,7 +216,7 @@ export default function ThesaurusRecommendModal({
       </div>
 
       {/* 한영오타 키워드 */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, ...dimStyle }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#0277BD', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 3, height: 12, background: '#29B6F6', borderRadius: 2 }} />
           한영오타 키워드 <span style={{ fontSize: 10, color: '#999' }}>({getTypoVariants(keyword).length})</span>
@@ -242,7 +244,7 @@ export default function ThesaurusRecommendModal({
       </div>
 
       {/* AI추천 키워드 */}
-      <div style={{ marginBottom: 8 }}>
+      <div style={{ marginBottom: 8, ...dimStyle }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#E65100', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 3, height: 12, background: '#FF9800', borderRadius: 2 }} />
