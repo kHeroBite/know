@@ -339,6 +339,15 @@ export default function KnowledgeWork() {
     }
   }, [selected, 키워드필터])
 
+  // items 갱신 시 selected 자동 동기화
+  useEffect(() => {
+    if (!selected) return
+    const updated = items.find(it => it.id === selected.id)
+    if (updated && updated !== selected) {
+      setSelected(updated)
+    }
+  }, [items])
+
   // ─── 필터링된 키워드 목록 (검색 + 네비게이션) ─────────────
   const filteredItems = 키워드필터 ? items.filter(r => r.keyword.includes(키워드필터)) : items
 
@@ -464,6 +473,11 @@ export default function KnowledgeWork() {
             .catch(() => {})
         }
         목록초기화()
+        // 사전빌드 완료 시 키워드분석 자동 실행
+        if (selected) {
+          setMorphPrefillKw(selected.keyword)
+          setMorphTrigger(prev => prev + 1)
+        }
       },
       onError: (msg) => {
         message.error(msg || '빌드 실패')
