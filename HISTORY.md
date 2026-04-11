@@ -1,5 +1,21 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-11 — 키워드 마지막 선택 기억 기능
+
+### 수정 내용
+- `www/init_db.py`: `user_last_selected` 테이블 신설 (user_id + workspace + domain UNIQUE)
+- `www/services/assignment_service.py`: `save_last_selected`, `get_last_selected` 함수 추가
+- `www/api/assignment.py`: PUT/GET `/api/assignments/last-selected` API 추가
+- `www/frontend/src/api/assignment.ts`: `마지막선택저장`, `마지막선택조회` 메서드 추가
+- `www/frontend/src/pages/KnowledgeWork.tsx`: `saveLastSelected`(debounce 300ms) + 목록초기화 시 last-selected 우선 조회
+- 기존 `get_last_read_position()`는 fallback으로 유지
+
+### 배포
+- 백엔드 소스 rsync 업로드 + 프론트 소스 rsync 업로드
+- 서버 npm build → 서비스 재시작 완료
+
+---
+
 ## 2026-04-11 — 작업키워드 새로고침 버튼 추가 + 사전빌드 완료 시 자동 갱신
 
 ### 수정 내용

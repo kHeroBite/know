@@ -192,6 +192,32 @@ def get_keyword(
         "flag": row[9] or "",
     }
 
+@라우터.put("/last-selected")
+def save_last_selected_api(
+    keyword_id: int = Query(...),
+    workspace: str = Query(...),
+    domain: str = Query(...),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user)
+):
+    """마지막 선택 키워드 저장"""
+    from services.assignment_service import save_last_selected
+    save_last_selected(db, current["user_id"], workspace, domain, keyword_id)
+    return {"ok": True}
+
+
+@라우터.get("/last-selected")
+def get_last_selected_api(
+    workspace: str = Query(...),
+    domain: str = Query(...),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user)
+):
+    """마지막 선택 키워드 조회"""
+    from services.assignment_service import get_last_selected
+    return get_last_selected(db, current["user_id"], workspace, domain)
+
+
 @라우터.post("/reset")
 def initialize(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(db_session), current: dict = Depends(get_current_user)):

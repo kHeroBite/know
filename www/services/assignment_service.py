@@ -552,6 +552,28 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
         db.close()
 
 
+def save_last_selected(db, user_id: str, workspace: str, domain: str, keyword_id: int):
+    """사용자가 마지막으로 선택한 키워드 저장 (UPSERT)"""
+    from datetime import datetime
+    db.execute(text("""
+        INSERT INTO user_last_selected (user_id, workspace, domain, keyword_id, updated_at)
+        VALUES (:uid, :ws, :dom, :kid, :now)
+        ON CONFLICT(user_id, workspace, domain) DO UPDATE SET
+            keyword_id=excluded.keyword_id,
+            updated_at=excluded.updated_at
+    """), {"uid": user_id, "ws": workspace, "dom": domain, "kid": keyword_id, "now": datetime.utcnow().isoformat()})
+    db.commit()
+
+
+def get_last_selected(db, user_id: str, workspace: str, domain: str):
+    """사용자가 마지막으로 선택한 키워드 조회"""
+    row = db.execute(text("""
+        SELECT keyword_id FROM user_last_selected
+        WHERE user_id=:uid AND workspace=:ws AND domain=:dom
+    """), {"uid": user_id, "ws": workspace, "dom": domain}).fetchone()
+    return {"keyword_id": row[0] if row else None}
+
+
 def reanalyze_from_db(workspace: str, domain: str) -> dict:
     """DB kw_{ws} 테이블 키워드를 refine.txt로 복원 후 재분석 실행.
 

@@ -146,6 +146,15 @@ export default function KnowledgeWork() {
   const historyRef = useRef<WorkHistoryRef>(null)
   const selectLastTokenRef = useRef(false)
   const selectLastLineFirstRef = useRef(false)  // ↑로 이전 키워드: 마지막 줄의 첫 워드
+  const saveLastSelectedRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const saveLastSelected = useCallback((keywordId: number) => {
+    if (saveLastSelectedRef.current) clearTimeout(saveLastSelectedRef.current)
+    saveLastSelectedRef.current = setTimeout(() => {
+      if (!selectedWorkspace || !selectedDomain) return
+      assignmentApi.마지막선택저장(keywordId, selectedWorkspace, selectedDomain).catch(() => {})
+    }, 300)
+  }, [selectedWorkspace, selectedDomain])
 
   // ─── 키워드 목록 ────────────────────────────────────────────
 
@@ -153,14 +162,25 @@ export default function KnowledgeWork() {
     if (!selectedWorkspace || !selectedDomain || !user) return
     setLoading(true)
     try {
-      // 1. 마지막 읽은 키워드 위치 조회
+      // 1. 마지막 선택 키워드 조회 (우선) → fallback: 마지막 읽은 위치
       let startPage = 1
       let targetKeywordId: number | null = null
       try {
-        const { data: pos } = await assignmentApi.마지막읽은위치(selectedWorkspace, selectedDomain, PAGE_SIZE)
-        if (pos.keyword_id) {
-          startPage = pos.page
-          targetKeywordId = pos.keyword_id
+        const { data: lastSel } = await assignmentApi.마지막선택조회(selectedWorkspace, selectedDomain)
+        if (lastSel.keyword_id) {
+          targetKeywordId = lastSel.keyword_id
+          // keyword_id 기반으로 페이지 계산
+          const { data: pos } = await assignmentApi.마지막읽은위치(selectedWorkspace, selectedDomain, PAGE_SIZE)
+          if (pos.keyword_id === lastSel.keyword_id && pos.page) {
+            startPage = pos.page
+          }
+        } else {
+          // fallback: 마지막 읽은 위치
+          const { data: pos } = await assignmentApi.마지막읽은위치(selectedWorkspace, selectedDomain, PAGE_SIZE)
+          if (pos.keyword_id) {
+            startPage = pos.page
+            targetKeywordId = pos.keyword_id
+          }
         }
       } catch { /* fallback to page 1 */ }
 
@@ -570,6 +590,7 @@ export default function KnowledgeWork() {
       const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
       const newIdx = curIdx > 0 ? curIdx - 1 : 0
       setSelected(filteredItems[newIdx])
+      saveLastSelected(filteredItems[newIdx].id)
       // Alt+↑: 첫 줄 첫 워드 (기본 동작 — ref 설정 안 함)
       if (!filteredItems[newIdx].flag) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
@@ -584,6 +605,7 @@ export default function KnowledgeWork() {
       const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
       const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
       setSelected(filteredItems[newIdx])
+      saveLastSelected(filteredItems[newIdx].id)
       if (!filteredItems[newIdx].flag) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
@@ -752,6 +774,7 @@ export default function KnowledgeWork() {
         const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
         if (curIdx > 0) {
           setSelected(filteredItems[curIdx - 1])
+          saveLastSelected(filteredItems[curIdx - 1].id)
           if (!filteredItems[curIdx - 1].flag) {
             assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
@@ -768,6 +791,7 @@ export default function KnowledgeWork() {
         const newIdx = curIdx - 1
         selectLastLineFirstRef.current = true
         setSelected(filteredItems[newIdx])
+        saveLastSelected(filteredItems[newIdx].id)
         if (!filteredItems[newIdx].flag) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
@@ -787,6 +811,7 @@ export default function KnowledgeWork() {
         const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
         if (curIdx < filteredItems.length - 1) {
           setSelected(filteredItems[curIdx + 1])
+          saveLastSelected(filteredItems[curIdx + 1].id)
           if (!filteredItems[curIdx + 1].flag) {
             assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
@@ -801,6 +826,7 @@ export default function KnowledgeWork() {
         const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
         const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
         setSelected(filteredItems[newIdx])
+        saveLastSelected(filteredItems[newIdx].id)
         if (!filteredItems[newIdx].flag) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
@@ -828,6 +854,7 @@ export default function KnowledgeWork() {
           if (curIdx > 0) {
             selectLastTokenRef.current = true
             setSelected(filteredItems[curIdx - 1])
+            saveLastSelected(filteredItems[curIdx - 1].id)
             if (!filteredItems[curIdx - 1].flag) {
               assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
@@ -845,6 +872,7 @@ export default function KnowledgeWork() {
           const curIdx = selected ? filteredItems.findIndex(i => i.id === selected.id) : -1
           if (curIdx >= 0 && curIdx < filteredItems.length - 1) {
             setSelected(filteredItems[curIdx + 1])
+            saveLastSelected(filteredItems[curIdx + 1].id)
             if (!filteredItems[curIdx + 1].flag) {
               assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
@@ -1189,6 +1217,7 @@ export default function KnowledgeWork() {
                   ref={(el) => { itemRefs.current[record.id] = el }}
                   onClick={(e) => {
                     e.stopPropagation(); setSelected(record); setIsCenterFocused(true)
+                    saveLastSelected(record.id)
                     if (!record.flag) {
                       assignmentApi.updateFlag(record.id, 'R', selectedWorkspace ?? '').catch(() => {})
                       setItems(prev => prev.map(i => i.id === record.id ? { ...i, flag: 'R' } : i))

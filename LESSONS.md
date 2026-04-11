@@ -496,3 +496,14 @@ elif os.path.isdir(path):
 > **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 2건 (파이프라인 순서 정상 차단)
 
 **MEMORY.md 점검 결과**: 이번 세션 교훈 0건. hook 정상 차단 2건(HOOK_BLOCK_OK — 방어 체계 정상 작동). 1회성 이슈 없음. MEMORY.md 반영 없음.
+
+---
+
+## [2026-04-11] 키워드 마지막 선택 기억 기능 구현
+
+> **작업 요약**: user_last_selected 테이블 신설 + PUT/GET API 추가 + KnowledgeWork.tsx saveLastSelected(debounce 300ms) + 목록초기화 시 last-selected 우선 조회.
+
+**교훈**:
+- WSL 재기동 후 kresume으로 정확하게 파이프라인 재개 가능함 (PLAN_DONE → DEV 재개 성공)
+- kdev-1_result.json의 status="completed" + todos_completed=[1,2,3,4,5]로 완료 여부 명확히 확인 가능
+- 프로세스 이슈 없음 — LESSONS.md 반영 없음.

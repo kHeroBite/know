@@ -181,8 +181,38 @@ def create_tables():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_llm_log_user ON llm_usage_log(user_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_llm_log_created ON llm_usage_log(created_at)"))
 
+        # 8. user_last_selected (사용자별 마지막 선택 키워드)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_last_selected (
+                user_id TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                keyword_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, workspace, domain)
+            )
+        """))
+
         conn.commit()
-    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log 테이블 생성")
+    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log, user_last_selected 테이블 생성")
+
+    # user_last_selected 마이그레이션 (기존 DB에 테이블 없을 경우)
+    with 엔진.connect() as db:
+        try:
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_last_selected (
+                    user_id TEXT NOT NULL,
+                    workspace TEXT NOT NULL,
+                    domain TEXT NOT NULL,
+                    keyword_id INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, workspace, domain)
+                )
+            """))
+            db.commit()
+            print("  [OK] user_last_selected 마이그레이션 완료")
+        except Exception as e:
+            print(f"user_last_selected 마이그레이션: {e}")
 
 
 def create_domain_dict_tables(list_domains_service: list[str]):

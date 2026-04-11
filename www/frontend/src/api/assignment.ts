@@ -43,4 +43,12 @@ export const assignmentApi = {
     클라이언트.post('/assignments/complete-with-mode', { workspace, domain, mode }),
   키워드단건: (workspace: string, keywordId: number) =>
     클라이언트.get<KeywordItem>(`/assignments/keyword/${keywordId}`, { params: { workspace } }),
+  마지막선택저장: (keywordId: number, workspace: string, domain: string) =>
+    클라이언트.put('/assignments/last-selected', null, {
+      params: { keyword_id: keywordId, workspace, domain }
+    }),
+  마지막선택조회: (workspace: string, domain: string) =>
+    클라이언트.get<{ keyword_id: number | null }>('/assignments/last-selected', {
+      params: { workspace, domain }
+    }),
 }
