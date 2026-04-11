@@ -268,7 +268,7 @@ www/
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
-│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id})
+│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
@@ -301,7 +301,7 @@ www/
     │   └── ControlPanel.tsx   # 파이프라인 제어 패널
     │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
-    ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag)
+    ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag, 키워드페이지조회)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API)
     ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
@@ -428,9 +428,15 @@ www/
 - `pages/DomainManage.tsx`: 복사소스 사전건수 표시 UI 제거, Select 너비 280px 고정
 - `services/dictionary_service.py`: `_find_dict_file()` 2단계 하위 디렉토리 탐색 추가
 
-### Phase 6: auto-save 제거 + 사전빌드 재분석/percent 개선 (2026-04-11)
+### Phase 6: auto-save 제거 + 사전빌드 재분析/percent 개선 (2026-04-11)
 - `pages/KnowledgeWork.tsx`: auto-save state/useEffect×2/JSX Alert 완전 제거 (사용자 미요청 기능)
-- `services/assignment_service.py`: `reanalyze_from_db()` 신규 — DB `kw_{workspace}` 기반 형태소분석+유사어확장+refine.txt 재생성
-- `pipeline/build_wrapper.py`: 빌드 완료 후 `reanalyze_from_db()` 호출로 교체 (DB 기반 재분석)
+- `services/assignment_service.py`: `reanalyze_from_db()` 신규 — DB `kw_{workspace}` 기반 형태소분析+유사어확장+refine.txt 재생성
+- `pipeline/build_wrapper.py`: 빌드 완료 후 `reanalyze_from_db()` 호출로 교체 (DB 기반 재분析)
 - `services/build_service.py`: `_estimate_build_percent()` 신규 + 빌드 상태 응답에 `percent` 필드 추가
 - `stores/buildOpsSlice.ts`: 백엔드 `percent` 값 활용하여 progressbar 단계적 진행 표시
+
+### Phase 7: 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 (2026-04-11)
+- `services/assignment_service.py`: `get_keyword_page()` 신규 — keyword_id → line_num → position → 페이지 번호 계산
+- `api/assignment.py`: `GET /assignments/keyword-page` 엔드포인트 추가 (keyword_id 기반 페이지 번호 조회)
+- `api/assignment.ts`: `키워드페이지조회(workspace, domain, userId, keywordId)` API 메서드 추가
+- `pages/KnowledgeWork.tsx`: `목록초기화()` 수정 — 신규 API로 startPage 계산 + target 마지막 항목 pre-fetch

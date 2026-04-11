@@ -507,3 +507,12 @@ elif os.path.isdir(path):
 - WSL 재기동 후 kresume으로 정확하게 파이프라인 재개 가능함 (PLAN_DONE → DEV 재개 성공)
 - kdev-1_result.json의 status="completed" + todos_completed=[1,2,3,4,5]로 완료 여부 명확히 확인 가능
 - 프로세스 이슈 없음 — LESSONS.md 반영 없음.
+
+---
+
+## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
+
+> **작업 요약**: `get_keyword_page()` 신규 함수로 keyword_id → 페이지 번호 계산. `/api/assignments/keyword-page` API 추가. 프론트 `목록초기화()` 신규 API 활용으로 startPage 정확히 계산 + pre-fetch 수정.
+> **교훈 결과**: 프로세스 이슈 없음 (review actions = 0건) — HOOK_BLOCK_OK 1건 (ktest_done_guard 정상 차단)
+
+**MEMORY.md 점검 결과**: 이번 세션 교훈 0건. hook 정상 차단 1건(HOOK_BLOCK_OK — 방어 체계 정상 작동). 1회성 이슈 없음. MEMORY.md 반영 없음.

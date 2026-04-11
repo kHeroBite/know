@@ -169,11 +169,11 @@ export default function KnowledgeWork() {
         const { data: lastSel } = await assignmentApi.마지막선택조회(selectedWorkspace, selectedDomain)
         if (lastSel.keyword_id) {
           targetKeywordId = lastSel.keyword_id
-          // keyword_id 기반으로 페이지 계산
-          const { data: pos } = await assignmentApi.마지막읽은위치(selectedWorkspace, selectedDomain, PAGE_SIZE)
-          if (pos.keyword_id === lastSel.keyword_id && pos.page) {
-            startPage = pos.page
-          }
+          // 새 API: keyword_id 기반 정확한 페이지 계산
+          const { data: pos } = await assignmentApi.키워드페이지조회(
+            lastSel.keyword_id, selectedWorkspace, selectedDomain, PAGE_SIZE
+          )
+          if (pos.found) startPage = pos.page
         } else {
           // fallback: 마지막 읽은 위치
           const { data: pos } = await assignmentApi.마지막읽은위치(selectedWorkspace, selectedDomain, PAGE_SIZE)
@@ -211,6 +211,24 @@ export default function KnowledgeWork() {
           assignmentApi.updateFlag(target.id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === target!.id ? { ...i, flag: 'R' } : i))
         }
+      }
+      // target이 목록 맨 마지막 항목이고 더 로드할 게 있으면 → 다음 페이지 pre-fetch
+      if (
+        target &&
+        allItems.length > 0 &&
+        target.id === allItems[allItems.length - 1].id &&
+        allItems.length < (data.total || 0)
+      ) {
+        const nextPage = startPage + 1
+        try {
+          const { data: nextData } = await assignmentApi.목록(
+            selectedWorkspace, selectedDomain, 'assigned', nextPage, PAGE_SIZE, user.user_id,
+          )
+          if ((nextData.items || []).length > 0) {
+            setItems(prev => [...prev, ...(nextData.items || [])])
+            setMaxPage(nextPage)
+          }
+        } catch { /* 무시 */ }
       }
       return target ?? null
     } catch {

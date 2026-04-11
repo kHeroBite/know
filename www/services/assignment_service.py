@@ -399,6 +399,27 @@ def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to
     return {"keyword_id": keyword_id, "line_num": line_num, "page": page, "position": position}
 
 
+def get_keyword_page(db, workspace: str, domain: str, user_id: str, keyword_id: int, size: int = 100) -> dict:
+    """keyword_id 기반으로 해당 키워드가 속한 페이지 번호 계산."""
+    tbl = _kw_table(workspace)
+    ensure_kw_table(db, workspace)
+    # 해당 keyword의 line_num 조회 (assigned_to + status 조건 포함)
+    row = db.execute(text(f"""
+        SELECT line_num FROM {tbl}
+        WHERE id=:kid AND domain=:dom AND assigned_to=:uid AND status='assigned'
+    """), {"kid": keyword_id, "dom": domain, "uid": user_id}).fetchone()
+    if not row:
+        return {"keyword_id": keyword_id, "page": 1, "found": False}
+    line_num = row[0]
+    # 이 키워드 앞에 몇 건이 있는지 계산
+    position = db.execute(text(f"""
+        SELECT COUNT(*) FROM {tbl}
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned' AND line_num < :ln
+    """), {"dom": domain, "uid": user_id, "ln": line_num}).scalar() or 0
+    page = max(1, (position // size) + 1)
+    return {"keyword_id": keyword_id, "page": page, "found": True}
+
+
 def process_complete(db: Session, workspace: str, domain: str, user_id: str) -> dict:
     """user_id에게 할당된 키워드를 complete 처리."""
     tbl = _kw_table(workspace)

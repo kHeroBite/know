@@ -51,4 +51,8 @@ export const assignmentApi = {
     클라이언트.get<{ keyword_id: number | null }>('/assignments/last-selected', {
       params: { workspace, domain }
     }),
+  키워드페이지조회: (keywordId: number, workspace: string, domain: string, size: number = 100) =>
+    클라이언트.get<{ keyword_id: number; page: number; found: boolean }>('/assignments/keyword-page', {
+      params: { keyword_id: keywordId, workspace, domain, size }
+    }),
 }

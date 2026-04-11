@@ -48,6 +48,19 @@ def get_last_read_position(workspace: str = Query(...), domain: str = Query(...)
     """마지막으로 읽은 키워드의 위치(페이지) 반환."""
     return assignment_service.get_last_read_position(db, workspace, domain, current["user_id"], size)
 
+@라우터.get("/keyword-page")
+def get_keyword_page_api(
+    keyword_id: int = Query(...),
+    workspace: str = Query(...),
+    domain: str = Query(...),
+    size: int = Query(100),
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user)
+):
+    """keyword_id 기반 페이지 번호 조회."""
+    from services.assignment_service import get_keyword_page
+    return get_keyword_page(db, workspace, domain, current["user_id"], keyword_id, size)
+
 @라우터.get("/stats")
 def get_stats(workspace: str = Query(...), domain: str = Query(...),
          db: Session = Depends(db_session), _: dict = Depends(get_current_user)):

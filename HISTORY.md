@@ -1036,3 +1036,24 @@
 
 ### 커밋
 - (커밋 후 업데이트 예정)
+
+---
+
+## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
+
+> **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.
+
+### 변경 파일
+- **www/services/assignment_service.py**:
+  - `get_keyword_page(db, workspace, domain, user_id, keyword_id, size=100)` 신규: keyword_id → line_num 조회 후 position 계산으로 페이지 번호 반환
+- **www/api/assignment.py**:
+  - `GET /api/assignments/keyword-page` 엔드포인트 추가: keyword_id 기반 페이지 번호 조회
+- **www/frontend/src/api/assignment.ts**:
+  - `키워드페이지조회(workspace, domain, userId, keywordId)` API 클라이언트 메서드 추가
+- **www/frontend/src/pages/KnowledgeWork.tsx**:
+  - `목록초기화()` 수정: 신규 API로 startPage 계산 + target 마지막 항목 시 pre-fetch
+
+### 배경
+- 다른 메뉴(도메인 관리 등) 이동 후 작업실 복귀 시 lastSelectedKeywordId가 기록되어 있지만 페이지 번호를 모르는 문제
+- keyword_id로 해당 키워드가 몇 번째 페이지에 있는지 서버에서 계산하는 API가 없었음
+- 마지막 항목이 다음 페이지 첫 항목일 경우 pre-fetch 누락 문제도 함께 수정
