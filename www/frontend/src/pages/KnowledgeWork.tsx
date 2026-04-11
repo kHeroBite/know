@@ -192,9 +192,11 @@ export default function KnowledgeWork() {
           setItems(prev => prev.map(i => i.id === target!.id ? { ...i, flag: 'R' } : i))
         }
       }
+      return target ?? null
     } catch {
       setItems([])
       setTotal(0)
+      return null
     } finally {
       setLoading(false)
     }
@@ -452,13 +454,13 @@ export default function KnowledgeWork() {
 
   // ─── 사전 빌드 ──────────────────────────────────────────────
 
-  const 키워드새로고침 = useCallback(() => {
-    목록초기화()
-    if (selected) {
-      setMorphPrefillKw(selected.keyword)
+  const 키워드새로고침 = useCallback(async () => {
+    const target = await 목록초기화()
+    if (target) {
+      setMorphPrefillKw(target.keyword)
       setMorphTrigger(prev => prev + 1)
     }
-  }, [목록초기화, selected, setMorphPrefillKw, setMorphTrigger])
+  }, [목록초기화, setMorphPrefillKw, setMorphTrigger])
 
   const 사전빌드실행 = useCallback(() => {
     if (!selectedDomain || isBlocked) return
