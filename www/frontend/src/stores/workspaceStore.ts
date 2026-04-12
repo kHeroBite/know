@@ -119,9 +119,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
       },
       completeWorkspace: async (wsName: string, domain: string) => {
+        const token = localStorage.getItem('access_token')
         const res = await fetch(`/api/workspaces/${wsName}/complete`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({ domain }),
         })
         if (!res.ok) {

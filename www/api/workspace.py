@@ -535,7 +535,13 @@ def complete_workspace_api(
     ws상태 = 상태.get(name)
     if ws상태 is None:
         raise HTTPException(status_code=404, detail="워크스페이스 없음")
-    if ws상태.get("phase") == "complete":
+    current_phase = ws상태.get("phase", "preprocess")
+    if current_phase == "complete":
         raise HTTPException(status_code=409, detail="이미 완료된 워크스페이스입니다")
+    if current_phase != "verify":
+        raise HTTPException(
+            status_code=409,
+            detail=f"완료 처리는 사전 검증(verify) 단계 이후에만 가능합니다 (현재: {current_phase})",
+        )
     result = complete_workspace(name, domain, db)
     return {"status": "ok", **result}

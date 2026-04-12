@@ -25,6 +25,23 @@ export default function WorkComplete() {
     }
   }
 
+  if (!selectedWorkspace || !selectedDomain) {
+    return (
+      <div style={{ padding: '24px' }}>
+        <Title level={3}>
+          <CheckCircleOutlined style={{ marginRight: 8 }} />
+          작업 완료
+        </Title>
+        <Alert
+          type="warning"
+          message="워크스페이스를 먼저 선택해주세요."
+          description="상단 워크스페이스 메뉴에서 작업할 워크스페이스와 도메인을 선택한 후 이 페이지를 이용하세요."
+          showIcon
+        />
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: '24px' }}>
       <Title level={3}>
