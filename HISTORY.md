@@ -1103,6 +1103,24 @@
 
 ---
 
+## [2026-04-12] 사전빌드 버그 3건 수정 — 이력 삭제/상태복원/검증대상 0건
+
+> **작업 요약**: 사전빌드 메뉴의 버그 3건 수정. 이전단계 이동 시 빌드 이력 삭제 문제, 새로고침 후 빌드 상태 미복원 문제, 사전검증 대상 0건 표시 문제 수정.
+
+### 변경 파일
+- **www/frontend/src/pages/BuildHistory.tsx**:
+  - Bug 1: `onPrev` 핸들러에서 `DELETE /build/{domain}/history` API 호출 제거 → 이전단계 이동은 phase 전환만 수행 (데이터 삭제 없음)
+  - Bug 2: 상태 복원 `useEffect`를 `pollRef`/`빌드로그조회` 선언 이후로 이동 (TDZ 방지) → 새로고침 후 `running` 상태 시 폴링 자동 재시작, `completed` 상태 시 다운로드/다음단계 버튼 표시
+- **www/api/dict_verify.py**:
+  - Bug 3: `keyword_assignments` 하드코딩 테이블명 → `_kw_table(workspace)` 동적 테이블명으로 교체 → 워크스페이스별 완료 키워드 정상 조회
+
+### 배경
+- 사전빌드 메뉴에서 이전단계(데이터할당)로 이동 후 복귀 시 빌드 이력이 전부 삭제되는 버그
+- 사전빌드 완료 후 새로고침하면 다운로드 버튼·다음단계 버튼이 나타나지 않는 버그 (TDZ로 인한 상태 복원 실패)
+- 사전검증 메뉴에서 검증 대상이 0건으로 표시되는 버그 (`kw_A` 대신 존재하지 않는 `keyword_assignments` 테이블 조회)
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.

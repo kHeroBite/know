@@ -590,3 +590,24 @@ elif os.path.isdir(path):
 **재발방지**: 전처리 파일 우선 폴백이 안전하려면 사전빌드 단계에서 WS 루트 synonym.UTF-8 생성이 선행되어야 함. 빌드 → 전처리 인과 순서를 반드시 지킬 것. 신규 워크스페이스나 빌드 미실행 환경에서는 DB 폴백이 발동될 수 있음을 유의.
 **Level**: 2 (MEMORY.md 반영)
 
+### L-053: React useRef/useCallback 선언 이후에 의존 useEffect 위치 필수 (2026-04-12)
+
+**현상**: `BuildHistory.tsx`에서 상태 복원 `useEffect`가 `pollRef`(useRef) 및 `빌드로그조회`(useCallback) 선언 이전에 위치하여, 새로고침 후 폴링이 자동 재시작되지 않는 버그 발생.
+**원인**: JavaScript의 TDZ(Temporal Dead Zone) — 훅 선언 이전의 코드에서 해당 훅 참조 시 `undefined` 참조. React 함수 컴포넌트에서 훅 순서가 실행 순서이기도 함.
+**재발방지**: `useRef`, `useCallback`으로 생성한 값을 참조하는 `useEffect`는 반드시 해당 훅 선언 **이후**에 위치시킬 것. 특히 폴링(`setInterval`)을 ref로 관리하는 패턴에서 필수.
+**Level**: 2
+
+### L-054: WS 사전 조회 쿼리는 _kw_table(workspace) 동적 테이블명 필수 (2026-04-12)
+
+**현상**: `dict_verify.py`에서 `keyword_assignments` 하드코딩 테이블명을 사용하여 워크스페이스 A의 완료 키워드 조회 결과가 0건으로 반환됨.
+**원인**: Know 시스템은 워크스페이스별로 `kw_{workspace}` 동적 테이블을 사용(예: `kw_A`). `keyword_assignments`는 존재하지 않는 테이블명이었음.
+**재발방지**: WS 사전 관련 쿼리 작성 시 반드시 `_kw_table(workspace)`로 동적 테이블명을 획득하여 사용. `keyword_assignments` 하드코딩 금지. (MEMORY.md L-049 참조)
+**Level**: 2
+
+### L-055: 단계 전환(phase revert)과 데이터 삭제는 반드시 분리 (2026-04-12)
+
+**현상**: `BuildHistory.tsx`에서 "이전단계로" 버튼이 단계 전환(revertPhase)과 빌드 이력 전체 삭제를 동시에 수행하여, 사용자가 단순히 이전 단계를 다시 보려다 빌드 이력이 소실됨.
+**원인**: 단계 전환 기능에 데이터 초기화 로직이 결합됨. 사용자의 의도(단계 이동)와 부수효과(데이터 삭제)가 일치하지 않음.
+**재발방지**: `revertPhase()`는 워크스페이스 상태(phase)만 변경. 빌드 이력/로그 등 데이터 삭제는 명시적인 사용자 요청(별도 삭제 버튼, 확인 모달)에 의해서만 수행. 단계 전환 ≠ 데이터 초기화.
+**Level**: 2
+
