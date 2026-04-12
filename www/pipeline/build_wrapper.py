@@ -121,10 +121,6 @@ def run_build(
         logger.info("빌드 시작: domain=%s, build_history_id=%s, workspace=%s", domain, _bh_id, workspace)
         _update_build_history(_bh_id, status="running")
 
-        # ant dic 빌드 전 thesaurus export (workspace 지정 시)
-        if workspace:
-            _export_thesaurus_before_build(workspace, domain, build_home, _bh_id, pipeline_id)
-
         try:
             result = _run_antdic(domain, pipeline_id, timeout, _bh_id, build_home)
         except subprocess.TimeoutExpired:
@@ -379,32 +375,6 @@ def _ftp_download_from_ftpinfo(ftpinfo_path: str) -> str:
                         logs.append(f"  [경고] MGET {fname} 실패: {e}")
 
     return "\n".join(logs)
-
-
-def _export_thesaurus_before_build(
-    workspace: str,
-    domain: str,
-    build_home: str,
-    build_history_id: int,
-    pipeline_id: Optional[int],
-) -> None:
-    """ant dic 빌드 전 DB thesaurus를 synonym_full_v2.txt로 내보내기.
-
-    출력 경로: /home/know/apps/know-ops/workspace/{workspace}/synonym_full_v2.txt
-    내보내기 실패해도 빌드 자체는 계속 진행 (경고만 기록).
-    """
-    from pathlib import Path
-    출력파일 = Path(WORKSPACE_BASE) / workspace / "synonym_full_v2.txt"
-    try:
-        from services.dict_export_service import export_db_thesaurus_to_file
-        cnt = export_db_thesaurus_to_file(workspace, domain, 출력파일)
-        msg = f"[thesaurus export] {출력파일} — {cnt}건"
-        logger.info(msg)
-        _update_build_history(build_history_id, log_text=msg)
-        _publish_log(pipeline_id, "build", msg, domain=domain)
-    except Exception as e:
-        logger.warning("thesaurus export 실패 (빌드 계속): %s", e)
-        _publish_log(pipeline_id, "build", f"[thesaurus export 실패] {e}", domain=domain)
 
 
 def _count_entries(domain: str) -> Optional[int]:

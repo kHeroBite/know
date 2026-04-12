@@ -71,6 +71,12 @@ def ws_export_dict_file(db, workspace: str, domain: str, jiana_home: str) -> dic
                     f.write(head.strip() + " " + " ".join(tails) + "\n")
         결과["thesaurus"] = len(rows)
         logger.info("사전 export: %s_THESAURUS → %s (%d건)", site, synonym_path, len(rows))
+        # WS 루트에도 synonym.UTF-8 생성 (정책 #4 + 전처리 파일 우선 지원)
+        from pathlib import Path
+        ws_root = Path(jiana_home).parent
+        ws_syn_path = ws_root / "synonym.UTF-8"
+        shutil.copy2(synonym_path, str(ws_syn_path))
+        logger.info("WS 루트 synonym.UTF-8 생성: %s", ws_syn_path)
     except Exception as e:
         logger.warning("THESAURUS export 실패: %s", e)
         결과["thesaurus_error"] = str(e)

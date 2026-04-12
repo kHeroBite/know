@@ -23,8 +23,8 @@ from core.constants import (
     OLD_DOMAIN_DIR, DOMAIN_PROGRESS_DIR,
 )
 
-# 워크스페이스 phase 순서 (preprocess → work → build → verify)
-PHASES = ["preprocess", "work", "build", "verify"]
+# 워크스페이스 phase 순서 (preprocess → work → build → verify → complete)
+PHASES = ["preprocess", "work", "build", "verify", "complete"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
@@ -900,3 +900,58 @@ def _auto_migrate_phase(db) -> None:
         변경 = True
     if 변경:
         _write_state(상태)
+
+
+def complete_workspace(ws_name: str, domain: str, db) -> dict:
+    """
+    6.1 도메인 백업: DOMAIN_DIR/{domain}/{data,txt_resrc,synonym.UTF-8}
+        → DICT_BACKUP_DIR/{domain}_{YYYYMMDD}/ (중복 시 _001, _002 suffix)
+    6.2 WS→도메인 복사: WORKSPACE_BASE/{ws}/{data,txt_resrc,synonym.UTF-8}
+        → DOMAIN_DIR/{domain}/
+    6.3 phase → 'complete' 전이 (phase_forward 호출)
+    반환: {"backup_path": str, "copied_files": int, "phase": "complete"}
+    """
+    import shutil
+    from datetime import datetime
+    from pathlib import Path
+    from core.constants import DICT_BACKUP_DIR, WORKSPACE_BASE, DOMAIN_DIR
+
+    domain_path = Path(DOMAIN_DIR) / domain
+    ws_path = Path(WORKSPACE_BASE) / ws_name
+    today = datetime.now().strftime("%Y%m%d")
+
+    # 백업 경로 결정 (중복 시 suffix)
+    base_name = f"{domain}_{today}"
+    backup_path = Path(DICT_BACKUP_DIR) / base_name
+    if backup_path.exists():
+        for i in range(1, 100):
+            backup_path = Path(DICT_BACKUP_DIR) / f"{base_name}_{i:03d}"
+            if not backup_path.exists():
+                break
+
+    # 6.1 도메인 백업
+    backup_path.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for item in ["data", "txt_resrc"]:
+        src = domain_path / item
+        if src.exists():
+            shutil.copytree(str(src), str(backup_path / item), dirs_exist_ok=True)
+            copied += 1
+    syn_src = domain_path / "synonym.UTF-8"
+    if syn_src.exists():
+        shutil.copy2(str(syn_src), str(backup_path / "synonym.UTF-8"))
+        copied += 1
+
+    # 6.2 WS→도메인 복사
+    for item in ["data", "txt_resrc"]:
+        src = ws_path / item
+        if src.exists():
+            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+    ws_syn = ws_path / "synonym.UTF-8"
+    if ws_syn.exists():
+        shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
+
+    # 6.3 phase → complete
+    phase_forward(ws_name, "complete")
+
+    return {"backup_path": str(backup_path), "copied_files": copied, "phase": "complete"}

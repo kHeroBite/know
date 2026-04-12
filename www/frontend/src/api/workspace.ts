@@ -101,10 +101,10 @@ export const workspaceAPI = {
     클라이언트.put('/workspaces/hotkeys', { hotkeys }),
 
   // Phase 전이
-  advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify') =>
+  advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete') =>
     클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/advance`, { to }),
 
-  revertPhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify') =>
+  revertPhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete') =>
     클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/revert`, { to }),
 
   getPhase: (workspace: string) =>

@@ -20,6 +20,7 @@ import Assignment from './pages/Assignment'
 import KnowledgeWork from './pages/KnowledgeWork'
 import LLMSettings from './pages/LLMSettings'
 import DictVerify from './pages/DictVerify'
+import WorkComplete from './pages/WorkComplete'
 import Dashboard from './pages/Dashboard'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
@@ -40,6 +41,7 @@ export function isMenuEnabled(
     '/knowledge': wsSelected && phase === 'work' && myPhase === 'working',
     '/build-history': wsSelected && phase === 'build',
     '/dict-verify': wsSelected && phase === 'verify',
+    '/work-complete': wsSelected && (phase === 'verify' || phase === 'complete'),
     '/domain-manage': true,
     '/statistics': true,
     '/accounts': true,
@@ -68,6 +70,7 @@ function DefaultRoute() {
   if (phase === 'work' && myPhase === 'working') return <Navigate to="/knowledge-work" replace />
   if (phase === 'build') return <Navigate to="/build-history" replace />
   if (phase === 'verify') return <Navigate to="/dict-verify" replace />
+  if (phase === 'complete') return <Navigate to="/work-complete" replace />
   // 폴백 (phase === 'work' && myPhase === 'done' 등)
   return <Navigate to="/workspace" replace />
 }
@@ -97,6 +100,7 @@ export default function App() {
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="build-history" element={<BuildHistory />} />
         <Route path="dict-verify" element={<DictVerify />} />
+        <Route path="work-complete" element={<WorkComplete />} />
         <Route path="accounts" element={<AccountManagement />} />
         <Route path="llm-settings" element={<LLMSettings />} />
         <Route path="manual" element={<Manual />} />

@@ -343,6 +343,8 @@ elif os.path.isdir(path):
 | L-048 | 신규 사전 타입 추가 시 export 함수 분기 쌍으로 작업 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
 | L-049 | WS 사전 작업이력 workspace 기반 동적 테이블명 사용 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
 | L-050 | 사전 UI 변경은 work_history 기록 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
+| L-051 | kplan_debate는 메인(team-lead)에서 직접 실행 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-12 | ✅ |
+| L-052 | 전처리 유사어 파일 우선 — 빌드→전처리 인과 순서 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-12 | ✅ |
 
 ---
 
@@ -563,4 +565,28 @@ elif os.path.isdir(path):
 > **교훈 결과**: 3건 (L-048~L-050, Level 2 — MEMORY.md 반영)
 
 **MEMORY.md 점검 결과**: Level 2 항목 3건 — 신규 사전 타입 추가 절차, WS 사전 작업이력 테이블 접근 패턴, 사전 UI work_history 기록 원칙 모두 MEMORY.md에 반영됨.
+
+---
+
+## [2026-04-12] 사전 workflow 정책 준수 + 작업완료 메뉴 추가
+
+> **작업 요약**: 사전작업흐름 6대 정책 중 위반 항목 수정 + 작업완료 메뉴(정책 #6) 신규 구현.
+> 정책 #3(전처리 파일 우선), 정책 #4(빌드 synonym.UTF-8 생성), 정책 #6(작업완료 메뉴/API/서비스) 완전 구현.
+> **교훈 결과**: 2건 (L-051~L-052, Level 2 — MEMORY.md 반영) + HOOK_BLOCK_OK 3건 (방어 체계 정상 작동)
+
+**MEMORY.md 점검 결과**: Level 2 항목 2건 — kplan_debate flat team 제약, 전처리 유사어 인과 순서 원칙 MEMORY.md에 반영됨.
+
+### L-051: kplan_debate는 메인(team-lead)에서 직접 실행 필수 (2026-04-12)
+
+**현상**: kplan-1 팀에이전트가 kplan_debate 스킬 실행 중 분석가/비판가 에이전트를 내부 spawn 시도 → pipeline_order_guard.sh가 3회 차단 (HOOK_BLOCK_OK).
+**원인**: kplan_debate SKILL.md가 팀에이전트 내부에서 추가 에이전트를 spawn할 수 있다고 전제. 그러나 Claude Code flat team 구조에서는 팀에이전트(kplan-1)가 다른 팀에이전트를 직접 spawn 불가.
+**재발방지**: kplan_debate는 반드시 메인(team-lead)에서 직접 Skill()로 호출해야 함. 팀에이전트가 kplan_debate를 실행하는 경우, 단일 에이전트가 3렌즈(아키텍처/리스크/구현) 역할을 내부 분리하여 수행.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-052: 전처리 유사어 파일 우선 정책 — 빌드→전처리 인과 순서 필수 (2026-04-12)
+
+**현상**: 전처리(`_sync_synonym`)를 파일 우선으로 전환할 때, ws/synonym.UTF-8이 존재하지 않으면 DB 폴백이 발생하여 정책 재위반 위험.
+**원인**: 전처리가 파일 우선 로직으로 전환되려면 해당 파일이 반드시 사전에 존재해야 함. 이 파일은 사전빌드(`ws_export_dict_file`)에서 WS 루트에 synonym.UTF-8을 생성해야만 보장됨.
+**재발방지**: 전처리 파일 우선 폴백이 안전하려면 사전빌드 단계에서 WS 루트 synonym.UTF-8 생성이 선행되어야 함. 빌드 → 전처리 인과 순서를 반드시 지킬 것. 신규 워크스페이스나 빌드 미실행 환경에서는 DB 폴백이 발동될 수 있음을 유의.
+**Level**: 2 (MEMORY.md 반영)
 

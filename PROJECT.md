@@ -255,7 +255,7 @@ www/
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
-│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify) + user_work_phase (idle/working/done)
+│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify/complete) + user_work_phase (idle/working/done) + complete_workspace(도메인백업+WS→도메인복사)
 │   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증 — 파일 기반 재작성)
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
@@ -266,7 +266,7 @@ www/
 │   ├── auth.py, domain.py, category.py, statistics.py
 │   ├── dictionary.py          # 사전 CRUD API + 유사어 추천: GET/POST /api/dictionary/recommend
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
-│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함)
+│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함) + POST /{name}/complete (작업완료 처리)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status)
@@ -286,12 +286,13 @@ www/
 │   └── install_redis.sh       # Redis 설치 스크립트
 ├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
-    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정 페이지
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정/작업완료 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
     │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시, 캐시 제거됨)
     │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트)
     │   ├── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리 + 통합 phase 전이 버튼)
-    │   └── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)
+    │   ├── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)
+    │   └── WorkComplete.tsx   # 작업완료 페이지 (신규 — 정책 #6: 도메인 백업 + WS→도메인 복사 실행)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (LLM탭+Wikipedia탭 2탭 구조 — Google/Perplexity 제거)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
@@ -308,7 +309,7 @@ www/
     ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
-    ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록)
+    ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록) + completeWorkspace 액션
     ├── src/stores/globalTaskStore.ts # 전역작업 단일 큐 (currentTask, isBlocked, _startTask, _finishTask, _startPolling, applyRemoteTask) — 다중 PC WS 동기화 race condition 수정 완료
     ├── src/stores/workspaceOpsSlice.ts # 워크스페이스 작업 슬라이스 (executeCreate/Connect/Cancel/Release/Reinit, restoreWorkspacePolling)
     ├── src/stores/domainOpsSlice.ts # 도메인 작업 슬라이스 (executeDomainAdd/Delete, restoreDomainPolling)

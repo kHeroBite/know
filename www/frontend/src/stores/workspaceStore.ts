@@ -4,7 +4,7 @@ import 클라이언트 from '../api/client'
 import { assignmentApi } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
 
-export type Phase = 'preprocess' | 'work' | 'build' | 'verify'
+export type Phase = 'preprocess' | 'work' | 'build' | 'verify' | 'complete'
 export type MyPhase = 'idle' | 'working' | 'done'
 
 interface WorkspaceState {
@@ -25,6 +25,7 @@ interface WorkspaceState {
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
   loadWorkspaceStatus: () => Promise<void>
+  completeWorkspace: (wsName: string, domain: string) => Promise<{ backup_path: string; copied_files: number }>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -116,6 +117,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         } catch {
           set({ _statusLoaded: true })
         }
+      },
+      completeWorkspace: async (wsName: string, domain: string) => {
+        const res = await fetch(`/api/workspaces/${wsName}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.detail || '작업 완료 실패')
+        }
+        const data = await res.json()
+        await get().loadWorkspaceStatus()
+        return data
       },
     }),
     { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedColor: s.selectedColor, lastMenu: s.lastMenu }) }

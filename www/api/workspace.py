@@ -44,6 +44,7 @@ from services.workspace_service import (
     get_progress,
     read_hotkey_settings,
     save_hotkey_settings_service,
+    complete_workspace,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -516,3 +517,25 @@ def get_members_status(
     members.sort(key=lambda x: x["today_count"], reverse=True)
 
     return {"workspace": workspace_id, "members": members}
+
+
+@라우터.post("/{name}/complete")
+def complete_workspace_api(
+    name: str,
+    body: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
+) -> Dict[str, Any]:
+    """워크스페이스 완료 처리 — 도메인 백업 + WS→도메인 복사 + phase 'complete' 전이."""
+    from services.workspace_service import _read_state
+    domain = body.get("domain", "")
+    if not domain:
+        raise HTTPException(status_code=400, detail="domain 필수")
+    상태 = _read_state()
+    ws상태 = 상태.get(name)
+    if ws상태 is None:
+        raise HTTPException(status_code=404, detail="워크스페이스 없음")
+    if ws상태.get("phase") == "complete":
+        raise HTTPException(status_code=409, detail="이미 완료된 워크스페이스입니다")
+    result = complete_workspace(name, domain, db)
+    return {"status": "ok", **result}

@@ -27,6 +27,7 @@ function getDisabledReason(key: string, wsSelected: boolean, phase: string, myPh
   if (key === '/knowledge-work' && myPhase !== 'working') return '데이터 할당을 먼저 받으세요'
   if (key === '/build-history' && phase !== 'build') return '빌드 단계가 아닙니다'
   if (key === '/dict-verify' && phase !== 'verify') return '검증 단계가 아닙니다'
+  if (key === '/work-complete' && phase !== 'verify' && phase !== 'complete') return '검증 완료 후 사용 가능합니다'
   if ((key === '/category' || key === '/pipeline' || key === '/knowledge') && phase !== 'work') return '작업 단계가 아닙니다'
   if ((key === '/category' || key === '/pipeline' || key === '/knowledge') && myPhase !== 'working') return '데이터 할당을 먼저 받으세요'
   return '현재 사용 불가'
@@ -119,6 +120,7 @@ export default function Layout() {
         { key: '/knowledge-work', label: tooltipLabel('작업실', '/knowledge-work', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <EditOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/build-history', label: tooltipLabel('사전 빌드', '/build-history', !wsSelected || phase !== 'build'), icon: <HistoryOutlined />, disabled: !wsSelected || phase !== 'build' },
         { key: '/dict-verify', label: tooltipLabel('사전 검증', '/dict-verify', !wsSelected || phase !== 'verify'), icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'verify' },
+        { key: '/work-complete', label: tooltipLabel('작업완료', '/work-complete', !wsSelected || (phase !== 'verify' && phase !== 'complete')), icon: <CheckCircleOutlined />, disabled: !wsSelected || (phase !== 'verify' && phase !== 'complete') },
         { key: '/category', label: tooltipLabel('카테고리 관리', '/category', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <TagsOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/pipeline', label: tooltipLabel('파이프라인', '/pipeline', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <RocketOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/knowledge', label: tooltipLabel('지식작업', '/knowledge', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <BulbOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },

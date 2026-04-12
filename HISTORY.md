@@ -1081,6 +1081,28 @@
 
 ---
 
+## [2026-04-12] 사전 workflow 정책 준수 + 작업완료 메뉴 추가
+
+> **작업 요약**: 사전작업흐름 6대 정책 중 위반 항목(#3/#4) 수정 + 작업완료 메뉴(정책 #6) 신규 구현. PHASES 확장('complete'), complete_workspace 서비스/API, WorkComplete.tsx 신규.
+
+### 변경 파일
+- **www/phase1/executor.py**: `_sync_synonym` 파일 우선 폴백 전환 (정책 #3) — ws/synonym.UTF-8 → txt_resrc/synonym.UTF-8 → jiana/synonym.UTF-8 → DB 순
+- **www/services/build_service.py**: `ws_export_dict_file()` THESAURUS export 시 WS 루트 synonym.UTF-8 추가 생성 (정책 #4)
+- **www/pipeline/build_wrapper.py**: `_export_thesaurus_before_build` 중복 export 제거
+- **www/services/workspace_service.py**: PHASES 확장('complete') + `complete_workspace()` 신규
+- **www/api/workspace.py**: `POST /{name}/complete` 엔드포인트 추가
+- **www/frontend/src/App.tsx**: Phase 타입 'complete' + `/work-complete` 라우트 추가
+- **www/frontend/src/components/Layout.tsx**: 작업완료 메뉴 항목 추가
+- **www/frontend/src/stores/workspaceStore.ts**: `completeWorkspace` 액션 추가
+- **www/frontend/src/pages/WorkComplete.tsx**: 작업완료 페이지 신규 생성
+
+### 배경
+- 6대 사전작업흐름 정책 중 정책 #3(전처리 유사어 파일 우선)이 DB 우선으로 위반되어 있었음
+- 정책 #4(사전빌드 synonym.UTF-8 생성)에서 jiana 디렉토리에만 쓰고 WS 루트 생성 누락
+- 정책 #6(작업완료 메뉴)은 미구현 상태였음
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.
