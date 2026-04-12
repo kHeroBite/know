@@ -81,7 +81,7 @@ export function createDomainOpsSlice(
           const res = await workspaceAPI.도메인추가진행률(name)
           const st = res.data?.status
           if (!st || st === 'idle') return { percent: 100, done: true, error: false }
-          if (st === 'dict_copying') return { percent: 92, done: false, error: false }
+          if (st === 'dict_copying') return { percent: res.data?.percent ?? 92, done: false, error: false }
           if (st === 'done') return { percent: 100, done: true, error: false }
           if (st === 'cancelled') return { percent: 0, done: false, error: true, message: '__cancelled__' }
           if (st === 'error') return { percent: 0, done: false, error: true, message: res.data?.message }
