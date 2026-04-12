@@ -17,6 +17,7 @@ from core.database import db_session
 from services.dict_verify_service import verify_dict, auto_verify_dict
 from services.morpheme_service import analyze_morpheme
 from services.workspace_service import get_jiana_home_path
+from services.assignment_service import _kw_table
 
 라우터 = APIRouter(prefix="/dict-verify", tags=["verify_dict"])
 
@@ -74,16 +75,20 @@ def run_file_verify(요청: 자동검증요청, db: Session = Depends(db_session
 def run_split_verify(요청: 자동검증요청, db: Session = Depends(db_session), _current: dict = Depends(get_current_user)):
     """complete/미complete 키워드를 분리하여 각각 verify_dict run_phase1_service."""
     jiana_home = get_jiana_home_path(요청.workspace) if 요청.workspace else None
-    # complete 키워드
+    try:
+        tbl = _kw_table(요청.workspace)
+    except ValueError as e:
+        return {"error": str(e), "completed": {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}, "pending": {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}}
+    # complete 키워드 (워크스페이스 동적 테이블 kw_{workspace} 사용)
     완료rows = db.execute(text(
-        "SELECT DISTINCT keyword FROM keyword_assignments "
-        "WHERE workspace=:ws AND domain=:dom AND status='completed'"
-    ), {"ws": 요청.workspace, "dom": 요청.domain}).scalars().all()
+        f"SELECT DISTINCT keyword FROM {tbl} "
+        "WHERE domain=:dom AND status='completed'"
+    ), {"dom": 요청.domain}).scalars().all()
     # 미complete 키워드
     미완료rows = db.execute(text(
-        "SELECT DISTINCT keyword FROM keyword_assignments "
-        "WHERE workspace=:ws AND domain=:dom AND status!='completed'"
-    ), {"ws": 요청.workspace, "dom": 요청.domain}).scalars().all()
+        f"SELECT DISTINCT keyword FROM {tbl} "
+        "WHERE domain=:dom AND status!='completed'"
+    ), {"dom": 요청.domain}).scalars().all()
 
     완료결과 = verify_dict(list(완료rows), 요청.domain, jiana_home=jiana_home) if 완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}
     미완료결과 = verify_dict(list(미완료rows), 요청.domain, jiana_home=jiana_home) if 미완료rows else {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": 요청.domain}

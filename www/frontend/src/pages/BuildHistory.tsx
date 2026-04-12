@@ -97,20 +97,7 @@ export default function BuildHistory() {
     } catch { /* 무시 */ }
   }, [currentDomain])
 
-  // 페이지 진입 시 최근 성공 빌드 로그 복원
-  useEffect(() => {
-    if (!currentDomain) return
-    빌드API.상태조회(currentDomain).then((res: any) => {
-      const d = res.data
-      if (d && d.log_text && (d.status === 'completed' || d.status === 'running')) {
-        const lines = d.log_text.split('\n').filter((l: string) => l.trim())
-        set빌드로그(lines)
-        set최근빌드ID(d.id)
-        set최근빌드상태(d.status)
-        if (d.status === 'running') set빌드중(true)
-      }
-    }).catch(() => {})
-  }, [currentDomain])
+  // 페이지 진입 시 최근 빌드 상태 복원 (폴링 재시작 포함 — 아래 pollRef/빌드로그조회 선언 이후로 이동)
 
   // 전체 이력 조회
   const 전체이력조회 = useCallback(async () => {
@@ -136,6 +123,31 @@ export default function BuildHistory() {
   }, [빌드로그])
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // 페이지 진입/새로고침 시 빌드 상태 복원 (pollRef, 빌드로그조회 선언 이후에 위치 — TDZ 방지)
+  useEffect(() => {
+    if (!currentDomain) return
+    빌드API.상태조회(currentDomain).then((res: any) => {
+      const d = res.data
+      if (!d) return
+      // 로그 복원 (있을 때만)
+      if (d.log_text) {
+        const lines = d.log_text.split('\n').filter((l: string) => l.trim())
+        set빌드로그(lines)
+      }
+      // 상태 복원 (항상)
+      if (d.id) set최근빌드ID(d.id)
+      if (d.status) set최근빌드상태(d.status)
+      // running 중이면 폴링 자동 복원 (빌드 완료 감지 위해)
+      if (d.status === 'running') {
+        set빌드중(true)
+        if (!pollRef.current) {
+          pollRef.current = setInterval(빌드로그조회, 2000)
+        }
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDomain])
 
   const 빌드로그조회 = useCallback(async () => {
     if (!currentDomain) return
@@ -297,15 +309,11 @@ export default function BuildHistory() {
         onPrev={() => {
           Modal.confirm({
             title: '이전단계로 돌아가시겠습니까?',
-            content: '빌드된 내용과 로그가 모두 삭제됩니다.',
+            content: '데이터할당 단계로 돌아갑니다.',
             okText: '확인',
             cancelText: '취소',
             okButtonProps: { danger: true },
             onOk: async () => {
-              try {
-                // 빌드 이력 삭제
-                await 클라이언트.delete(`/build/${currentDomain}/history`, { params: { workspace: selectedWorkspace } })
-              } catch { /* 무시 */ }
               try {
                 await useWorkspaceStore.getState().revertPhase('work')
                 navigate('/assignment')
