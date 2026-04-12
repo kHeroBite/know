@@ -85,19 +85,8 @@ export default function BuildHistory() {
       const res = await 빌드API.이력조회(currentDomain)
       const items = res.data?.items || []
       set현재이력(items)
-      // 최근 빌드 상태 복원
-      if (items.length > 0) {
-        const latest = items[0]
-        set최근빌드ID(latest.id)
-        set최근빌드상태(latest.status)
-        if (latest.status === 'running') {
-          set빌드중(true)
-        }
-      }
     } catch { /* 무시 */ }
   }, [currentDomain])
-
-  // 페이지 진입 시 최근 빌드 상태 복원 (폴링 재시작 포함 — 아래 pollRef/빌드로그조회 선언 이후로 이동)
 
   // 전체 이력 조회
   const 전체이력조회 = useCallback(async () => {
@@ -113,8 +102,10 @@ export default function BuildHistory() {
     }
   }, [])
 
-  useEffect(() => { 현재이력조회() }, [현재이력조회])
-  useEffect(() => { 전체이력조회() }, [전체이력조회])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { 현재이력조회() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { 전체이력조회() }, [])
 
   useEffect(() => {
     if (로그박스Ref.current) {
@@ -123,31 +114,56 @@ export default function BuildHistory() {
   }, [빌드로그])
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // 빌드로그조회 최신 버전을 항상 참조 (stale closure 방지)
+  const 빌드로그조회Ref = useRef<(() => Promise<void>) | null>(null)
+  // 현재 진행 중인 빌드 ID 추적 (타이밍 이슈: 이전 빌드 completed 오조회 방지)
+  const currentBuildIdRef = useRef<number | null>(null)
+  // 페이지 마운트 카운터 — 마운트/언마운트 시마다 증가하여 상태 복원 useEffect를 강제 재실행
+  const mountKeyRef = useRef(0)
+  const [mountKey, setMountKey] = useState(0)
 
-  // 페이지 진입/새로고침 시 빌드 상태 복원 (pollRef, 빌드로그조회 선언 이후에 위치 — TDZ 방지)
+  // 페이지 마운트 시 mountKey 증가 (사전검증→사전빌드 복귀 시에도 재실행 보장)
+  useEffect(() => {
+    mountKeyRef.current += 1
+    setMountKey(mountKeyRef.current)
+    return () => {
+      // 언마운트 시 폴링 정리
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      wsRef.current?.close()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 페이지 진입/새로고침/복귀 시 빌드 상태 복원 (pollRef, 빌드로그조회 선언 이후에 위치 — TDZ 방지)
+  // mountKey를 의존성에 추가하여 같은 domain으로 복귀할 때도 재실행
   useEffect(() => {
     if (!currentDomain) return
+    // 복귀 시 이전 로그/상태 초기화 후 서버에서 최신 상태 복원
+    set빌드로그([])
+    set빌드중(false)
+    set최근빌드ID(null)
+    set최근빌드상태('')
     빌드API.상태조회(currentDomain).then((res: any) => {
       const d = res.data
       if (!d) return
-      // 로그 복원 (있을 때만)
-      if (d.log_text) {
-        const lines = d.log_text.split('\n').filter((l: string) => l.trim())
-        set빌드로그(lines)
-      }
       // 상태 복원 (항상)
       if (d.id) set최근빌드ID(d.id)
       if (d.status) set최근빌드상태(d.status)
-      // running 중이면 폴링 자동 복원 (빌드 완료 감지 위해)
+      // running 중이면 로그 복원 + 폴링 자동 복원
+      // completed/idle 상태에서는 로그 표시 안 함 (복귀 시 로그 잔류 방지)
       if (d.status === 'running') {
+        if (d.log_text) {
+          const lines = d.log_text.split('\n').filter((l: string) => l.trim())
+          set빌드로그(lines)
+        }
         set빌드중(true)
         if (!pollRef.current) {
-          pollRef.current = setInterval(빌드로그조회, 2000)
+          pollRef.current = setInterval(() => 빌드로그조회Ref.current?.(), 2000)
         }
       }
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDomain])
+  }, [currentDomain, mountKey])
 
   const 빌드로그조회 = useCallback(async () => {
     if (!currentDomain) return
@@ -164,17 +180,24 @@ export default function BuildHistory() {
       현재이력조회()
       전체이력조회()
       if (d.status !== 'running') {
+        // 현재 시작한 빌드 ID와 다른 경우 완료 처리 무시 (이전 빌드 오조회 방지)
+        // currentBuildIdRef == -1: API 응답 대기 중, != null: 다른 빌드 ID → 둘 다 무시
+        if (currentBuildIdRef.current !== null && d.id !== currentBuildIdRef.current) return
         set빌드중(false)
+        currentBuildIdRef.current = null
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
       }
     } catch { /* 무시 */ }
   }, [currentDomain, 현재이력조회, 전체이력조회])
 
+  // 항상 최신 빌드로그조회를 ref에 동기화 (setInterval stale closure 방지)
+  빌드로그조회Ref.current = 빌드로그조회
+
   const 빌드웹소켓연결 = (domain: string) => {
     wsRef.current?.close()
-    // DB 폴링 시작 (2초 간격 — WebSocket 누락 시 fallback)
+    // DB 폴링 시작 (2초 간격 — WebSocket 누락 시 fallback). ref 경유로 stale closure 방지
     if (pollRef.current) clearInterval(pollRef.current)
-    pollRef.current = setInterval(빌드로그조회, 2000)
+    pollRef.current = setInterval(() => 빌드로그조회Ref.current?.(), 2000)
 
     const connect = () => {
       const ws = new WebSocket(`ws://${window.location.host}/ws/build/${domain}`)
@@ -194,8 +217,13 @@ export default function BuildHistory() {
         }
       }
       ws.onclose = () => {
-        빌드로그조회()
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+        // WS 종료 후 폴링은 유지하고, 최종 상태가 completed로 설정될 때까지 빌드로그조회가 폴링을 중단시킴
+        // (pollRef.current가 있으면 빌드로그조회Ref가 status !== 'running' 시 자동 clear)
+        if (!pollRef.current) {
+          // 폴링이 없으면 최신 버전으로 최종 1회 강제 조회
+          빌드로그조회Ref.current?.()
+        }
+        // 폴링이 있으면 기존 폴링이 최종 상태를 감지하므로 유지
       }
       ws.onerror = () => setTimeout(connect, 3000)
     }
@@ -205,11 +233,14 @@ export default function BuildHistory() {
   const 빌드시작 = async () => {
     set빌드중(true)
     set빌드로그([])
+    currentBuildIdRef.current = -1  // -1: 아직 ID 모름, 받기 전까지 완료 처리 무시
     // WebSocket 먼저 연결 후 빌드 시작 (빠른 빌드 로그 누락 방지)
     빌드웹소켓연결(currentDomain)
     try {
       const startRes = await 빌드API.빌드시작(currentDomain, selectedWorkspace || undefined)
-      set최근빌드ID(startRes.data?.build_history_id || null)
+      const newBuildId = startRes.data?.build_history_id || null
+      currentBuildIdRef.current = newBuildId
+      set최근빌드ID(newBuildId)
       set최근빌드상태('running')
       message.success(`워크스페이스 ${selectedWorkspace} 빌드 시작`)
     } catch (err: any) {
@@ -224,6 +255,7 @@ export default function BuildHistory() {
       await 빌드API.빌드취소(currentDomain)
       message.info('빌드가 중지되었습니다')
       set빌드중(false)
+      currentBuildIdRef.current = null
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
       wsRef.current?.close()
       현재이력조회()
@@ -288,7 +320,7 @@ export default function BuildHistory() {
     {
       title: '다운로드', key: 'download', width: 160,
       render: (_: any, r: 빌드이력항목) => {
-        if (r.status !== 'completed') return '-'
+        if (r.status !== 'completed' && r.status !== 'success') return '-'
         const dl = (filename: string) => 파일다운로드(r.id, filename)
         return (
           <Space size={4}>
@@ -323,7 +355,7 @@ export default function BuildHistory() {
             },
           })
         }}
-        showNext={최근빌드상태 === 'completed' && !빌드중}
+        showNext={(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중}
         nextLabel="다음단계로 (사전검증)"
         onNext={async () => {
           if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
@@ -368,7 +400,7 @@ export default function BuildHistory() {
               : <div style={{ color: '#555' }}>빌드를 시작하면 실시간 로그가 여기에 표시됩니다.</div>
           }
         </div>
-        {최근빌드상태 === 'completed' && 최근빌드ID && (
+        {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && 최근빌드ID && !빌드중 && (
           <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
             <Button icon={<ReloadOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'synonym.UTF-8')}>synonym.UTF-8 다운로드</Button>
             <Button icon={<BuildOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'data.tar')}>data.tar 다운로드</Button>
