@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -627,11 +628,20 @@ def _copy_domain_task(name: str, 원본: str, 대상: str,
             shutil.rmtree(대상, ignore_errors=True)
 
 
+_도메인이름패턴 = re.compile(r'^[A-Za-z0-9_]+$')
+
+
 def add_domain_service(name: str, base_source: str, base_name: str,
               copy_dict_from: str | None = None,
               mysql_dict_from: str | None = None,
               display_name: str | None = None) -> dict[str, Any]:
     """도메인 추가 — 비동기 복사 시작 (즉시 반환). 사전 복사 옵션 포함."""
+    # 이름 유효성 검증 (SQL Injection 방지, 영문자/숫자/언더스코어만 허용)
+    if not _도메인이름패턴.match(name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"유효하지 않은 도메인 이름: '{name}' (영문자/숫자/언더스코어만 허용, 예: my_domain)"
+        )
     if os.path.isdir(DOMAIN_PROGRESS_DIR):
         for pf in Path(DOMAIN_PROGRESS_DIR).glob("*.json"):
             if pf.stem == name:
