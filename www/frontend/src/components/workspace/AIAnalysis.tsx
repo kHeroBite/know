@@ -60,15 +60,17 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
   const [promptText, setPromptText] = useState('')
   const prevInitialRef = useRef(initialKeyword)
 
-  // 활성 범용LLM provider 목록 로드
+  // 활성 범용LLM provider 목록 로드 (단일 setState로 배치 — flicker 방지)
   useEffect(() => {
     workspaceAPI.getActiveProviders()
       .then(({ data }) => {
         const generic = (data.providers || []).filter((p: any) => p.provider !== 'local')
         setActiveProviders(generic)
+        setProvidersLoaded(true)
       })
-      .catch(() => {})
-      .finally(() => setProvidersLoaded(true))
+      .catch(() => {
+        setProvidersLoaded(true)
+      })
   }, [])
 
   // forcedTab: 외부에서 탭 강제 전환 (PageUp/PageDown 핫키)
