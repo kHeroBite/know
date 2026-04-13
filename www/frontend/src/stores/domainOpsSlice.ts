@@ -76,13 +76,20 @@ export function createDomainOpsSlice(
         return
       }
 
+      // idle 연속 수신 카운터: 작업 시작 직후 progress 파일 생성 전 idle을 done으로 오인 방지
+      let _idleCount = 0
       get()._startPolling(
         taskId,
         async () => {
           const res = await workspaceAPI.도메인추가진행률(name)
           const st = res.data?.status
-          if (!st || st === 'idle') return { percent: 100, done: true, error: false }
-          if (st === 'dict_copying') return { percent: res.data?.percent ?? 92, done: false, error: false }
+          if (!st || st === 'idle') {
+            _idleCount++
+            // 3회 연속 idle일 때만 완료 처리 (초기 파일 생성 지연 흡수)
+            return { percent: 100, done: _idleCount >= 3, error: false }
+          }
+          _idleCount = 0
+          if (st === 'dict_copying') return { percent: res.data?.percent ?? 50, done: false, error: false }
           if (st === 'done') return { percent: 100, done: true, error: false }
           if (st === 'cancelled') return { percent: 0, done: false, error: true, message: '__cancelled__' }
           if (st === 'error') return { percent: 0, done: false, error: true, message: res.data?.message }
@@ -160,13 +167,18 @@ export function createDomainOpsSlice(
           return
         }
         // 아직 running — 폴링 시작
+        let _idleCount2 = 0
         get()._startPolling(
           taskId,
           async () => {
             const r = await workspaceAPI.도메인추가진행률(domainName)
             const s = r.data?.status
-            if (!s || s === 'idle') return { percent: 100, done: true, error: false }
-            if (s === 'dict_copying') return { percent: r.data?.percent ?? 92, done: false, error: false }
+            if (!s || s === 'idle') {
+              _idleCount2++
+              return { percent: 100, done: _idleCount2 >= 3, error: false }
+            }
+            _idleCount2 = 0
+            if (s === 'dict_copying') return { percent: r.data?.percent ?? 50, done: false, error: false }
             if (s === 'done') return { percent: 100, done: true, error: false }
             if (s === 'cancelled') return { percent: 0, done: true, error: false }
             if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }
@@ -223,13 +235,18 @@ export function createDomainOpsSlice(
               status: 'running',
             })
             if (started) {
+              let _idleCount3 = 0
               get()._startPolling(
                 taskId,
                 async () => {
                   const r = await workspaceAPI.도메인추가진행률(dmId)
                   const s = r.data?.status
-                  if (!s || s === 'idle') return { percent: 100, done: true, error: false }
-                  if (s === 'dict_copying') return { percent: r.data?.percent ?? 92, done: false, error: false }
+                  if (!s || s === 'idle') {
+                    _idleCount3++
+                    return { percent: 100, done: _idleCount3 >= 3, error: false }
+                  }
+                  _idleCount3 = 0
+                  if (s === 'dict_copying') return { percent: r.data?.percent ?? 50, done: false, error: false }
                   if (s === 'done') return { percent: 100, done: true, error: false }
                   if (s === 'cancelled') return { percent: 0, done: true, error: false }
                   if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }
