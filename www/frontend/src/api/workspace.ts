@@ -87,6 +87,12 @@ export const workspaceAPI = {
   searchAI: (keyword: string) =>
     클라이언트.get('/ai-analysis/search', { params: { keyword } }),
 
+  searchAIByProvider: (keyword: string, provider: string) =>
+    클라이언트.get(`/ai-analysis/search/${provider}`, { params: { keyword } }),
+
+  getActiveProviders: () =>
+    클라이언트.get<{ providers: { provider: string; model: string }[] }>('/ai-analysis/active-providers'),
+
   getAIPrompt: () =>
     클라이언트.get('/ai-analysis/prompt'),
 

@@ -134,7 +134,7 @@ export default function Layout() {
         { key: '/dashboard', label: '대시보드', icon: <DashboardOutlined /> },
         { key: '/domain-manage', label: '도메인 관리', icon: <SettingOutlined /> },
         { key: '/statistics', label: '통계', icon: <BarChartOutlined /> },
-        { key: '/llm-settings', label: 'LLM 설정', icon: <ApiOutlined /> },
+        { key: '/llm-settings', label: 'AI 설정', icon: <ApiOutlined /> },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리', icon: <UserOutlined /> }] : []),
       ],
     },

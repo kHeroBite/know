@@ -77,39 +77,49 @@ async def _search_wikipedia(keyword: str) -> dict:
 
 
 async def ai_search_service(keyword: str, user_id: str = '') -> dict:
-    """LLM 질의 + Wikipedia 동시 검색."""
+    """로컬LLM + Wikipedia 기본 검색 (범용LLM 제외)."""
     import asyncio
+    from services.llm_settings_service import _get_active_settings_list, _single_llm_query
     logger.info("[AI분석] 검색 시작: keyword=%r", keyword)
     prompt = load_prompt()
-    query = prompt.format(keyword=keyword)
-    logger.info("[AI분석] 프롬프트 query=%r", query)
 
-    llm_task = asyncio.create_task(llm_query(keyword, prompt, user_id=user_id, usage_type='ai_analysis'))
+    # 로컬LLM 설정만 추출
+    all_active = _get_active_settings_list()
+    local_settings = [s for s in all_active if s["provider"] == "local"]
+
+    tasks_map = {}
+    if local_settings:
+        tasks_map["local"] = asyncio.create_task(
+            _single_llm_query(local_settings[0], keyword, prompt, user_id, "ai_analysis")
+        )
     wiki_task = asyncio.create_task(_search_wikipedia(keyword))
 
-    llm_result = await llm_task
+    local_result = await tasks_map["local"] if "local" in tasks_map else None
     wiki_result = await wiki_task
 
-    llm_val = llm_result.get("result") if llm_result else None
     wiki_val = wiki_result.get("result") if wiki_result else None
-    provider = llm_result.get("provider") if llm_result else None
-    model = llm_result.get("model") if llm_result else None
-    # 모델별 결과
-    llm_results = llm_result.get("results", []) if llm_result else []
 
-    logger.info(
-        "[AI분석] 최종 반환: llm=%r, wikipedia=%r, provider=%s, model=%s, results_count=%d",
-        llm_val[:60] if llm_val else None,
-        wiki_val[:60] if wiki_val else None,
-        provider,
-        model,
-        len(llm_results),
-    )
+    logger.info("[AI분석] 완료: local=%r, wiki=%r",
+                local_result.get("result", "")[:60] if local_result else None,
+                wiki_val[:60] if wiki_val else None)
     return {
-        "llm": llm_val,
         "wikipedia": wiki_val,
-        "query": query,
-        "provider": provider,
-        "model": model,
-        "llm_results": llm_results,
+        "local_result": local_result,
+        "local_active": bool(local_settings),
+        "query": prompt.format(keyword=keyword),
     }
+
+
+async def ai_search_provider(keyword: str, provider: str, user_id: str = '') -> dict:
+    """범용LLM 특정 provider 단일 호출."""
+    from services.llm_settings_service import _get_active_settings_list, _single_llm_query
+    logger.info("[AI분석][범용] provider=%s keyword=%r", provider, keyword)
+    prompt = load_prompt()
+
+    all_active = _get_active_settings_list()
+    provider_settings = [s for s in all_active if s["provider"] == provider]
+    if not provider_settings:
+        return {"result": None, "provider": provider, "model": None,
+                "error": f"'{provider}' 설정이 활성화되지 않았습니다"}
+
+    return await _single_llm_query(provider_settings[0], keyword, prompt, user_id, "ai_analysis")

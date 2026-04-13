@@ -270,7 +270,7 @@ export default function LLMSettings() {
   if (로딩중) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-        <Spin size="large" tip="LLM 설정 로드 중..." />
+        <Spin size="large" tip="AI 설정 로드 중..." />
       </div>
     )
   }
@@ -279,7 +279,7 @@ export default function LLMSettings() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <PageHeader title="LLM 설정" />
+      <PageHeader title="AI 설정" />
       <div style={{ marginBottom: 24 }}>
         <Text type="secondary">AI 분석에 사용할 LLM 프로바이더를 설정합니다. 여러 개 동시 활성화 시 모든 결과를 비교할 수 있습니다.</Text>
         {활성수 > 0 && (

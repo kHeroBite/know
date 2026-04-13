@@ -13,13 +13,31 @@ interface Props {
   forcedTab?: { tab: string; n: number }
 }
 
-interface AIResult {
-  llm?: string
-  wikipedia?: string
-  query?: string
+interface LocalResult {
+  result?: string
   provider?: string
   model?: string
-  llm_results?: { result?: string; provider?: string; model?: string; error?: string }[]
+  error?: string
+}
+
+interface BaseResult {
+  wikipedia?: string
+  local_result?: LocalResult | null
+  local_active?: boolean
+  query?: string
+}
+
+interface ProviderResult {
+  result?: string
+  provider?: string
+  model?: string
+  error?: string
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  claude: 'Claude',
+  gemini: 'Gemini',
 }
 
 export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTab }: Props) {
@@ -27,16 +45,28 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
   const [inputValue, setInputValue] = useState(initialKeyword || '')
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<AIResult | null>(null)
+  const [baseResult, setBaseResult] = useState<BaseResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('llm')
-  const [hasAiResult, setHasAiResult] = useState(false)
+  const [activeTab, setActiveTab] = useState('local')
   const [hasWikiResult, setHasWikiResult] = useState(false)
+  // 범용LLM: provider → { loading, result }
+  const [providerResults, setProviderResults] = useState<Record<string, { loading: boolean; data: ProviderResult | null }>>({})
+  const [activeProviders, setActiveProviders] = useState<{ provider: string; model: string }[]>([])
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
   const [promptText, setPromptText] = useState('')
   const prevInitialRef = useRef(initialKeyword)
+
+  // 활성 범용LLM provider 목록 로드
+  useEffect(() => {
+    workspaceAPI.getActiveProviders()
+      .then(({ data }) => {
+        const generic = (data.providers || []).filter((p: any) => p.provider !== 'local')
+        setActiveProviders(generic)
+      })
+      .catch(() => {})
+  }, [])
 
   // forcedTab: 외부에서 탭 강제 전환 (PageUp/PageDown 핫키)
   useEffect(() => {
@@ -48,7 +78,6 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
     if (initialKeyword && initialKeyword !== prevInitialRef.current) {
       setInputValue(initialKeyword)
       prevInitialRef.current = initialKeyword
-      // / 핫키로 호출된 경우에만 자동 검색 실행
       doSearch(initialKeyword)
     }
   }, [initialKeyword])
@@ -59,29 +88,26 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
     setSearchKeyword(kw)
     setLoading(true)
     setError(null)
-    setHasAiResult(false)
     setHasWikiResult(false)
+    setBaseResult(null)
+    setProviderResults({})
     workspaceAPI.searchAI(kw)
       .then(({ data }) => {
-        setResult(data)
+        setBaseResult(data)
         onSearch?.()
-        const llmResults = data.llm_results || []
-        const hasLLM = llmResults.some((r: any) => r.result && !r.error)
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
-        setHasAiResult(!!hasLLM)
         setHasWikiResult(!!hasWiki)
-        // 첫 번째 결과 있는 모델 탭으로 이동
-        if (hasLLM) {
-          const firstOk = llmResults.find((r: any) => r.result && !r.error)
-          setActiveTab(firstOk?.model || 'wikipedia')
+        // 탭 초기 선택: 로컬LLM 활성이면 local, 아니면 wikipedia
+        if (data.local_active && data.local_result?.result) {
+          setActiveTab('local')
         } else if (hasWiki) {
           setActiveTab('wikipedia')
         } else {
-          setActiveTab(llmResults[0]?.model || 'wikipedia')
+          setActiveTab('local')
         }
       })
       .catch((err) => {
-        setResult(null)
+        setBaseResult(null)
         setError(err?.response?.data?.detail || 'AI 분석 실패')
       })
       .finally(() => setLoading(false))
@@ -90,6 +116,28 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
   const handleSearch = (val: string) => {
     const trimmed = val.trim()
     if (trimmed) doSearch(trimmed)
+  }
+
+  // 범용LLM provider 클릭 → 해당 provider 호출
+  const handleProviderClick = (provider: string) => {
+    if (!searchKeyword) return
+    setActiveTab(provider)
+    // 이미 결과 있으면 재사용
+    if (providerResults[provider]?.data) return
+    setProviderResults(prev => ({ ...prev, [provider]: { loading: true, data: null } }))
+    workspaceAPI.searchAIByProvider(searchKeyword, provider)
+      .then(({ data }) => {
+        setProviderResults(prev => ({ ...prev, [provider]: { loading: false, data } }))
+      })
+      .catch((err) => {
+        setProviderResults(prev => ({
+          ...prev,
+          [provider]: {
+            loading: false,
+            data: { error: err?.response?.data?.detail || '호출 실패', provider, model: undefined },
+          },
+        }))
+      })
   }
 
   const openPromptModal = async () => {
@@ -120,21 +168,19 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
 
   const wikiUrl = searchKeyword ? `https://ko.wikipedia.org/wiki/${encodeURIComponent(searchKeyword)}` : ''
 
-  const renderModelResult = (modelResult: { result?: string; provider?: string; model?: string; error?: string }) => {
-    // LLM 미설정 에러 감지
-    if (modelResult.error && (modelResult.error.includes('설정되지 않았습니다') || modelResult.error.includes('설정이 필요'))) {
+  const renderTextResult = (content?: string | null, errorMsg?: string | null) => {
+    if (errorMsg && (errorMsg.includes('설정되지 않았습니다') || errorMsg.includes('활성화되지 않았습니다') || errorMsg.includes('설정이 필요'))) {
       return (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-            LLM이 설정되지 않았습니다. 설정 페이지에서 API를 등록해주세요.
+            AI가 설정되지 않았습니다. 설정 페이지에서 API를 등록해주세요.
           </Text>
           <Button type="primary" size="small" icon={<SettingOutlined />} onClick={() => navigate('/llm-settings')}>
-            LLM 설정으로 이동
+            AI 설정으로 이동
           </Button>
         </div>
       )
     }
-    const content = modelResult.result
     const hasContent = content && !content.includes('검색 결과가 없습니다')
     return (
       <div style={{ padding: '0 4px' }}>
@@ -148,7 +194,7 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
           </pre>
         ) : (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
-            <Text type="secondary">{modelResult.error || '결과 없음'}</Text>
+            <Text type="secondary">{errorMsg || '결과 없음'}</Text>
           </div>
         )}
       </div>
@@ -156,7 +202,7 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
   }
 
   const renderWikiResult = () => {
-    const content = result?.wikipedia
+    const content = baseResult?.wikipedia
     const hasContent = content && !content.includes('정보를 찾을 수 없습니다')
     return (
       <div style={{ padding: '0 4px' }}>
@@ -181,6 +227,51 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
       </div>
     )
   }
+
+  const renderProviderTab = (provider: string) => {
+    const state = providerResults[provider]
+    if (!searchKeyword) {
+      return <div style={{ textAlign: 'center', padding: '12px 0' }}><Text type="secondary">검색 후 클릭하세요</Text></div>
+    }
+    if (!state) {
+      return <div style={{ textAlign: 'center', padding: '12px 0' }}><Text type="secondary">클릭하여 분석 요청</Text></div>
+    }
+    if (state.loading) {
+      return <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spin tip="분석 중..." /></div>
+    }
+    return renderTextResult(state.data?.result, state.data?.error)
+  }
+
+  // 탭 아이템 구성
+  const tabItems = [
+    // 로컬LLM 탭 (활성화된 경우에만)
+    ...(baseResult?.local_active ? [{
+      key: 'local',
+      label: <span style={{ fontSize: 11 }}>로컬LLM</span>,
+      children: renderTextResult(baseResult?.local_result?.result, baseResult?.local_result?.error),
+    }] : []),
+    // Wikipedia 탭 (기본)
+    {
+      key: 'wikipedia',
+      label: <span style={{ fontSize: 11, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
+      disabled: !hasWikiResult,
+      children: renderWikiResult(),
+    },
+    // 범용LLM 탭들 (활성화된 것만, 클릭 시 호출)
+    ...activeProviders.map(({ provider }) => ({
+      key: provider,
+      label: (
+        <span
+          style={{ fontSize: 11, cursor: 'pointer' }}
+          onClick={() => handleProviderClick(provider)}
+        >
+          {PROVIDER_LABELS[provider] || provider}
+          {providerResults[provider]?.loading && <Spin size="small" style={{ marginLeft: 4 }} />}
+        </span>
+      ),
+      children: renderProviderTab(provider),
+    })),
+  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -212,36 +303,25 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Spin tip="AI 분석 중..." />
           </div>
-        ) : error && !error.includes('설정되지 않았습니다') && !error.includes('설정이 필요') ? (
+        ) : error ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Text type="danger">{error}</Text>
           </div>
-        ) : !result && !error ? (
+        ) : !baseResult ? (
           <Empty description="결과 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <Tabs
             activeKey={activeTab}
-            onChange={setActiveTab}
+            onChange={(key) => {
+              setActiveTab(key)
+              // 범용LLM 탭 클릭 시 호출
+              if (activeProviders.some(p => p.provider === key)) {
+                handleProviderClick(key)
+              }
+            }}
             size="small"
             tabBarStyle={{ paddingLeft: 4 }}
-            items={[
-              ...(result?.llm_results || []).map((r: any) => {
-                const hasContent = r.result && !r.error
-                const modelName = (r.model || r.provider || 'AI').split('/').pop()
-                return {
-                  key: r.model || r.provider || 'ai',
-                  label: <span style={{ fontSize: 11, color: !hasContent ? '#ccc' : undefined }}>{modelName}</span>,
-                  disabled: !hasContent,
-                  children: renderModelResult(r),
-                }
-              }),
-              {
-                key: 'wikipedia',
-                label: <span style={{ fontSize: 11, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
-                disabled: !hasWikiResult,
-                children: renderWikiResult(),
-              },
-            ]}
+            items={tabItems}
           />
         )}
       </div>
