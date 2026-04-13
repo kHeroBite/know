@@ -274,7 +274,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
           style={{ fontSize: 11, cursor: 'pointer' }}
           onClick={() => handleProviderClick(provider)}
         >
-          {PROVIDER_LABELS[provider] || provider}
+          💰 {PROVIDER_LABELS[provider] || provider}
           {providerResults[provider]?.loading && <Spin size="small" style={{ marginLeft: 4 }} />}
         </span>
       ),
