@@ -742,8 +742,16 @@ def get_mysql_dict_count(site: str) -> dict:
     return 결과
 
 
-def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
-    """MySQL의 사전 4종(UDIC/CNDIC/THESAURUS/CATEGORY)을 SQLite 새 도메인으로 마이그레이션."""
+def migrate_dict_from_mysql(
+    target_site: str,
+    mysql_site: str,
+    progress_callback: "Callable[[int], None] | None" = None,
+) -> dict:
+    """MySQL의 사전 4종(UDIC/CNDIC/THESAURUS/CATEGORY)을 SQLite 새 도메인으로 마이그레이션.
+
+    Args:
+        progress_callback: 진행률(0~100) 콜백. 각 사전 처리 완료 시 호출.
+    """
     import pymysql
     from core.database import 세션팩토리
 
@@ -755,11 +763,16 @@ def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
     )
     db = 세션팩토리()
 
+    # 4종 사전 처리 단계별 진행률 구간: (시작%, 종료%)
+    # 92%에서 시작해 udic→cndic→thesaurus→category 순으로 99%까지
+    _단계구간 = [(92, 93), (93, 95), (95, 99), (99, 99)]
+    _배치크기 = 10000
     결과 = {}
     try:
-        for dic_type, suffix in [("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS"), ("category", "_CATEGORY")]:
+        for idx, (dic_type, suffix) in enumerate([("udic", "_UDIC"), ("cndic", "_CNDIC"), ("thesaurus", "_THESAURUS"), ("category", "_CATEGORY")]):
             mysql_tbl = f"{mysql_site}{suffix}"
             tgt_tbl = _dict_table(db, target_site, dic_type)
+            pct_start, pct_end = _단계구간[idx]
 
             try:
                 cur = mysql_conn.cursor()
@@ -768,37 +781,51 @@ def migrate_dict_from_mysql(target_site: str, mysql_site: str) -> dict:
 
                 if cnt == 0:
                     결과[dic_type] = 0
-                    continue
+                else:
+                    db.execute(delete(tgt_tbl))
 
-                db.execute(delete(tgt_tbl))
+                    if dic_type in ("udic", "cndic"):
+                        cur.execute(f"SELECT _WORD FROM `{mysql_tbl}`")
+                    elif dic_type == "thesaurus":
+                        cur.execute(f"SELECT _HEAD_WORD, _TAIL_WORD FROM `{mysql_tbl}`")
+                    else:  # category
+                        cur.execute(f"SELECT _WORD, _DISPLAY_CATEGORY, _DELETE_CATEGORY FROM `{mysql_tbl}`")
 
-                if dic_type in ("udic", "cndic"):
-                    cur.execute(f"SELECT _WORD FROM `{mysql_tbl}`")
-                    rows = cur.fetchall()
-                    for r in rows:
-                        db.execute(insert(tgt_tbl).values(
-                            _WORD=r[0], _UPDATED=datetime.now(),
-                        ))
-                elif dic_type == "thesaurus":
-                    cur.execute(f"SELECT _HEAD_WORD, _TAIL_WORD FROM `{mysql_tbl}`")
-                    rows = cur.fetchall()
-                    for r in rows:
-                        db.execute(insert(tgt_tbl).values(
-                            _HEAD_WORD=r[0], _TAIL_WORD=r[1], _UPDATED=datetime.now(),
-                        ))
-                else:  # category
-                    cur.execute(f"SELECT _WORD, _DISPLAY_CATEGORY, _DELETE_CATEGORY FROM `{mysql_tbl}`")
-                    rows = cur.fetchall()
-                    for r in rows:
-                        db.execute(insert(tgt_tbl).values(
-                            _WORD=r[0], _DISPLAY_CATEGORY=r[1],
-                            _DELETE_CATEGORY=r[2], _UPDATED=datetime.now(),
-                        ))
+                    처리건수 = 0
+                    while True:
+                        rows = cur.fetchmany(_배치크기)
+                        if not rows:
+                            break
+                        for r in rows:
+                            if dic_type in ("udic", "cndic"):
+                                db.execute(insert(tgt_tbl).values(
+                                    _WORD=r[0], _UPDATED=datetime.now(),
+                                ))
+                            elif dic_type == "thesaurus":
+                                db.execute(insert(tgt_tbl).values(
+                                    _HEAD_WORD=r[0], _TAIL_WORD=r[1], _UPDATED=datetime.now(),
+                                ))
+                            else:  # category
+                                db.execute(insert(tgt_tbl).values(
+                                    _WORD=r[0], _DISPLAY_CATEGORY=r[1],
+                                    _DELETE_CATEGORY=r[2], _UPDATED=datetime.now(),
+                                ))
+                        db.commit()
+                        처리건수 += len(rows)
+                        # 배치 완료마다 구간 내 세분화된 진행률 콜백
+                        if progress_callback and pct_end > pct_start and cnt > 0:
+                            구간내비율 = min(처리건수 / cnt, 1.0)
+                            세분퍼센트 = int(pct_start + (pct_end - pct_start) * 구간내비율)
+                            progress_callback(세분퍼센트)
 
-                db.commit()
-                결과[dic_type] = len(rows)
+                    결과[dic_type] = 처리건수
+
             except Exception as e:
                 결과[dic_type] = f"오류: {e}"
+
+            # 각 사전 완료 후 종료 퍼센트 콜백
+            if progress_callback:
+                progress_callback(pct_end)
 
         return 결과
     finally:
