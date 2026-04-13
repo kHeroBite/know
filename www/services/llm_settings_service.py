@@ -123,8 +123,15 @@ async def test_llm_connection(provider: str, api_key: str, base_url: str) -> dic
             from urllib.parse import urlparse
             parsed = urlparse(url)
             server_root = f"{parsed.scheme}://{parsed.netloc}"
-            models_urls = [f"{url.rsplit('/v1/', 1)[0]}/v1/models"] if "/v1/" in url else []
-            models_urls += [f"{server_root}/v1/models", f"{server_root}/api/tags"]
+            # 시도 순서: 1) base_url/v1/models (직접 경로), 2) server_root/v1/models, 3) server_root/api/tags
+            models_urls = [f"{url}/v1/models"]
+            if "/v1/" in url:
+                models_urls.insert(0, f"{url.rsplit('/v1/', 1)[0]}/v1/models")
+            if f"{server_root}/v1/models" not in models_urls:
+                models_urls.append(f"{server_root}/v1/models")
+            models_urls.append(f"{url}/api/tags")
+            if f"{server_root}/api/tags" not in models_urls:
+                models_urls.append(f"{server_root}/api/tags")
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                 for mu in models_urls:
                     try:
@@ -215,8 +222,14 @@ async def get_llm_model_list(provider: str, api_key: str, base_url: str) -> list
             from urllib.parse import urlparse
             parsed = urlparse(url)
             server_root = f"{parsed.scheme}://{parsed.netloc}"
-            models_urls = [f"{url.rsplit('/v1/', 1)[0]}/v1/models"] if "/v1/" in url else []
-            models_urls += [f"{server_root}/v1/models", f"{server_root}/api/tags"]
+            models_urls = [f"{url}/v1/models"]
+            if "/v1/" in url:
+                models_urls.insert(0, f"{url.rsplit('/v1/', 1)[0]}/v1/models")
+            if f"{server_root}/v1/models" not in models_urls:
+                models_urls.append(f"{server_root}/v1/models")
+            models_urls.append(f"{url}/api/tags")
+            if f"{server_root}/api/tags" not in models_urls:
+                models_urls.append(f"{server_root}/api/tags")
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                 for mu in models_urls:
                     try:
@@ -324,27 +337,14 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
                     _record_usage_log(user_id, usage_type, used_model, 0, 0)
                     return {"result": result, "provider": provider, "model": used_model, "error": None}
                 else:
-                    try:
-                        resp = await client.post(f"{url}/v1/chat/completions", json={
-                            "model": used_model,
-                            "messages": [{"role": "user", "content": query}],
-                            "max_completion_tokens": 2000,
-                        })
-                        resp.raise_for_status()
-                        data = resp.json()
-                        result = _strip_think(data["choices"][0]["message"]["content"])
-                        _record_usage_log(user_id, usage_type, used_model, 0, 0)
-                        return {"result": result, "provider": provider, "model": used_model, "error": None}
-                    except Exception:
-                        pass
-                    resp = await client.post(f"{url}/api/generate", json={
+                    resp = await client.post(f"{url}/v1/chat/completions", json={
                         "model": used_model,
-                        "prompt": query,
-                        "stream": False,
+                        "messages": [{"role": "user", "content": query}],
+                        "max_completion_tokens": 2000,
                     })
                     resp.raise_for_status()
                     data = resp.json()
-                    result = data.get("response", "")
+                    result = _strip_think(data["choices"][0]["message"]["content"])
                     _record_usage_log(user_id, usage_type, used_model, 0, 0)
                     return {"result": result, "provider": provider, "model": used_model, "error": None}
 

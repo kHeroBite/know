@@ -8,6 +8,7 @@ const { Text } = Typography
 
 interface Props {
   initialKeyword: string
+  searchTrigger?: number
   isAdmin?: boolean
   onSearch?: () => void
   forcedTab?: { tab: string; n: number }
@@ -40,7 +41,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   gemini: 'Gemini',
 }
 
-export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTab }: Props) {
+export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onSearch, forcedTab }: Props) {
   const navigate = useNavigate()
   const [inputValue, setInputValue] = useState(initialKeyword || '')
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -73,14 +74,22 @@ export default function AIAnalysis({ initialKeyword, isAdmin, onSearch, forcedTa
     if (forcedTab && forcedTab.tab) setActiveTab(forcedTab.tab)
   }, [forcedTab?.n])
 
-  // initialKeyword prop 변경 시 입력값만 업데이트 (자동검색 안 함)
+  // initialKeyword prop 변경 시 입력값 업데이트 (키워드가 다를 때만)
   useEffect(() => {
     if (initialKeyword && initialKeyword !== prevInitialRef.current) {
       setInputValue(initialKeyword)
       prevInitialRef.current = initialKeyword
-      doSearch(initialKeyword)
     }
   }, [initialKeyword])
+
+  // searchTrigger 증가 시 항상 즉시 검색 (같은 키워드 반복 포함)
+  useEffect(() => {
+    if (searchTrigger && searchTrigger > 0 && initialKeyword) {
+      setInputValue(initialKeyword)
+      prevInitialRef.current = initialKeyword
+      doSearch(initialKeyword)
+    }
+  }, [searchTrigger])
 
   const doSearch = (keyword: string) => {
     const kw = keyword.trim()

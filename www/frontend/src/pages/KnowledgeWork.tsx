@@ -129,6 +129,7 @@ export default function KnowledgeWork() {
 
   // AI분석
   const [aiKeyword, setAiKeyword] = useState('')
+  const [aiTrigger, setAiTrigger] = useState(0)
   const [aiForcedTab, setAiForcedTab] = useState<{ tab: string; n: number } | undefined>(undefined)
 
   // 작업완료 모달
@@ -975,6 +976,7 @@ export default function KnowledgeWork() {
         if (kw) {
           setAnalysisRightTab('ai')
           setAiKeyword(kw)
+          setAiTrigger(prev => prev + 1)
         }
         break
       }
@@ -1461,7 +1463,7 @@ export default function KnowledgeWork() {
               </div>
               {[
                 { label: '키워드 분석', key: hotkeys.analyzeKeyword || '0', action: () => { setAnalysisRightTab('morpheme'); setMorphPrefillKw(컨텍스트메뉴.word); setMorphTrigger(p => p + 1) } },
-                { label: 'AI 분석', key: hotkeys.aiAnalysis || '/', action: () => { setAnalysisRightTab('ai'); setAiKeyword(컨텍스트메뉴.word) } },
+                { label: 'AI 분석', key: hotkeys.aiAnalysis || '/', action: () => { setAnalysisRightTab('ai'); setAiKeyword(컨텍스트메뉴.word); setAiTrigger(prev => prev + 1) } },
                 { divider: true },
                 { label: '사용자사전 등록', key: hotkeys.registerUdic || '1', action: () => {
                   클라이언트.post(`/dictionaries/${selectedDomain}/udic${selectedWorkspace ? `?workspace=${selectedWorkspace}` : ''}`, { word: 컨텍스트메뉴.word, memo: '' })
@@ -1558,7 +1560,7 @@ export default function KnowledgeWork() {
                 {
                   key: 'ai',
                   label: <span>AI 분석 <KbdKey>{displayKey(hotkeys.aiAnalysis)}</KbdKey></span>,
-                  children: <div style={{ padding: 8 }}><AIAnalysis initialKeyword={aiKeyword} isAdmin={user?.auth === 'A'} forcedTab={aiForcedTab} /></div>,
+                  children: <div style={{ padding: 8 }}><AIAnalysis initialKeyword={aiKeyword} searchTrigger={aiTrigger} isAdmin={user?.auth === 'A'} forcedTab={aiForcedTab} /></div>,
                 },
               ]}
             />
