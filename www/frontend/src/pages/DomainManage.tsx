@@ -297,7 +297,7 @@ export default function DomainManage() {
         {/* 진행률 */}
         {Object.entries(도메인복사진행중).map(([dm, pct]) => (
           <div key={dm} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontSize: 12 }}>{dm} 생성 중</Text>
+            <Text style={{ fontSize: 12 }}>{currentTask?.label || `${dm} 추가 중`}</Text>
             <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block', flex: 1 }} />
             <Button size="small" danger onClick={async () => {
               await cancelDomainAdd(dm)
@@ -450,15 +450,10 @@ export default function DomainManage() {
             set사전복사모드(v === 'domain' ? 'sqlite' : 'mysql')
           }}
             options={[{ label: '현재 도메인에서 복사', value: 'domain' }, { label: '이전 도메인에서 복사', value: 'old' }]} />
-          <Select style={{ width: '100%' }} placeholder="소스 선택"
-            options={도메인소스타입 === 'old' ? (() => {
-              const 사전있음 = (old소스목록 || []).filter(d => mysql소스목록.includes(d))
-              const 사전없음 = (old소스목록 || []).filter(d => !mysql소스목록.includes(d))
-              return [
-                ...사전있음.map(d => ({ label: d, value: d })),
-                ...사전없음.map(d => ({ label: <span style={{ color: '#bbb' }}>{d}</span>, value: d })),
-              ]
-            })() : 도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
+          <Select style={{ width: '100%' }} placeholder="소스 선택" showSearch
+            options={도메인소스타입 === 'old'
+              ? (old소스목록 || []).map(d => ({ label: d, value: d }))
+              : 도메인목록.map(d => ({ label: d.name ? `${d.name} (${d.id})` : d.id, value: d.id }))}
             onChange={async v => {
               set도메인소스이름(v)
               set도메인신규이름(v)

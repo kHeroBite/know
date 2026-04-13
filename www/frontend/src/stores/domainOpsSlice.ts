@@ -47,10 +47,11 @@ export function createDomainOpsSlice(
   return {
     executeDomainAdd: async (name, params, callbacks) => {
       const taskId = `domain-add-${name}-${Date.now()}`
+      const displayLabel = params.display_name ? `${params.display_name} (${name})` : name
       const started = get()._startTask({
         id: taskId,
         type: '도메인 추가',
-        label: `${name} 추가 중`,
+        label: `${displayLabel} 추가 중`,
         percent: 0,
         status: 'running',
       })
