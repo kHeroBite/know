@@ -11,6 +11,17 @@ def _strip_think(text: str) -> str:
     """Qwen3 등 thinking 모델의 <think>...</think> 태그 제거."""
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
+
+def _strip_markdown(text: str) -> str:
+    """마크다운 헤딩(#)/볼드(**)/이탤릭(*) 제거 — AI분석 응답 후처리."""
+    # 헤딩 제거: ## 제목 → 제목
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # 볼드/이탤릭 제거: **텍스트** → 텍스트
+    text = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
+    # __텍스트__ → 텍스트
+    text = re.sub(r'_{1,2}(.+?)_{1,2}', r'\1', text)
+    return text.strip()
+
 import httpx
 from sqlalchemy import text
 
@@ -289,7 +300,7 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
                 messages=[{"role": "user", "content": query}],
                 max_completion_tokens=500,
             )
-            result = resp.choices[0].message.content
+            result = _strip_markdown(resp.choices[0].message.content)
             used_model = model or "gpt-4o-mini"
             pt = getattr(getattr(resp, 'usage', None), 'prompt_tokens', 0) or 0
             ct = getattr(getattr(resp, 'usage', None), 'completion_tokens', 0) or 0
@@ -301,10 +312,11 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
             client = AsyncAnthropic(api_key=api_key, base_url=base_url or None)
             resp = await client.messages.create(
                 model=model or "claude-haiku-4-5-20251001",
+                system="마크다운 형식(#, ##, **, __, *, - 목록 등)을 절대 사용하지 마세요. 자연스러운 문장으로만 답변하세요.",
                 messages=[{"role": "user", "content": query}],
                 max_tokens=500,
             )
-            result = resp.content[0].text
+            result = _strip_markdown(resp.content[0].text)
             used_model = model or "claude-haiku-4-5-20251001"
             pt = getattr(getattr(resp, 'usage', None), 'input_tokens', 0) or 0
             ct = getattr(getattr(resp, 'usage', None), 'output_tokens', 0) or 0
@@ -316,7 +328,7 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
             genai.configure(api_key=api_key)
             gmodel = genai.GenerativeModel(model or "gemini-2.0-flash")
             resp = await gmodel.generate_content_async(query)
-            result = resp.text
+            result = _strip_markdown(resp.text)
             used_model = model or "gemini-2.0-flash"
             _record_usage_log(user_id, usage_type, used_model, 0, 0)
             return {"result": result, "provider": provider, "model": used_model, "error": None}
@@ -351,7 +363,7 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
                     logger.error("[llm_query][local] 응답 %d: %s", resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 data = resp.json()
-                result = _strip_think(data["choices"][0]["message"]["content"])
+                result = _strip_markdown(_strip_think(data["choices"][0]["message"]["content"]))
                 _record_usage_log(user_id, usage_type, used_model, 0, 0)
                 return {"result": result, "provider": provider, "model": used_model, "error": None}
 
