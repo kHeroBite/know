@@ -99,8 +99,9 @@ async def ai_search_service(keyword: str, user_id: str = '') -> dict:
 
     wiki_val = wiki_result.get("result") if wiki_result else None
 
+    local_log = (local_result.get("result") or "")[:60] if local_result else None
     logger.info("[AI분석] 완료: local=%r, wiki=%r",
-                local_result.get("result", "")[:60] if local_result else None,
+                local_log,
                 wiki_val[:60] if wiki_val else None)
     return {
         "wikipedia": wiki_val,

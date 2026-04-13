@@ -13,6 +13,20 @@
 
 > 서버 접속 정보/배포 명령/ntfy 등 인프라 설정: **kinfra_know** SKILL.md 참조.
 
+### 로컬LLM 서버 (rtx5070)
+
+| 항목 | 값 |
+|------|-----|
+| 공인 IP (외부 접속용) | 211.54.70.74 |
+| 내부 IP (사내망 전용) | 172.10.74.2 |
+| 포트 | 18989 |
+| **base_url (AI설정 입력값)** | `http://211.54.70.74:18989/api/llm` |
+| 현재 로드 모델 | `google/gemma-4-E2B-it` |
+| 엔드포인트 | `/api/llm/v1/models`, `/api/llm/v1/chat/completions` |
+
+> ⚠️ `172.10.74.2`는 사내망 전용 (WSL/사무실 PC에서만 접근 가능)  
+> ⚠️ know 서버(133.186.132.245)에서 rtx5070으로 직접 접근 불가 — 공인 IP 사용 필수
+
 ### 관리 서버 (know-server)
 
 | 항목 | 값 |
@@ -110,7 +124,7 @@ ssh -i ~/.ssh/know_rsa know@133.186.132.245
 │   ├── know-ops/                     ← 통합 운영 디렉토리
 │   │   ├── startup.sh                ← 시스템 통합 시작 (Redis + uvicorn)
 │   │   ├── shutdown.sh               ← 시스템 종료
-│   │   ├── www/                      ← FastAPI 웹 서버 (구 know-api)
+│   │   ├── www/                      ← FastAPI 웹 서버
 │   │   │   ├── main.py               ← FastAPI 앱 진입점 (:18000)
 │   │   │   ├── start.sh              ← uvicorn 단독 재시작
 │   │   │   ├── venv/                 ← Python 가상환경
@@ -234,7 +248,7 @@ know pipeline input.txt --도메인 site1
 
 ---
 
-## www 디렉토리 구조 (Phase 2 신규, 구 know-api)
+## www 디렉토리 구조 (Phase 2 신규)
 
 ```
 www/
