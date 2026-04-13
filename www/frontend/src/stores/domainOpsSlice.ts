@@ -166,7 +166,7 @@ export function createDomainOpsSlice(
             const r = await workspaceAPI.도메인추가진행률(domainName)
             const s = r.data?.status
             if (!s || s === 'idle') return { percent: 100, done: true, error: false }
-            if (s === 'dict_copying') return { percent: 92, done: false, error: false }
+            if (s === 'dict_copying') return { percent: r.data?.percent ?? 92, done: false, error: false }
             if (s === 'done') return { percent: 100, done: true, error: false }
             if (s === 'cancelled') return { percent: 0, done: true, error: false }
             if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }
@@ -229,7 +229,7 @@ export function createDomainOpsSlice(
                   const r = await workspaceAPI.도메인추가진행률(dmId)
                   const s = r.data?.status
                   if (!s || s === 'idle') return { percent: 100, done: true, error: false }
-                  if (s === 'dict_copying') return { percent: 92, done: false, error: false }
+                  if (s === 'dict_copying') return { percent: r.data?.percent ?? 92, done: false, error: false }
                   if (s === 'done') return { percent: 100, done: true, error: false }
                   if (s === 'cancelled') return { percent: 0, done: true, error: false }
                   if (s === 'error') return { percent: 0, done: false, error: true, message: r.data?.message }

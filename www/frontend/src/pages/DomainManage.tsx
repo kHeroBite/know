@@ -182,11 +182,14 @@ export default function DomainManage() {
   const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('create')
 
   // store에서 직접 파생: 현재 도메인 복사 진행 중인 항목
+  // done 상태도 포함: _finishTask 후 2초 딜레이 동안 100%로 표시
   const 도메인복사진행중: Record<string, number> = (() => {
-    if (!currentTask || currentTask.status !== 'running') return {}
+    if (!currentTask) return {}
+    if (currentTask.status !== 'running' && currentTask.status !== 'done') return {}
     const match = currentTask.id.match(/^domain-add-(.+?)-\d+$/)
     if (!match) return {}
-    return { [match[1]]: currentTask.percent }
+    const pct = currentTask.status === 'done' ? 100 : currentTask.percent
+    return { [match[1]]: pct }
   })()
 
   const 목록조회 = async () => {
