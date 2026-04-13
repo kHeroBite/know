@@ -340,11 +340,15 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
                     used_model = "llama3"
             async with httpx.AsyncClient(timeout=60.0) as client:
                 chat_url = url if "/v1/chat/completions" in url else f"{url}/v1/chat/completions"
-                resp = await client.post(chat_url, json={
+                req_body = {
                     "model": used_model,
                     "messages": [{"role": "user", "content": query}],
-                    "max_tokens": 2000,
-                })
+                    "max_tokens": 800,
+                }
+                logger.info("[llm_query][local] POST %s body=%s", chat_url, req_body)
+                resp = await client.post(chat_url, json=req_body)
+                if not resp.is_success:
+                    logger.error("[llm_query][local] 응답 %d: %s", resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 data = resp.json()
                 result = _strip_think(data["choices"][0]["message"]["content"])
