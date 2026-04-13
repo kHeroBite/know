@@ -323,30 +323,33 @@ async def _single_llm_query(설정: dict, keyword: str, prompt: str, user_id: st
 
         elif provider == "local":
             url = (base_url or "http://localhost:11434").rstrip("/")
-            used_model = model or "llama3"
+            used_model = model or ""
+            # model이 비어 있으면 /v1/models에서 첫 번째 모델 자동 감지
+            if not used_model:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as probe:
+                        mresp = await probe.get(f"{url}/v1/models")
+                        mresp.raise_for_status()
+                        mdata = mresp.json()
+                        models_list = mdata.get("data", [])
+                        if models_list:
+                            used_model = models_list[0]["id"]
+                            logger.info("[llm_query][local] model 자동 감지: %s", used_model)
+                except Exception as me:
+                    logger.warning("[llm_query][local] model 자동 감지 실패: %s", me)
+                    used_model = "llama3"
             async with httpx.AsyncClient(timeout=60.0) as client:
-                if "/v1/chat/completions" in url:
-                    resp = await client.post(url, json={
-                        "model": used_model,
-                        "messages": [{"role": "user", "content": query}],
-                        "max_completion_tokens": 2000,
-                    })
-                    resp.raise_for_status()
-                    data = resp.json()
-                    result = _strip_think(data["choices"][0]["message"]["content"])
-                    _record_usage_log(user_id, usage_type, used_model, 0, 0)
-                    return {"result": result, "provider": provider, "model": used_model, "error": None}
-                else:
-                    resp = await client.post(f"{url}/v1/chat/completions", json={
-                        "model": used_model,
-                        "messages": [{"role": "user", "content": query}],
-                        "max_completion_tokens": 2000,
-                    })
-                    resp.raise_for_status()
-                    data = resp.json()
-                    result = _strip_think(data["choices"][0]["message"]["content"])
-                    _record_usage_log(user_id, usage_type, used_model, 0, 0)
-                    return {"result": result, "provider": provider, "model": used_model, "error": None}
+                chat_url = url if "/v1/chat/completions" in url else f"{url}/v1/chat/completions"
+                resp = await client.post(chat_url, json={
+                    "model": used_model,
+                    "messages": [{"role": "user", "content": query}],
+                    "max_tokens": 2000,
+                })
+                resp.raise_for_status()
+                data = resp.json()
+                result = _strip_think(data["choices"][0]["message"]["content"])
+                _record_usage_log(user_id, usage_type, used_model, 0, 0)
+                return {"result": result, "provider": provider, "model": used_model, "error": None}
 
         else:
             return {"result": None, "provider": provider, "model": model, "error": f"알 수 없는 provider: {provider}"}
