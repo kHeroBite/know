@@ -133,11 +133,8 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
     if (trimmed) doSearch(trimmed)
   }
 
-  // 범용LLM provider 클릭 → 해당 provider 호출
-  const handleProviderClick = (provider: string) => {
-    if (!searchKeyword) return
-    setActiveTab(provider)
-    // 이미 결과 있거나 요청 진행 중이면 재사용 (이중 호출 차단)
+  // 범용LLM provider API 호출 (이중 호출 완전 차단 — 3중 가드)
+  const fetchProvider = (provider: string) => {
     if (providerResults[provider]?.data) return
     if (providerResults[provider]?.loading) return
     if (pendingProvidersRef.current.has(provider)) return
@@ -158,6 +155,13 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
           },
         }))
       })
+  }
+
+  // 범용LLM provider 탭 클릭 핸들러
+  const handleProviderClick = (provider: string) => {
+    if (!searchKeyword) return
+    setActiveTab(provider)
+    fetchProvider(provider)
   }
 
   const openPromptModal = async () => {
@@ -334,9 +338,8 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
               activeKey={activeTab}
               onChange={(key) => {
                 setActiveTab(key)
-                // 범용LLM 탭 클릭 시 호출
                 if (activeProviders.some(p => p.provider === key)) {
-                  handleProviderClick(key)
+                  fetchProvider(key)
                 }
               }}
               size="small"
