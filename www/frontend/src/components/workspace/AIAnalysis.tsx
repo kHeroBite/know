@@ -271,6 +271,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
       children: renderWikiResult(),
     },
     // 범용LLM 탭들 (providersLoaded 후에만 렌더링 — 로드 전 깜빡임 방지)
+    // label에서 providerResults 참조 제거 → label 재렌더링 차단 (이모지 flicker 방지)
     ...(providersLoaded ? activeProviders : []).map(({ provider }) => ({
       key: provider,
       label: (
@@ -279,7 +280,6 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
           onClick={() => handleProviderClick(provider)}
         >
           💰 {PROVIDER_LABELS[provider] || provider}
-          {providerResults[provider]?.loading && <Spin size="small" style={{ marginLeft: 4 }} />}
         </span>
       ),
       children: renderProviderTab(provider),
