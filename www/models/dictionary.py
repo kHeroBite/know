@@ -2,14 +2,14 @@ from __future__ import annotations
 import re
 from sqlalchemy import Table, Column, String, DateTime, Text, MetaData
 
-# 사이트명 검증 패턴 (SQL Injection 방지)
-_사이트명패턴 = re.compile(r'^[A-Za-z0-9_]+$')
+# 사이트명 검증 패턴 (SQL Injection 방지 — SQLAlchemy가 테이블명 자동 따옴표 처리)
+_사이트명패턴 = re.compile(r'^[A-Za-z0-9_.]+$')
 
 
 def validate_site_name(site: str) -> str:
     """사이트명 유효성 검증 — SQL Injection 방지."""
     if not _사이트명패턴.match(site):
-        raise ValueError(f"잘못된 사이트명: {site!r} (영문자/숫자/언더스코어만 허용)")
+        raise ValueError(f"잘못된 사이트명: {site!r} (영문자/숫자/언더스코어/점만 허용)")
     return site.upper()
 
 

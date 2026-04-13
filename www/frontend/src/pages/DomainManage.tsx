@@ -439,7 +439,7 @@ export default function DomainManage() {
           set도메인추가로딩(false)
         }}
         onCancel={() => { set도메인추가팝업(false); set도메인신규이름(''); set도메인표시이름(''); set도메인소스이름(null); set사전복사모드('none'); set사전복사소스(null); set복사소스사전건수(null) }}
-        okText="추가" cancelText="취소" confirmLoading={도메인추가로딩} okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 || !/^[A-Za-z0-9_]+$/.test(도메인신규이름.trim()) }}>
+        okText="추가" cancelText="취소" confirmLoading={도메인추가로딩} okButtonProps={{ disabled: !도메인신규이름.trim() || !도메인소스이름 || !/^[A-Za-z0-9_.]+$/.test(도메인신규이름.trim()) }}>
         <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
           {/* 순서: 소스타입(3) → 소스선택(4) → 도메인ID(2) → 표시이름(1) */}
           <Select style={{ width: '100%' }} value={도메인소스타입} onChange={v => {
@@ -485,9 +485,9 @@ export default function DomainManage() {
             value={도메인신규이름}
             onChange={e => set도메인신규이름(e.target.value)}
             autoComplete="off"
-            status={도메인신규이름 && !/^[A-Za-z0-9_]+$/.test(도메인신규이름) ? 'error' : undefined} />
-          {도메인신규이름 && !/^[A-Za-z0-9_]+$/.test(도메인신규이름) && (
-            <Typography.Text type="danger" style={{ fontSize: 12 }}>영문자/숫자/언더스코어(_)만 허용됩니다 (점, 한글 등 불가)</Typography.Text>
+            status={도메인신규이름 && !/^[A-Za-z0-9_.]+$/.test(도메인신규이름) ? 'error' : undefined} />
+          {도메인신규이름 && !/^[A-Za-z0-9_.]+$/.test(도메인신규이름) && (
+            <Typography.Text type="danger" style={{ fontSize: 12 }}>영문자/숫자/언더스코어(_)/점(.)만 허용됩니다 (한글, 공백 등 불가)</Typography.Text>
           )}
           <Input placeholder="도메인 표시이름 (한글 가능, 선택사항)" value={도메인표시이름} onChange={e => set도메인표시이름(e.target.value)} autoComplete="off" />
           <div>
