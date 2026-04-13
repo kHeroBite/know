@@ -175,7 +175,15 @@ export default function DomainManage() {
 
   // 임포트
   const [임포트모달, set임포트모달] = useState(false)
-  const [파일건수, set파일건수] = useState<{udic: number; cndic: number; thesaurus: number; file?: {udic: number; cndic: number; thesaurus: number}; db?: {udic: number; cndic: number; thesaurus: number}} | null>(null)
+  type DictDiff = { file: number; db: number; new: number | null; duplicate: number | null }
+  const [파일건수, set파일건수] = useState<{
+    udic: number
+    cndic: number
+    thesaurus: number
+    file?: { udic: number; cndic: number; thesaurus: number }
+    db?: { udic: number; cndic: number; thesaurus: number }
+    diff?: { udic: DictDiff; cndic: DictDiff; thesaurus: DictDiff }
+  } | null>(null)
   const [임포트중, set임포트중] = useState(false)
   const [진행률, set진행률] = useState<{percent: number; stage: string; status: string; current: number} | null>(null)
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
@@ -556,7 +564,7 @@ export default function DomainManage() {
 
       {/* ─── 사전 임포트 모달 ─── */}
       <Modal title="파일에서 사전 가져오기" open={임포트모달}
-        onCancel={() => !임포트중 && set임포트모달(false)} width={600} closable={!임포트중} maskClosable={false}
+        onCancel={() => !임포트중 && set임포트모달(false)} width={780} closable={!임포트중} maskClosable={false}
         footer={임포트중 ? null : [
           <Button key="cancel" onClick={() => set임포트모달(false)}>취소</Button>,
           <Button key="ok" type="primary" danger={임포트모드 === 'create'} onClick={임포트실행}
@@ -582,43 +590,76 @@ export default function DomainManage() {
             {(() => {
               const 파일 = 파일건수.file ?? { udic: 파일건수.udic, cndic: 파일건수.cndic, thesaurus: 파일건수.thesaurus }
               const DB = 파일건수.db ?? { udic: 0, cndic: 0, thesaurus: 0 }
-              const 변경후 = (db: number, file: number, 선택: boolean): number => {
-                if (!선택) return db
-                if (임포트모드 === 'create') return file
-                return db + file  // overwrite/append: 서버가 중복 처리하므로 최대 예상값
+              const diffMap = 파일건수.diff
+              // 차분 기반 정확한 "변경 후" 계산
+              // - create: 기존 전체 삭제 후 파일 insert → 파일 유일 단어 수
+              // - overwrite: 기존 유지 + 동일 키워드 update + 새 단어 insert → DB + new
+              // - append: 기존 유지 + 새 단어만 insert → DB + new
+              // - diff 정보가 없으면(thesaurus 등) create는 파일, 나머지는 DB (정확한 계산 불가)
+              const 변경후 = (key: 'udic' | 'cndic' | 'thesaurus', 선택: boolean): number => {
+                if (!선택) return DB[key]
+                const d = diffMap?.[key]
+                if (임포트모드 === 'create') return 파일[key]
+                // overwrite/append: DB + new
+                if (d && d.new !== null) return DB[key] + d.new
+                return DB[key]  // diff 없으면 보수적으로 DB 유지
+              }
+              const 새로추가 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
+                const d = diffMap?.[key]
+                return d && d.new !== null ? d.new : null
+              }
+              const 중복 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
+                const d = diffMap?.[key]
+                return d && d.duplicate !== null ? d.duplicate : null
               }
               const rows: { key: 'udic' | 'cndic' | 'thesaurus'; label: string }[] = [
                 { key: 'udic', label: '사용자사전' },
                 { key: 'cndic', label: '복합명사사전' },
                 { key: 'thesaurus', label: '유사어사전' },
               ]
+              const th = (text: string, align: 'left' | 'right' = 'right'): React.CSSProperties => ({
+                padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: align, fontWeight: 500,
+              })
+              const td = (align: 'left' | 'right' = 'right', extra?: React.CSSProperties): React.CSSProperties => ({
+                padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: align, ...(extra || {}),
+              })
               return (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#fafafa' }}>
-                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500 }}>사전</th>
-                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>현재 DB</th>
-                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>파일</th>
-                      <th style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 500 }}>변경 후 (예상)</th>
+                      <th style={th('사전', 'left')}>사전</th>
+                      <th style={th('현재 DB')}>현재 DB</th>
+                      <th style={th('파일')}>파일(유일)</th>
+                      <th style={th('새로 추가')}>새로 추가</th>
+                      <th style={th('중복')}>중복(이미있음)</th>
+                      <th style={th('변경 후')}>변경 후 (예상)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map(({ key, label }) => {
                       const 선택 = 임포트옵션[key]
-                      const after = 변경후(DB[key], 파일[key], 선택)
-                      const diff = after - DB[key]
+                      const after = 변경후(key, 선택)
+                      const diffCnt = after - DB[key]
+                      const n = 새로추가(key)
+                      const dup = 중복(key)
                       return (
                         <tr key={key}>
-                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0' }}>
+                          <td style={td('left')}>
                             <Checkbox checked={선택} disabled={파일[key] === 0} onChange={e => set임포트옵션({ ...임포트옵션, [key]: e.target.checked })}>{label}</Checkbox>
                           </td>
-                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#888' }}>{DB[key].toLocaleString()}</td>
-                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>{파일[key].toLocaleString()}</td>
-                          <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>
+                          <td style={td('right', { color: '#888' })}>{DB[key].toLocaleString()}</td>
+                          <td style={td('right')}>{파일[key].toLocaleString()}</td>
+                          <td style={td('right', { color: n && n > 0 ? '#52c41a' : '#bbb' })}>
+                            {n === null ? '—' : n.toLocaleString()}
+                          </td>
+                          <td style={td('right', { color: '#888' })}>
+                            {dup === null ? '—' : dup.toLocaleString()}
+                          </td>
+                          <td style={td('right')}>
                             {선택 ? (
                               <span>
                                 {after.toLocaleString()}
-                                {diff !== 0 && <span style={{ marginLeft: 6, fontSize: 11, color: diff > 0 ? '#52c41a' : '#ff4d4f' }}>({diff > 0 ? '+' : ''}{diff.toLocaleString()})</span>}
+                                {diffCnt !== 0 && <span style={{ marginLeft: 6, fontSize: 11, color: diffCnt > 0 ? '#52c41a' : '#ff4d4f' }}>({diffCnt > 0 ? '+' : ''}{diffCnt.toLocaleString()})</span>}
                               </span>
                             ) : <span style={{ color: '#bbb' }}>—</span>}
                           </td>
@@ -626,16 +667,27 @@ export default function DomainManage() {
                       )
                     })}
                     <tr style={{ background: '#fafafa', fontWeight: 500 }}>
-                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0' }}>합계</td>
-                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#888' }}>{(DB.udic + DB.cndic + DB.thesaurus).toLocaleString()}</td>
-                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
-                      <td style={{ padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: 'right' }}>
-                        {(변경후(DB.udic, 파일.udic, 임포트옵션.udic) + 변경후(DB.cndic, 파일.cndic, 임포트옵션.cndic) + 변경후(DB.thesaurus, 파일.thesaurus, 임포트옵션.thesaurus)).toLocaleString()}
+                      <td style={td('left')}>합계</td>
+                      <td style={td('right', { color: '#888' })}>{(DB.udic + DB.cndic + DB.thesaurus).toLocaleString()}</td>
+                      <td style={td('right')}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
+                      <td style={td('right', { color: '#888' })}>—</td>
+                      <td style={td('right', { color: '#888' })}>—</td>
+                      <td style={td('right')}>
+                        {(변경후('udic', 임포트옵션.udic) + 변경후('cndic', 임포트옵션.cndic) + 변경후('thesaurus', 임포트옵션.thesaurus)).toLocaleString()}
                       </td>
                     </tr>
                   </tbody>
                 </table>
               )
+            })()}
+            {(() => {
+              const d = 파일건수.diff
+              if (!d) return null
+              const totalNew = (d.udic.new ?? 0) + (d.cndic.new ?? 0)
+              if (totalNew === 0 && 임포트모드 !== 'create') {
+                return <Alert style={{ marginTop: 12 }} type="info" showIcon message="파일과 DB가 이미 동일합니다. 새로 추가될 단어가 없습니다." />
+              }
+              return null
             })()}
           </div>
         )}

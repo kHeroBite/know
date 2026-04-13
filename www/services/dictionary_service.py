@@ -336,6 +336,17 @@ def get_dict_db_count(db: Session, site: str) -> dict:
     return 결과
 
 
+def _file_unique_words(파일경로: str) -> set:
+    """파일에서 normalize_word + 중복 제거된 유일 단어 집합 반환 (udic/cndic용)."""
+    중복set: set = set()
+    for 줄 in _read_file(파일경로):
+        parts = 줄.split("\t", 1)
+        word = normalize_word(parts[0].strip())
+        if word:
+            중복set.add(word)
+    return 중복set
+
+
 def preview_dict_file_count(site: str) -> dict:
     """도메인 사전 파일의 예상 insert 건수를 반환 (실제 import와 동일 로직).
 
@@ -353,16 +364,7 @@ def preview_dict_file_count(site: str) -> dict:
         if 파일경로 and os.path.isfile(파일경로):
             try:
                 if dic_type in ("udic", "cndic"):
-                    # 실제 _import_udic_cndic_file과 동일하게 normalize_word + 중복 제거
-                    줄list = _read_file(파일경로)
-                    중복set: set = set()
-                    for 줄 in 줄list:
-                        parts = 줄.split("\t", 1)
-                        word = normalize_word(parts[0].strip())
-                        if not word or word in 중복set:
-                            continue
-                        중복set.add(word)
-                    결과[dic_type] = len(중복set)
+                    결과[dic_type] = len(_file_unique_words(파일경로))
                 else:
                     # thesaurus: 단순 줄 수 (빈 줄 제외)
                     with open(파일경로, 'rb') as f:
@@ -370,6 +372,70 @@ def preview_dict_file_count(site: str) -> dict:
             except Exception:
                 pass
     return 결과
+
+
+def preview_dict_import_diff(db: Session, site: str) -> dict:
+    """파일 vs 현재 DB 대조 미리보기.
+
+    반환:
+      {
+        "udic":  {"file": N, "db": M, "new": X, "duplicate": Y},
+        "cndic": {"file": N, "db": M, "new": X, "duplicate": Y},
+        "thesaurus": {"file": N, "db": M, "new": null, "duplicate": null}
+      }
+    - udic/cndic: 파일 유일 단어 집합과 DB _WORD 집합을 비교하여 new/duplicate 계산
+    - thesaurus: 단순 라인 수 (그룹 포맷 복잡성으로 정확한 대조 생략)
+    """
+    결과 = {
+        "udic": {"file": 0, "db": 0, "new": 0, "duplicate": 0},
+        "cndic": {"file": 0, "db": 0, "new": 0, "duplicate": 0},
+        "thesaurus": {"file": 0, "db": 0, "new": None, "duplicate": None},
+    }
+    도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
+    추가경로 = _extra_search_paths(site)
+    if not os.path.isdir(도메인경로) and not 추가경로:
+        return 결과
+
+    for dic_type in ("udic", "cndic"):
+        파일경로 = _find_dict_file(도메인경로, _사전파일패턴[dic_type], 추가경로=추가경로)
+        if not (파일경로 and os.path.isfile(파일경로)):
+            continue
+        try:
+            파일단어 = _file_unique_words(파일경로)
+            tbl = _dict_table(db, site, dic_type)
+            db단어 = set(r[0] for r in db.execute(select(tbl.c._WORD)).all())
+            new_count = len(파일단어 - db단어)
+            dup_count = len(파일단어 & db단어)
+            결과[dic_type] = {
+                "file": len(파일단어),
+                "db": len(db단어),
+                "new": new_count,
+                "duplicate": dup_count,
+            }
+        except Exception:
+            pass
+
+    # thesaurus는 파일 라인 수 + DB 건수만 반환
+    thes_파일 = _find_dict_file(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
+    if thes_파일 and os.path.isfile(thes_파일):
+        try:
+            with open(thes_파일, 'rb') as f:
+                thes_cnt = sum(1 for line in f if line.strip())
+            tbl = _dict_table(db, site, "thesaurus")
+            thes_db = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
+            결과["thesaurus"] = {
+                "file": thes_cnt,
+                "db": thes_db,
+                "new": None,
+                "duplicate": None,
+            }
+        except Exception:
+            pass
+
+    return 결과
+
+
+
 
 
 # ─── 비동기 임포트 + 진행률 추적 ────────────────────────────────
