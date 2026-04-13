@@ -614,16 +614,17 @@ def start_async_file_import(site: str, user_id: str = None,
     """백그라운드 스레드에서 임포트 시작. run_id 반환."""
     import uuid as uuid_mod
     run_id = uuid_mod.uuid4().hex[:8]
+    # 초기 total은 파일 라인 수로 세팅 (preview). _task 진입 후 DB 대조로 mode별 작업대상으로 재조정.
     미리보기 = preview_dict_file_count(site)
-    전체건수 = 0
+    전체건수_임시 = 0
     if import_udic:
-        전체건수 += 미리보기.get("udic", 0)
+        전체건수_임시 += 미리보기.get("udic", 0)
     if import_cndic:
-        전체건수 += 미리보기.get("cndic", 0)
+        전체건수_임시 += 미리보기.get("cndic", 0)
     if import_thesaurus:
-        전체건수 += 미리보기.get("thesaurus", 0)
+        전체건수_임시 += 미리보기.get("thesaurus", 0)
     _임포트진행률[site] = {
-        "status": "running", "total": 전체건수, "current": 0,
+        "status": "running", "total": 전체건수_임시, "current": 0,
         "percent": 0, "stage": "preparing", "result": None, "run_id": run_id,
     }
     _임포트취소.pop(site, None)  # 이전 취소 플래그 정리
@@ -633,6 +634,20 @@ def start_async_file_import(site: str, user_id: str = None,
         db = None
         try:
             db = 세션팩토리()
+            # mode별 실제 작업대상 건수로 total 재계산 (DB 대조 기반)
+            try:
+                diff = preview_dict_import_diff(db, site, mode=mode)
+                작업대상합 = 0
+                for k, 사용 in (("udic", import_udic), ("cndic", import_cndic), ("thesaurus", import_thesaurus)):
+                    if not 사용:
+                        continue
+                    t = diff.get(k, {}).get("targets", {})
+                    작업대상합 += int(t.get(mode, 0) or 0)
+                # 최소 1로 세팅 (0이면 즉시 완료)
+                _임포트진행률[site]["total"] = max(작업대상합, 1)
+            except Exception:
+                pass  # 실패 시 기존 전체건수 유지 (fallback)
+
             결과 = _sync_file_import(db, site, user_id=user_id, progress_site=site,
                               import_udic=import_udic, import_cndic=import_cndic, import_thesaurus=import_thesaurus,
                               mode=mode)
@@ -755,7 +770,10 @@ def _import_udic_cndic_file(
         new_batch: list = []
         update_batch: list = []
         now = datetime.now()
-        처리수 = 0
+        # 작업대상 카운터: mode에 따라 다르게 증가
+        # - overwrite: UPDATE(기존) + INSERT(신규) 둘 다 카운트 → 파일 전체
+        # - append: INSERT(신규)만 카운트 → 신규만
+        작업대상수 = 0
 
         for word, memo in 파일항목:
             _check_cancelled(progress_site)
@@ -764,40 +782,53 @@ def _import_udic_cndic_file(
                     # key 일치면 무조건 UPDATE (MEMO 비교 가드 제거)
                     update_batch.append({"word_": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
                     업데이트수 += 1
+                    작업대상수 += 1
                 else:  # append
                     스킵수 += 1
+                    # append는 skip이므로 작업대상 카운트 제외
             else:
                 new_batch.append({"_WORD": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
                 삽입수 += 1
-            처리수 += 1
-            if progress_site and 처리수 % 2000 == 0:
-                _update_progress(progress_site, progress_offset + 처리수)
+                작업대상수 += 1  # create/overwrite/append 모두 신규는 작업대상
 
-        # bulk INSERT (신규)
+        # bulk INSERT (신규) — 배치 완료마다 작업대상 기준 진행률 업데이트
+        누적작업 = 0
         if new_batch:
             _check_cancelled(progress_site)
             if progress_site:
-                _update_progress(progress_site, progress_offset + 처리수, f"{dic_type}_inserting")
+                _update_progress(progress_site, progress_offset + 누적작업, f"{dic_type}_inserting")
             for i in range(0, len(new_batch), BATCH):
                 _check_cancelled(progress_site)
-                db.execute(insert(tbl), new_batch[i:i + BATCH])
+                chunk = new_batch[i:i + BATCH]
+                db.execute(insert(tbl), chunk)
+                누적작업 += len(chunk)
+                if progress_site:
+                    _update_progress(progress_site, progress_offset + 누적작업)
 
         # bulk UPDATE (기존 — overwrite 시 무조건 UPDATE)
         if update_batch:
             _check_cancelled(progress_site)
             if progress_site:
-                _update_progress(progress_site, progress_offset + 처리수, f"{dic_type}_updating")
+                _update_progress(progress_site, progress_offset + 누적작업, f"{dic_type}_updating")
             upd_stmt = update(tbl).where(tbl.c._WORD == bindparam("word_")).values(
                 _MEMO=bindparam("_MEMO"), _USER_ID=bindparam("_USER_ID"), _UPDATED=bindparam("_UPDATED"),
             )
             for i in range(0, len(update_batch), BATCH):
                 _check_cancelled(progress_site)
-                db.execute(upd_stmt, update_batch[i:i + BATCH])
+                chunk = update_batch[i:i + BATCH]
+                db.execute(upd_stmt, chunk)
+                누적작업 += len(chunk)
+                if progress_site:
+                    _update_progress(progress_site, progress_offset + 누적작업)
+
+        # 이 사전 타입의 "작업대상수"를 return하여 _sync_file_import가 offset 누적
+        파일총수 = 작업대상수
 
     if progress_site:
         _update_progress(progress_site, progress_offset + 파일총수)
     db.commit()
-    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
+    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수,
+            "__작업대상수__": 파일총수}
 
 
 def _import_thesaurus_file(
@@ -873,7 +904,10 @@ def _import_thesaurus_file(
         new_batch: list = []
         update_batch: list = []
         now = datetime.now()
-        처리수 = 0
+        # 작업대상수: mode별로 실제 I/O 건수 카운트
+        # - overwrite: UPDATE + INSERT 둘 다 (파일 전체)
+        # - append: INSERT만 (신규만)
+        작업대상수 = 0
 
         for head, tail, memo in 파일항목:
             _check_cancelled(progress_site)
@@ -885,6 +919,7 @@ def _import_thesaurus_file(
                         "_USER_ID": user_id, "_UPDATED": now,
                     })
                     업데이트수 += 1
+                    작업대상수 += 1
                 else:  # append
                     # append 원칙: _HEAD_WORD 중복 시 무조건 SKIP (PK 제약 + 기존 보존 원칙)
                     # 사용자 원요구는 (head,tail) 완전일치 기준이나 PK 제약상 구현 불가
@@ -895,36 +930,47 @@ def _import_thesaurus_file(
                     "_USER_ID": user_id, "_UPDATED": now,
                 })
                 삽입수 += 1
-            처리수 += 1
-            if progress_site and 처리수 % 2000 == 0:
-                _update_progress(progress_site, progress_offset + 처리수)
+                작업대상수 += 1
 
-        # bulk INSERT (신규)
+        # bulk INSERT (신규) — 배치 완료마다 작업대상 기준 진행률 업데이트
+        누적작업 = 0
         if new_batch:
             _check_cancelled(progress_site)
             if progress_site:
-                _update_progress(progress_site, progress_offset + 처리수, "thesaurus_inserting")
+                _update_progress(progress_site, progress_offset + 누적작업, "thesaurus_inserting")
             for i in range(0, len(new_batch), BATCH):
                 _check_cancelled(progress_site)
-                db.execute(insert(tbl), new_batch[i:i + BATCH])
+                chunk = new_batch[i:i + BATCH]
+                db.execute(insert(tbl), chunk)
+                누적작업 += len(chunk)
+                if progress_site:
+                    _update_progress(progress_site, progress_offset + 누적작업)
 
         # bulk UPDATE (변경된 기존)
         if update_batch:
             _check_cancelled(progress_site)
             if progress_site:
-                _update_progress(progress_site, progress_offset + 처리수, "thesaurus_updating")
+                _update_progress(progress_site, progress_offset + 누적작업, "thesaurus_updating")
             upd_stmt = update(tbl).where(tbl.c._HEAD_WORD == bindparam("head_")).values(
                 _TAIL_WORD=bindparam("_TAIL_WORD"), _MEMO=bindparam("_MEMO"),
                 _USER_ID=bindparam("_USER_ID"), _UPDATED=bindparam("_UPDATED"),
             )
             for i in range(0, len(update_batch), BATCH):
                 _check_cancelled(progress_site)
-                db.execute(upd_stmt, update_batch[i:i + BATCH])
+                chunk = update_batch[i:i + BATCH]
+                db.execute(upd_stmt, chunk)
+                누적작업 += len(chunk)
+                if progress_site:
+                    _update_progress(progress_site, progress_offset + 누적작업)
+
+        # 이 함수의 "작업대상수"로 파일총수 치환
+        파일총수 = 작업대상수
 
     if progress_site:
         _update_progress(progress_site, progress_offset + 파일총수)
     db.commit()
-    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
+    return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수,
+            "__작업대상수__": 파일총수}
 
 
 def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, progress_site: Optional[str] = None,
@@ -945,6 +991,13 @@ def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, pro
     결과 = {"udic": dict(_빈결과), "cndic": dict(_빈결과), "thesaurus": dict(_빈결과)}
     누적 = 0
 
+    # 누적은 "작업대상(실제 I/O) 건수" 기준. _import_*_file이 반환한 __작업대상수__로 증가.
+    def _누적증가(r: dict) -> int:
+        # 반환값의 __작업대상수__ 우선. 없으면 fallback으로 inserted+updated 사용 (skipped 제외).
+        if "__작업대상수__" in r:
+            return int(r["__작업대상수__"] or 0)
+        return int(r.get("inserted", 0) or 0) + int(r.get("updated", 0) or 0)
+
     # UDIC: user.ks 또는 user*.ks
     if import_udic:
         if progress_site:
@@ -952,7 +1005,7 @@ def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, pro
         udic파일 = _find_dict_file(도메인경로, ["user.ks", "user*.ks"], 추가경로=추가경로)
         if udic파일:
             결과["udic"] = _import_udic_cndic_file(db, site, "udic", udic파일, user_id, progress_site, 누적, mode=mode)
-            누적 += 결과["udic"]["inserted"] + 결과["udic"]["updated"] + 결과["udic"]["skipped"]
+            누적 += _누적증가(결과["udic"])
 
     # CNDIC: cnlist.ks 또는 cnlist*.ks
     if import_cndic:
@@ -961,7 +1014,7 @@ def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, pro
         cndic파일 = _find_dict_file(도메인경로, ["cnlist.ks", "cnlist*.ks"], 추가경로=추가경로)
         if cndic파일:
             결과["cndic"] = _import_udic_cndic_file(db, site, "cndic", cndic파일, user_id, progress_site, 누적, mode=mode)
-            누적 += 결과["cndic"]["inserted"] + 결과["cndic"]["updated"] + 결과["cndic"]["skipped"]
+            누적 += _누적증가(결과["cndic"])
 
     # THESAURUS: quasisynonym 또는 addedsyn
     if import_thesaurus:
@@ -970,7 +1023,12 @@ def _sync_file_import(db: Session, site: str, user_id: Optional[str] = None, pro
         thesaurus파일 = _find_dict_file(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
         if thesaurus파일:
             결과["thesaurus"] = _import_thesaurus_file(db, site, thesaurus파일, user_id, progress_site, 누적, mode=mode)
+            누적 += _누적증가(결과["thesaurus"])
 
+    # 반환 정리: 내부 필드 __작업대상수__ 제거 (외부 노출 금지)
+    for k in ("udic", "cndic", "thesaurus"):
+        if isinstance(결과.get(k), dict):
+            결과[k].pop("__작업대상수__", None)
     return 결과
 
 
