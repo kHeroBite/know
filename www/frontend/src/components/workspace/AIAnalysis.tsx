@@ -59,6 +59,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
   const [promptSaving, setPromptSaving] = useState(false)
   const [promptText, setPromptText] = useState('')
   const prevInitialRef = useRef(initialKeyword)
+  const pendingProvidersRef = useRef<Set<string>>(new Set())
 
   // 활성 범용LLM provider 목록 로드 (단일 setState로 배치 — flicker 방지)
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
     setHasWikiResult(false)
     setBaseResult(null)
     setProviderResults({})
+    pendingProvidersRef.current.clear()
     workspaceAPI.searchAI(kw)
       .then(({ data }) => {
         setBaseResult(data)
@@ -135,14 +137,19 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
   const handleProviderClick = (provider: string) => {
     if (!searchKeyword) return
     setActiveTab(provider)
-    // 이미 결과 있으면 재사용
+    // 이미 결과 있거나 요청 진행 중이면 재사용 (이중 호출 차단)
     if (providerResults[provider]?.data) return
+    if (providerResults[provider]?.loading) return
+    if (pendingProvidersRef.current.has(provider)) return
+    pendingProvidersRef.current.add(provider)
     setProviderResults(prev => ({ ...prev, [provider]: { loading: true, data: null } }))
     workspaceAPI.searchAIByProvider(searchKeyword, provider)
       .then(({ data }) => {
+        pendingProvidersRef.current.delete(provider)
         setProviderResults(prev => ({ ...prev, [provider]: { loading: false, data } }))
       })
       .catch((err) => {
+        pendingProvidersRef.current.delete(provider)
         setProviderResults(prev => ({
           ...prev,
           [provider]: {
