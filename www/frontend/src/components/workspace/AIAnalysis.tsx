@@ -241,8 +241,38 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
     )
   }
 
-  const renderProviderTab = (provider: string) => {
-    const state = providerResults[provider]
+  // 탭 구조 (label만 — children 없음)
+  // providerResults를 의존성에서 완전히 제거 → 결과 수신 시 탭 구조 재생성/재마운트 없음
+  const tabItems = useMemo(() => [
+    ...(baseResult?.local_active ? [{
+      key: 'local',
+      label: <span style={{ fontSize: 11 }}>로컬LLM</span>,
+    }] : []),
+    {
+      key: 'wikipedia',
+      label: <span style={{ fontSize: 11, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
+      disabled: !hasWikiResult,
+    },
+    ...(providersLoaded ? activeProviders : []).map(({ provider }) => ({
+      key: provider,
+      label: (
+        <span style={{ fontSize: 11 }}>
+          💰 {PROVIDER_LABELS[provider] || provider}
+        </span>
+      ),
+    })),
+  ], [baseResult?.local_active, hasWikiResult, providersLoaded, activeProviders])
+
+  // 활성 탭 콘텐츠 — tabItems와 분리하여 직접 렌더링 (provider 결과 변경 시 탭 구조 재마운트 없음)
+  const renderActiveTabContent = () => {
+    if (activeTab === 'local') {
+      return renderTextResult(baseResult?.local_result?.result, baseResult?.local_result?.error)
+    }
+    if (activeTab === 'wikipedia') {
+      return renderWikiResult()
+    }
+    // 범용LLM
+    const state = providerResults[activeTab]
     if (!searchKeyword) {
       return <div style={{ textAlign: 'center', padding: '12px 0' }}><Text type="secondary">검색 후 클릭하세요</Text></div>
     }
@@ -254,38 +284,6 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
     }
     return renderTextResult(state.data?.result, state.data?.error)
   }
-
-  // 탭 아이템 구성 (메모이제이션 — providerResults 변경 시 해당 탭만 재계산)
-  const tabItems = useMemo(() => [
-    // 로컬LLM 탭 (활성화된 경우에만)
-    ...(baseResult?.local_active ? [{
-      key: 'local',
-      label: <span style={{ fontSize: 11 }}>로컬LLM</span>,
-      children: renderTextResult(baseResult?.local_result?.result, baseResult?.local_result?.error),
-    }] : []),
-    // Wikipedia 탭 (기본)
-    {
-      key: 'wikipedia',
-      label: <span style={{ fontSize: 11, color: !hasWikiResult ? '#ccc' : undefined }}>Wikipedia</span>,
-      disabled: !hasWikiResult,
-      children: renderWikiResult(),
-    },
-    // 범용LLM 탭들 (providersLoaded 후에만 렌더링 — 로드 전 깜빡임 방지)
-    // label에서 providerResults 참조 제거 → label 재렌더링 차단 (이모지 flicker 방지)
-    ...(providersLoaded ? activeProviders : []).map(({ provider }) => ({
-      key: provider,
-      label: (
-        <span
-          style={{ fontSize: 11, cursor: 'pointer' }}
-          onClick={() => handleProviderClick(provider)}
-        >
-          💰 {PROVIDER_LABELS[provider] || provider}
-        </span>
-      ),
-      children: renderProviderTab(provider),
-    })),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [baseResult, hasWikiResult, providersLoaded, activeProviders, providerResults, searchKeyword])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -324,19 +322,25 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
         ) : !baseResult ? (
           <Empty description="결과 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          <Tabs
-            activeKey={activeTab}
-            onChange={(key) => {
-              setActiveTab(key)
-              // 범용LLM 탭 클릭 시 호출
-              if (activeProviders.some(p => p.provider === key)) {
-                handleProviderClick(key)
-              }
-            }}
-            size="small"
-            tabBarStyle={{ paddingLeft: 4 }}
-            items={tabItems}
-          />
+          <>
+            <Tabs
+              activeKey={activeTab}
+              onChange={(key) => {
+                setActiveTab(key)
+                // 범용LLM 탭 클릭 시 호출
+                if (activeProviders.some(p => p.provider === key)) {
+                  handleProviderClick(key)
+                }
+              }}
+              size="small"
+              tabBarStyle={{ paddingLeft: 4, marginBottom: 0 }}
+              items={tabItems}
+            />
+            {/* 탭 콘텐츠: tabItems와 완전히 분리하여 렌더링 — provider 결과 변경 시 탭 구조 재마운트 없음 */}
+            <div style={{ marginTop: 4 }}>
+              {renderActiveTabContent()}
+            </div>
+          </>
         )}
       </div>
 
