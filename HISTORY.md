@@ -1,5 +1,24 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-13] 사전 import 3모드 프로세스 재정비 + UI 개선
+
+> **작업 요약**: create/overwrite/append 각 모드의 의미를 명확히 하고, 작업대상을 실제 I/O 건수와 1:1 대응하도록 로직 정비. 미리보기 UI를 7열→5열로 축소하고 기본값을 create→append로 변경.
+
+### 수정 파일
+- `www/services/dictionary_service.py` — `preview_dict_import_diff()`에 targets 필드 추가, overwrite 모드에서 MEMO/tail 가드 제거, append thesaurus를 _HEAD_WORD 기준 중복 판정으로 수정
+- `www/api/dictionary.py` — `/file-preview` API에 mode 파라미터 추가
+- `www/frontend/src/pages/DomainManage.tsx` — 테이블 7열→5열(사전/현재DB/파일/작업대상/변경후), 기본 라디오 create→append, append 작업대상=0 시 즉시 완료 처리
+
+### 모드별 동작 정의
+- **create**: DELETE ALL → 파일 전량 INSERT (작업대상=파일 전체)
+- **overwrite**: key 일치=UPDATE, 신규=INSERT (작업대상=파일 전체) / thesaurus는 _HEAD_WORD 일치 시 UPDATE
+- **append**: key 일치=SKIP, 신규만 INSERT (작업대상=신규 건수) / thesaurus는 _HEAD_WORD 기준, PK 제약상 head 중복 시 무조건 SKIP
+
+### 테스트
+- AC-001~AC-008 전체 PASS (otest-1)
+
+---
+
 ## [2026-04-11] 사전빌드 유사어 미반영 + 작업이력 되돌리기 버그 수정
 
 > **작업 요약**: 버그 3개 수정 — ① 사전빌드 시 THESAURUS export 누락, ② 작업이력 되돌리기 WS 사전 테이블 접근 오류, ③ DicTab 등록/삭제 시 work_history 미기록

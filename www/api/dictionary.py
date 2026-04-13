@@ -52,16 +52,23 @@ def _resolve_site(domain: str, workspace: str | None = None) -> str:
 
 
 @라우터.get("/{domain}/file-preview")
-def preview_file_count(domain: str, db: Session = Depends(db_session), _: dict = Depends(get_current_user)):
-    """도메인 사전 파일의 예상 건수 + 현재 DB 건수 + 차분(new/duplicate) 조회."""
+def preview_file_count(
+    domain: str,
+    mode: str = Query("append", regex="^(create|overwrite|append)$"),
+    db: Session = Depends(db_session),
+    _: dict = Depends(get_current_user),
+):
+    """도메인 사전 파일의 예상 건수 + 현재 DB 건수 + 차분(new/modified/same) 조회.
+    diff 각 사전에 targets 필드 포함 (create/overwrite/append 별 작업대상 건수).
+    """
     site = domain.upper()
     파일 = preview_dict_file_count(site)
     db건수 = get_dict_db_count(db, site)
-    diff = preview_dict_import_diff(db, site)
+    diff = preview_dict_import_diff(db, site, mode=mode)
     return {
         "file": 파일,
         "db": db건수,
-        # 차분 정보: 각 사전별 {file, db, new, duplicate}
+        # 차분 정보: 각 사전별 {file, db, new, modified, same, duplicate, targets}
         "diff": diff,
         # 하위 호환: 기존 파일건수 필드 유지
         "udic": 파일["udic"],

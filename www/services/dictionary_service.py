@@ -386,7 +386,87 @@ def preview_dict_file_count(site: str) -> dict:
     return 결과
 
 
-def preview_dict_import_diff(db: Session, site: str) -> dict:
+def _parse_thesaurus_file(파일경로: str) -> List[tuple]:
+    """thesaurus 파일을 파싱해 중복 제거된 (head, tail, memo) 리스트 반환.
+
+    지원 형식:
+    1) 탭 구분: head_word\\ttail_word[\\tmemo]
+    2) 쉼표 구분: head,tail1,tail2,...
+    3) 그룹 형식: 빈줄로 구분된 단어 그룹 (첫 단어=head, 나머지=tail 쉼표 결합)
+    """
+    빈줄포함 = []
+    for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
+        try:
+            with open(파일경로, "r", encoding=enc) as f:
+                for line in f:
+                    stripped = line.rstrip("\r\n")
+                    빈줄포함.append(stripped.strip())
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+
+    비공백줄 = [l for l in 빈줄포함 if l]
+    탭형식 = any("\t" in l for l in 비공백줄[:10])
+    쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
+
+    파일항목: list = []
+    중복set: set = set()
+
+    if 쉼표형식:
+        for 줄 in 비공백줄:
+            parts = 줄.split(",")
+            head = normalize_word(parts[0].strip())
+            tail_parts = [p.strip() for p in parts[1:] if p.strip()]
+            tail = ",".join(tail_parts)
+            if not head or not tail or head in 중복set:
+                continue
+            중복set.add(head)
+            파일항목.append((head, tail, None))
+    elif 탭형식:
+        for 줄 in 비공백줄:
+            parts = 줄.split("\t")
+            if len(parts) < 2:
+                continue
+            head = normalize_word(parts[0].strip())
+            tail = parts[1].strip()
+            memo = parts[2].strip() if len(parts) > 2 else None
+            if not head or not tail or head in 중복set:
+                continue
+            중복set.add(head)
+            파일항목.append((head, tail, memo))
+    else:
+        빈줄있음 = any(l == "" for l in 빈줄포함)
+        if 빈줄있음:
+            groups: List[List[str]] = []
+            현재그룹: List[str] = []
+            for 줄 in 빈줄포함:
+                if 줄:
+                    현재그룹.append(줄)
+                else:
+                    if 현재그룹:
+                        groups.append(현재그룹)
+                        현재그룹 = []
+            if 현재그룹:
+                groups.append(현재그룹)
+            for grp in groups:
+                head = normalize_word(grp[0])
+                tail_words = [normalize_word(w) for w in grp[1:] if w.strip()]
+                if not head or head in 중복set:
+                    continue
+                중복set.add(head)
+                파일항목.append((head, ",".join(tail_words) if tail_words else "", None))
+        else:
+            for 줄 in 비공백줄:
+                word = normalize_word(줄)
+                if not word or word in 중복set:
+                    continue
+                중복set.add(word)
+                파일항목.append((word, "", None))
+
+    return 파일항목
+
+
+def preview_dict_import_diff(db: Session, site: str, mode: str = "append") -> dict:
     """파일 vs 현재 DB 대조 미리보기 — (key, value) 완전일치 기준.
 
     분류 (udic/cndic/thesaurus 공통):
@@ -394,18 +474,26 @@ def preview_dict_import_diff(db: Session, site: str) -> dict:
       - modified: 키는 있지만 값(메모/tail)이 다름 → overwrite 시 UPDATE, append 시 SKIP
       - same: 키+값이 완전 일치 → 어떤 모드에서도 변경 없음
       - duplicate = modified + same (기존 호환 필드, '키 이미있음' 의미)
+      - targets: 모드별 작업대상 건수 (클라이언트에서 선택적으로 사용)
+        - create: 파일 전체 (DELETE ALL + INSERT)
+        - overwrite: 파일 전체 (UPDATE 기존 + INSERT 신규)
+        - append: 신규(new)만
 
     반환 형식:
       {
-        "udic":  {"file": N, "db": M, "new": X, "modified": Y, "same": Z, "duplicate": Y+Z},
-        "cndic": {...},
-        "thesaurus": {...}
+        "udic":  {"file": N, "db": M, "new": X, "modified": Y, "same": Z, "duplicate": Y+Z,
+                  "targets": {"create": N, "overwrite": N, "append": X}},
+        "cndic": {...동일},
+        "thesaurus": {...동일}
       }
     """
     결과 = {
-        "udic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0},
-        "cndic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0},
-        "thesaurus": {"file": 0, "db": 0, "new": None, "modified": None, "same": None, "duplicate": None},
+        "udic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0,
+                 "targets": {"create": 0, "overwrite": 0, "append": 0}},
+        "cndic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0,
+                  "targets": {"create": 0, "overwrite": 0, "append": 0}},
+        "thesaurus": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0,
+                      "targets": {"create": 0, "overwrite": 0, "append": 0}},
     }
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
     추가경로 = _extra_search_paths(site)
@@ -432,33 +520,58 @@ def preview_dict_import_diff(db: Session, site: str) -> dict:
                 else:
                     same_count += 1
 
+            file_cnt = len(파일맵)
             결과[dic_type] = {
-                "file": len(파일맵),
+                "file": file_cnt,
                 "db": len(db맵),
                 "new": new_count,
                 "modified": modified_count,
                 "same": same_count,
                 "duplicate": modified_count + same_count,
+                "targets": {
+                    "create": file_cnt,
+                    "overwrite": file_cnt,
+                    "append": new_count,
+                },
             }
         except Exception:
             pass
 
-    # thesaurus: (head, tail, memo) 완전 일치 기준
+    # thesaurus: _parse_thesaurus_file로 파싱 후 DB와 (head, tail, memo) 대조
     thes_파일 = _find_dict_file(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
     if thes_파일 and os.path.isfile(thes_파일):
         try:
-            # 파일 파싱: 단순 라인 수는 빠르게 셈 (그룹/탭 형식은 미리보기에서 정확 대조 생략)
-            with open(thes_파일, 'rb') as f:
-                thes_cnt = sum(1 for line in f if line.strip())
+            파일항목 = _parse_thesaurus_file(thes_파일)  # List[(head, tail, memo)]
+            파일맵 = {head: (tail, memo) for head, tail, memo in 파일항목}
+
             tbl = _dict_table(db, site, "thesaurus")
-            thes_db = db.execute(select(func.count()).select_from(tbl)).scalar() or 0
+            db_rows = db.execute(select(tbl.c._HEAD_WORD, tbl.c._TAIL_WORD, tbl.c._MEMO)).all()
+            db맵 = {r[0]: (r[1], r[2]) for r in db_rows}
+
+            new_count = 0
+            modified_count = 0
+            same_count = 0
+            for head, (tail, memo) in 파일맵.items():
+                if head not in db맵:
+                    new_count += 1
+                elif db맵[head] != (tail, memo):
+                    modified_count += 1
+                else:
+                    same_count += 1
+
+            file_cnt = len(파일맵)
             결과["thesaurus"] = {
-                "file": thes_cnt,
-                "db": thes_db,
-                "new": None,
-                "modified": None,
-                "same": None,
-                "duplicate": None,
+                "file": file_cnt,
+                "db": len(db맵),
+                "new": new_count,
+                "modified": modified_count,
+                "same": same_count,
+                "duplicate": modified_count + same_count,
+                "targets": {
+                    "create": file_cnt,
+                    "overwrite": file_cnt,
+                    "append": new_count,
+                },
             }
         except Exception:
             pass
@@ -648,12 +761,9 @@ def _import_udic_cndic_file(
             _check_cancelled(progress_site)
             if word in db맵:
                 if mode == "overwrite":
-                    # _MEMO 변경된 경우만 UPDATE
-                    if db맵[word] != memo:
-                        update_batch.append({"word_": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
-                        업데이트수 += 1
-                    else:
-                        스킵수 += 1
+                    # key 일치면 무조건 UPDATE (MEMO 비교 가드 제거)
+                    update_batch.append({"word_": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
+                    업데이트수 += 1
                 else:  # append
                     스킵수 += 1
             else:
@@ -672,7 +782,7 @@ def _import_udic_cndic_file(
                 _check_cancelled(progress_site)
                 db.execute(insert(tbl), new_batch[i:i + BATCH])
 
-        # bulk UPDATE (_MEMO 변경된 기존)
+        # bulk UPDATE (기존 — overwrite 시 무조건 UPDATE)
         if update_batch:
             _check_cancelled(progress_site)
             if progress_site:
@@ -711,82 +821,12 @@ def _import_thesaurus_file(
     tbl = _dict_table(db, site, "thesaurus")
     BATCH = 2000
 
-    # 1) 파일 읽기
+    # 1) 파일 파싱 (_parse_thesaurus_file 헬퍼 재사용)
     _check_cancelled(progress_site)
     if progress_site:
         _update_progress(progress_site, progress_offset, "thesaurus_reading")
 
-    빈줄포함list_tasks = []
-    for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
-        try:
-            with open(파일경로, "r", encoding=enc) as f:
-                for line in f:
-                    stripped = line.rstrip("\r\n")
-                    빈줄포함list_tasks.append(stripped.strip())
-            break
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-
-    # 형식 감지 (첫 10줄 기준)
-    비공백줄 = [l for l in 빈줄포함list_tasks if l]
-    탭형식 = any("\t" in l for l in 비공백줄[:10])
-    쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
-
-    # 2) 파일에서 유일 항목 추출 (head 중복 제거)
-    파일항목: list = []  # (head, tail, memo)
-    중복set: set = set()
-
-    if 쉼표형식:
-        for 줄 in 비공백줄:
-            parts = 줄.split(",")
-            head = normalize_word(parts[0].strip())
-            tail_parts = [p.strip() for p in parts[1:] if p.strip()]
-            tail = ",".join(tail_parts)
-            if not head or not tail or head in 중복set:
-                continue
-            중복set.add(head)
-            파일항목.append((head, tail, None))
-    elif 탭형식:
-        for 줄 in 비공백줄:
-            parts = 줄.split("\t")
-            if len(parts) < 2:
-                continue
-            head = normalize_word(parts[0].strip())
-            tail = parts[1].strip()
-            memo = parts[2].strip() if len(parts) > 2 else None
-            if not head or not tail or head in 중복set:
-                continue
-            중복set.add(head)
-            파일항목.append((head, tail, memo))
-    else:
-        빈줄있음 = any(l == "" for l in 빈줄포함list_tasks)
-        if 빈줄있음:
-            groups: List[List[str]] = []
-            현재그룹: List[str] = []
-            for 줄 in 빈줄포함list_tasks:
-                if 줄:
-                    현재그룹.append(줄)
-                else:
-                    if 현재그룹:
-                        groups.append(현재그룹)
-                        현재그룹 = []
-            if 현재그룹:
-                groups.append(현재그룹)
-            for grp in groups:
-                head = normalize_word(grp[0])
-                tail_words = [normalize_word(w) for w in grp[1:] if w.strip()]
-                if not head or head in 중복set:
-                    continue
-                중복set.add(head)
-                파일항목.append((head, ",".join(tail_words) if tail_words else "", None))
-        else:
-            for 줄 in 비공백줄:
-                word = normalize_word(줄)
-                if not word or word in 중복set:
-                    continue
-                중복set.add(word)
-                파일항목.append((word, "", None))
-
+    파일항목 = _parse_thesaurus_file(파일경로)  # List[(head, tail, memo)]
     파일총수 = len(파일항목)
     삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
 
@@ -839,17 +879,15 @@ def _import_thesaurus_file(
             _check_cancelled(progress_site)
             if head in db맵:
                 if mode == "overwrite":
-                    cur_tail, cur_memo = db맵[head]
-                    # _TAIL_WORD 또는 _MEMO 변경된 경우만 UPDATE
-                    if cur_tail != tail or cur_memo != memo:
-                        update_batch.append({
-                            "head_": head, "_TAIL_WORD": tail, "_MEMO": memo,
-                            "_USER_ID": user_id, "_UPDATED": now,
-                        })
-                        업데이트수 += 1
-                    else:
-                        스킵수 += 1
+                    # _HEAD_WORD 일치면 무조건 UPDATE (tail/memo 비교 가드 제거)
+                    update_batch.append({
+                        "head_": head, "_TAIL_WORD": tail, "_MEMO": memo,
+                        "_USER_ID": user_id, "_UPDATED": now,
+                    })
+                    업데이트수 += 1
                 else:  # append
+                    # append 원칙: _HEAD_WORD 중복 시 무조건 SKIP (PK 제약 + 기존 보존 원칙)
+                    # 사용자 원요구는 (head,tail) 완전일치 기준이나 PK 제약상 구현 불가
                     스킵수 += 1
             else:
                 new_batch.append({

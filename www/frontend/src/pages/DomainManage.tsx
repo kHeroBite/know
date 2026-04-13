@@ -182,6 +182,7 @@ export default function DomainManage() {
     modified: number | null   // key 있음/value 다름 → overwrite 시 UPDATE
     same: number | null       // key+value 완전 일치
     duplicate: number | null  // modified + same (기존 호환)
+    targets?: { create: number | null; overwrite: number | null; append: number | null }
   }
   const [파일건수, set파일건수] = useState<{
     udic: number
@@ -194,7 +195,7 @@ export default function DomainManage() {
   const [임포트중, set임포트중] = useState(false)
   const [진행률, set진행률] = useState<{percent: number; stage: string; status: string; current: number} | null>(null)
   const [임포트옵션, set임포트옵션] = useState({udic: true, cndic: true, thesaurus: true})
-  const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('create')
+  const [임포트모드, set임포트모드] = useState<'create' | 'overwrite' | 'append'>('append')
 
   // store에서 직접 파생: 현재 도메인 복사 진행 중인 항목
   // done 상태도 포함: _finishTask 후 2초 딜레이 동안 100%로 표시
@@ -241,12 +242,45 @@ export default function DomainManage() {
   const 임포트모달열기 = async () => {
     if (!사전도메인) return
     set임포트모달(true); set파일건수(null); set진행률(null)
-    set임포트옵션({udic: true, cndic: true, thesaurus: true}); set임포트모드('create')
+    set임포트옵션({udic: true, cndic: true, thesaurus: true}); set임포트모드('append')
     try { const res = await 클라이언트.get(`/dictionaries/${사전도메인}/file-preview`); set파일건수(res.data) } catch { set파일건수(null) }
+  }
+
+  const 작업대상계산 = (key: 'udic' | 'cndic' | 'thesaurus'): number => {
+    const 파일 = 파일건수?.file ?? { udic: 파일건수?.udic ?? 0, cndic: 파일건수?.cndic ?? 0, thesaurus: 파일건수?.thesaurus ?? 0 }
+    const d = 파일건수?.diff?.[key]
+    if (!d) {
+      const file = 파일[key] ?? 0
+      switch (임포트모드) {
+        case 'create': return file
+        case 'overwrite': return file
+        case 'append': return 0
+      }
+    }
+    const t = d.targets
+    if (t && t[임포트모드] !== null && t[임포트모드] !== undefined) return t[임포트모드]!
+    // fallback: targets 필드 없을 때 (호환)
+    const file = 파일[key] ?? 0
+    const new_ = d.new ?? 0
+    switch (임포트모드) {
+      case 'create': return file
+      case 'overwrite': return file
+      case 'append': return new_
+    }
   }
 
   const 임포트실행 = async () => {
     if (!사전도메인) return
+    if (임포트모드 === 'append') {
+      const 총작업대상 = (['udic', 'cndic', 'thesaurus'] as const)
+        .filter(k => 임포트옵션[k])
+        .reduce((sum, k) => sum + 작업대상계산(k), 0)
+      if (총작업대상 === 0) {
+        message.info('추가할 신규 항목이 없습니다. 즉시 완료되었습니다.')
+        set임포트모달(false)
+        return
+      }
+    }
     const taskId = `domain-import-${Date.now()}`
     const { _startTask, _updateProgress, _finishTask } = useGlobalTaskStore.getState()
     const started = _startTask({ id: taskId, type: '도메인 파일 임포트', label: `${사전도메인} 사전 임포트 중`, percent: 0, status: 'running' })
@@ -636,124 +670,108 @@ export default function DomainManage() {
                 </Space>
               </Radio.Group>
             </div>
-            {임포트모드 === 'create' && <Alert message="선택한 사전의 기존 DB 데이터를 삭제하고 파일에서 다시 등록합니다." type="warning" showIcon style={{ marginBottom: 16 }} />}
-            {임포트모드 === 'overwrite' && <Alert message="기존 데이터를 유지하면서 파일의 동일 키워드를 업데이트합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
-            {임포트모드 === 'append' && <Alert message="기존 데이터를 유지하면서 새로운 키워드만 추가합니다." type="info" showIcon style={{ marginBottom: 16 }} />}
+            {임포트모드 === 'create' && <Alert message="⚠️ 기존 DB 데이터를 모두 삭제하고 파일에서 다시 등록합니다. 복구 불가." type="warning" showIcon style={{ marginBottom: 16 }} />}
+            {임포트모드 === 'overwrite' && <Alert message="파일 전체를 DB에 반영합니다. 동일 키는 덮어쓰기, 신규 키는 추가. 작업대상=파일 전체" type="info" showIcon style={{ marginBottom: 16 }} />}
+            {임포트모드 === 'append' && <Alert message="기존 데이터를 유지하고 신규 키만 추가합니다. 작업대상=신규 건수만" type="info" showIcon style={{ marginBottom: 16 }} />}
             {(() => {
               const 파일 = 파일건수.file ?? { udic: 파일건수.udic, cndic: 파일건수.cndic, thesaurus: 파일건수.thesaurus }
               const DB = 파일건수.db ?? { udic: 0, cndic: 0, thesaurus: 0 }
               const diffMap = 파일건수.diff
-              // 차분 기반 정확한 "변경 후" 계산
-              // - create: 기존 전체 삭제 후 파일 insert → 파일 유일 단어 수
-              // - overwrite: 기존 유지 + 동일 키워드 update + 새 단어 insert → DB + new
-              // - append: 기존 유지 + 새 단어만 insert → DB + new
-              // - diff 정보가 없으면(thesaurus 등) create는 파일, 나머지는 DB (정확한 계산 불가)
               const 변경후 = (key: 'udic' | 'cndic' | 'thesaurus', 선택: boolean): number => {
                 if (!선택) return DB[key]
                 const d = diffMap?.[key]
-                if (임포트모드 === 'create') return 파일[key]
-                // overwrite/append: DB + new (modified는 UPDATE라 건수 증가 없음)
-                if (d && d.new !== null) return DB[key] + d.new
-                return DB[key]  // diff 없으면 보수적으로 DB 유지
+                switch (임포트모드) {
+                  case 'create': return 파일[key]
+                  case 'overwrite':
+                  case 'append': return (DB[key] ?? 0) + (d?.new ?? 0)
+                }
+                return DB[key]
               }
-              const 새로추가 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
+              const 작업대상 = (key: 'udic' | 'cndic' | 'thesaurus'): number => {
                 const d = diffMap?.[key]
-                return d && d.new !== null ? d.new : null
-              }
-              const 변경예정 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
-                const d = diffMap?.[key]
-                return d && d.modified !== undefined && d.modified !== null ? d.modified : null
-              }
-              const 완전일치 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
-                const d = diffMap?.[key]
-                return d && d.same !== undefined && d.same !== null ? d.same : null
+                if (!d) {
+                  const file = 파일[key] ?? 0
+                  switch (임포트모드) {
+                    case 'create': return file
+                    case 'overwrite': return file
+                    case 'append': return 0
+                  }
+                }
+                const t = d.targets
+                if (t && t[임포트모드] !== null && t[임포트모드] !== undefined) return t[임포트모드]!
+                const file = 파일[key] ?? 0
+                const new_ = d.new ?? 0
+                switch (임포트모드) {
+                  case 'create': return file
+                  case 'overwrite': return file
+                  case 'append': return new_
+                }
               }
               const rows: { key: 'udic' | 'cndic' | 'thesaurus'; label: string }[] = [
                 { key: 'udic', label: '사용자사전' },
                 { key: 'cndic', label: '복합명사사전' },
                 { key: 'thesaurus', label: '유사어사전' },
               ]
-              const th = (text: string, align: 'left' | 'right' = 'right'): React.CSSProperties => ({
+              const th = (align: 'left' | 'right' = 'right'): React.CSSProperties => ({
                 padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: align, fontWeight: 500,
               })
               const td = (align: 'left' | 'right' = 'right', extra?: React.CSSProperties): React.CSSProperties => ({
                 padding: '6px 10px', border: '1px solid #f0f0f0', textAlign: align, ...(extra || {}),
               })
+              const 총작업대상 = rows.filter(r => 임포트옵션[r.key]).reduce((sum, r) => sum + 작업대상(r.key), 0)
               return (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: '#fafafa' }}>
-                      <th style={th('사전', 'left')}>사전</th>
-                      <th style={th('현재 DB')}>현재 DB</th>
-                      <th style={th('파일')}>파일(유일)</th>
-                      <th style={th('새로 추가')}>새로 추가</th>
-                      <th style={th('변경')}>변경(덮어쓸)</th>
-                      <th style={th('완전일치')}>완전일치</th>
-                      <th style={th('변경 후')}>변경 후 (예상)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(({ key, label }) => {
-                      const 선택 = 임포트옵션[key]
-                      const after = 변경후(key, 선택)
-                      const diffCnt = after - DB[key]
-                      const n = 새로추가(key)
-                      const mod = 변경예정(key)
-                      const same = 완전일치(key)
-                      return (
-                        <tr key={key}>
-                          <td style={td('left')}>
-                            <Checkbox checked={선택} disabled={파일[key] === 0} onChange={e => set임포트옵션({ ...임포트옵션, [key]: e.target.checked })}>{label}</Checkbox>
-                          </td>
-                          <td style={td('right', { color: '#888' })}>{DB[key].toLocaleString()}</td>
-                          <td style={td('right')}>{파일[key].toLocaleString()}</td>
-                          <td style={td('right', { color: n && n > 0 ? '#52c41a' : '#bbb' })}>
-                            {n === null ? '—' : n.toLocaleString()}
-                          </td>
-                          <td style={td('right', { color: mod && mod > 0 ? '#faad14' : '#bbb' })}>
-                            {mod === null ? '—' : mod.toLocaleString()}
-                          </td>
-                          <td style={td('right', { color: '#888' })}>
-                            {same === null ? '—' : same.toLocaleString()}
-                          </td>
-                          <td style={td('right')}>
-                            {선택 ? (
-                              <span>
-                                {after.toLocaleString()}
-                                {diffCnt !== 0 && <span style={{ marginLeft: 6, fontSize: 11, color: diffCnt > 0 ? '#52c41a' : '#ff4d4f' }}>({diffCnt > 0 ? '+' : ''}{diffCnt.toLocaleString()})</span>}
-                              </span>
-                            ) : <span style={{ color: '#bbb' }}>—</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    <tr style={{ background: '#fafafa', fontWeight: 500 }}>
-                      <td style={td('left')}>합계</td>
-                      <td style={td('right', { color: '#888' })}>{(DB.udic + DB.cndic + DB.thesaurus).toLocaleString()}</td>
-                      <td style={td('right')}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
-                      <td style={td('right', { color: '#888' })}>—</td>
-                      <td style={td('right', { color: '#888' })}>—</td>
-                      <td style={td('right', { color: '#888' })}>—</td>
-                      <td style={td('right')}>
-                        {(변경후('udic', 임포트옵션.udic) + 변경후('cndic', 임포트옵션.cndic) + 변경후('thesaurus', 임포트옵션.thesaurus)).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#fafafa' }}>
+                        <th style={th('left')}>사전</th>
+                        <th style={th()}>현재 DB</th>
+                        <th style={th()}>파일</th>
+                        <th style={th()}>작업대상</th>
+                        <th style={th()}>변경후(예상)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(({ key, label }) => {
+                        const 선택 = 임포트옵션[key]
+                        const target = 작업대상(key)
+                        const after = 변경후(key, 선택)
+                        const diffCnt = after - DB[key]
+                        return (
+                          <tr key={key}>
+                            <td style={td('left')}>
+                              <Checkbox checked={선택} disabled={파일[key] === 0} onChange={e => set임포트옵션({ ...임포트옵션, [key]: e.target.checked })}>{label}</Checkbox>
+                            </td>
+                            <td style={td('right', { color: '#888' })}>{DB[key].toLocaleString()}</td>
+                            <td style={td('right')}>{파일[key].toLocaleString()}</td>
+                            <td style={td('right', { color: target > 0 ? '#1677ff' : '#bbb' })}>{target.toLocaleString()}</td>
+                            <td style={td('right')}>
+                              {선택 ? (
+                                <span>
+                                  {after.toLocaleString()}
+                                  {diffCnt !== 0 && <span style={{ marginLeft: 6, fontSize: 11, color: diffCnt > 0 ? '#52c41a' : '#ff4d4f' }}>({diffCnt > 0 ? '+' : ''}{diffCnt.toLocaleString()})</span>}
+                                </span>
+                              ) : <span style={{ color: '#bbb' }}>—</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      <tr style={{ background: '#fafafa', fontWeight: 500 }}>
+                        <td style={td('left')}>합계</td>
+                        <td style={td('right', { color: '#888' })}>{(DB.udic + DB.cndic + DB.thesaurus).toLocaleString()}</td>
+                        <td style={td('right')}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
+                        <td style={td('right', { color: 총작업대상 > 0 ? '#1677ff' : '#bbb' })}>{총작업대상.toLocaleString()}</td>
+                        <td style={td('right')}>
+                          {(변경후('udic', 임포트옵션.udic) + 변경후('cndic', 임포트옵션.cndic) + 변경후('thesaurus', 임포트옵션.thesaurus)).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {임포트모드 === 'append' && 총작업대상 === 0 && (
+                    <Alert style={{ marginTop: 12 }} type="info" showIcon message="추가할 신규 항목이 없습니다." />
+                  )}
+                </>
               )
-            })()}
-            {(() => {
-              const d = 파일건수.diff
-              if (!d) return null
-              const totalNew = (d.udic.new ?? 0) + (d.cndic.new ?? 0)
-              const totalMod = (d.udic.modified ?? 0) + (d.cndic.modified ?? 0)
-              if (totalNew === 0 && totalMod === 0 && 임포트모드 !== 'create') {
-                return <Alert style={{ marginTop: 12 }} type="info" showIcon message="파일과 DB가 완전히 동일합니다. 추가되거나 변경될 항목이 없습니다." />
-              }
-              if (totalNew === 0 && totalMod > 0 && 임포트모드 === 'append') {
-                return <Alert style={{ marginTop: 12 }} type="warning" showIcon message={`추가 모드는 기존 키워드를 수정하지 않습니다. 변경될 ${totalMod.toLocaleString()}건을 반영하려면 "덮어쓰기" 모드를 선택하세요.`} />
-              }
-              return null
             })()}
           </div>
         )}
