@@ -53,6 +53,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
   // 범용LLM: provider → { loading, result }
   const [providerResults, setProviderResults] = useState<Record<string, { loading: boolean; data: ProviderResult | null }>>({})
   const [activeProviders, setActiveProviders] = useState<{ provider: string; model: string }[]>([])
+  const [providersLoaded, setProvidersLoaded] = useState(false)
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
@@ -67,6 +68,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
         setActiveProviders(generic)
       })
       .catch(() => {})
+      .finally(() => setProvidersLoaded(true))
   }, [])
 
   // forcedTab: 외부에서 탭 강제 전환 (PageUp/PageDown 핫키)
@@ -266,8 +268,8 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
       disabled: !hasWikiResult,
       children: renderWikiResult(),
     },
-    // 범용LLM 탭들 (활성화된 것만, 클릭 시 호출)
-    ...activeProviders.map(({ provider }) => ({
+    // 범용LLM 탭들 (providersLoaded 후에만 렌더링 — 로드 전 깜빡임 방지)
+    ...(providersLoaded ? activeProviders : []).map(({ provider }) => ({
       key: provider,
       label: (
         <span
