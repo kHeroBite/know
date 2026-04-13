@@ -175,7 +175,14 @@ export default function DomainManage() {
 
   // 임포트
   const [임포트모달, set임포트모달] = useState(false)
-  type DictDiff = { file: number; db: number; new: number | null; duplicate: number | null }
+  type DictDiff = {
+    file: number
+    db: number
+    new: number | null
+    modified: number | null   // key 있음/value 다름 → overwrite 시 UPDATE
+    same: number | null       // key+value 완전 일치
+    duplicate: number | null  // modified + same (기존 호환)
+  }
   const [파일건수, set파일건수] = useState<{
     udic: number
     cndic: number
@@ -607,7 +614,7 @@ export default function DomainManage() {
 
       {/* ─── 사전 임포트 모달 ─── */}
       <Modal title="파일에서 사전 가져오기" open={임포트모달}
-        onCancel={() => !임포트중 && set임포트모달(false)} width={780} closable={!임포트중} maskClosable={false}
+        onCancel={() => !임포트중 && set임포트모달(false)} width={860} closable={!임포트중} maskClosable={false}
         footer={임포트중 ? [
           <Button key="cancel-import" danger onClick={임포트취소}>중지</Button>,
         ] : [
@@ -645,7 +652,7 @@ export default function DomainManage() {
                 if (!선택) return DB[key]
                 const d = diffMap?.[key]
                 if (임포트모드 === 'create') return 파일[key]
-                // overwrite/append: DB + new
+                // overwrite/append: DB + new (modified는 UPDATE라 건수 증가 없음)
                 if (d && d.new !== null) return DB[key] + d.new
                 return DB[key]  // diff 없으면 보수적으로 DB 유지
               }
@@ -653,9 +660,13 @@ export default function DomainManage() {
                 const d = diffMap?.[key]
                 return d && d.new !== null ? d.new : null
               }
-              const 중복 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
+              const 변경예정 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
                 const d = diffMap?.[key]
-                return d && d.duplicate !== null ? d.duplicate : null
+                return d && d.modified !== undefined && d.modified !== null ? d.modified : null
+              }
+              const 완전일치 = (key: 'udic' | 'cndic' | 'thesaurus'): number | null => {
+                const d = diffMap?.[key]
+                return d && d.same !== undefined && d.same !== null ? d.same : null
               }
               const rows: { key: 'udic' | 'cndic' | 'thesaurus'; label: string }[] = [
                 { key: 'udic', label: '사용자사전' },
@@ -676,7 +687,8 @@ export default function DomainManage() {
                       <th style={th('현재 DB')}>현재 DB</th>
                       <th style={th('파일')}>파일(유일)</th>
                       <th style={th('새로 추가')}>새로 추가</th>
-                      <th style={th('중복')}>중복(이미있음)</th>
+                      <th style={th('변경')}>변경(덮어쓸)</th>
+                      <th style={th('완전일치')}>완전일치</th>
                       <th style={th('변경 후')}>변경 후 (예상)</th>
                     </tr>
                   </thead>
@@ -686,7 +698,8 @@ export default function DomainManage() {
                       const after = 변경후(key, 선택)
                       const diffCnt = after - DB[key]
                       const n = 새로추가(key)
-                      const dup = 중복(key)
+                      const mod = 변경예정(key)
+                      const same = 완전일치(key)
                       return (
                         <tr key={key}>
                           <td style={td('left')}>
@@ -697,8 +710,11 @@ export default function DomainManage() {
                           <td style={td('right', { color: n && n > 0 ? '#52c41a' : '#bbb' })}>
                             {n === null ? '—' : n.toLocaleString()}
                           </td>
+                          <td style={td('right', { color: mod && mod > 0 ? '#faad14' : '#bbb' })}>
+                            {mod === null ? '—' : mod.toLocaleString()}
+                          </td>
                           <td style={td('right', { color: '#888' })}>
-                            {dup === null ? '—' : dup.toLocaleString()}
+                            {same === null ? '—' : same.toLocaleString()}
                           </td>
                           <td style={td('right')}>
                             {선택 ? (
@@ -717,6 +733,7 @@ export default function DomainManage() {
                       <td style={td('right')}>{(파일.udic + 파일.cndic + 파일.thesaurus).toLocaleString()}</td>
                       <td style={td('right', { color: '#888' })}>—</td>
                       <td style={td('right', { color: '#888' })}>—</td>
+                      <td style={td('right', { color: '#888' })}>—</td>
                       <td style={td('right')}>
                         {(변경후('udic', 임포트옵션.udic) + 변경후('cndic', 임포트옵션.cndic) + 변경후('thesaurus', 임포트옵션.thesaurus)).toLocaleString()}
                       </td>
@@ -729,8 +746,12 @@ export default function DomainManage() {
               const d = 파일건수.diff
               if (!d) return null
               const totalNew = (d.udic.new ?? 0) + (d.cndic.new ?? 0)
-              if (totalNew === 0 && 임포트모드 !== 'create') {
-                return <Alert style={{ marginTop: 12 }} type="info" showIcon message="파일과 DB가 이미 동일합니다. 새로 추가될 단어가 없습니다." />
+              const totalMod = (d.udic.modified ?? 0) + (d.cndic.modified ?? 0)
+              if (totalNew === 0 && totalMod === 0 && 임포트모드 !== 'create') {
+                return <Alert style={{ marginTop: 12 }} type="info" showIcon message="파일과 DB가 완전히 동일합니다. 추가되거나 변경될 항목이 없습니다." />
+              }
+              if (totalNew === 0 && totalMod > 0 && 임포트모드 === 'append') {
+                return <Alert style={{ marginTop: 12 }} type="warning" showIcon message={`추가 모드는 기존 키워드를 수정하지 않습니다. 변경될 ${totalMod.toLocaleString()}건을 반영하려면 "덮어쓰기" 모드를 선택하세요.`} />
               }
               return null
             })()}

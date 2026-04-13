@@ -347,6 +347,18 @@ def _file_unique_words(파일경로: str) -> set:
     return 중복set
 
 
+def _file_unique_word_memo(파일경로: str) -> dict:
+    """파일에서 {word: memo} 맵 반환 (udic/cndic용, 동일 word는 마지막 등장 memo 사용)."""
+    결과: dict = {}
+    for 줄 in _read_file(파일경로):
+        parts = 줄.split("\t", 1)
+        word = normalize_word(parts[0].strip())
+        memo = parts[1].strip() if len(parts) > 1 else None
+        if word and word not in 결과:
+            결과[word] = memo
+    return 결과
+
+
 def preview_dict_file_count(site: str) -> dict:
     """도메인 사전 파일의 예상 insert 건수를 반환 (실제 import와 동일 로직).
 
@@ -375,21 +387,25 @@ def preview_dict_file_count(site: str) -> dict:
 
 
 def preview_dict_import_diff(db: Session, site: str) -> dict:
-    """파일 vs 현재 DB 대조 미리보기.
+    """파일 vs 현재 DB 대조 미리보기 — (key, value) 완전일치 기준.
 
-    반환:
+    분류 (udic/cndic/thesaurus 공통):
+      - new: DB에 키 자체가 없음 → INSERT 대상
+      - modified: 키는 있지만 값(메모/tail)이 다름 → overwrite 시 UPDATE, append 시 SKIP
+      - same: 키+값이 완전 일치 → 어떤 모드에서도 변경 없음
+      - duplicate = modified + same (기존 호환 필드, '키 이미있음' 의미)
+
+    반환 형식:
       {
-        "udic":  {"file": N, "db": M, "new": X, "duplicate": Y},
-        "cndic": {"file": N, "db": M, "new": X, "duplicate": Y},
-        "thesaurus": {"file": N, "db": M, "new": null, "duplicate": null}
+        "udic":  {"file": N, "db": M, "new": X, "modified": Y, "same": Z, "duplicate": Y+Z},
+        "cndic": {...},
+        "thesaurus": {...}
       }
-    - udic/cndic: 파일 유일 단어 집합과 DB _WORD 집합을 비교하여 new/duplicate 계산
-    - thesaurus: 단순 라인 수 (그룹 포맷 복잡성으로 정확한 대조 생략)
     """
     결과 = {
-        "udic": {"file": 0, "db": 0, "new": 0, "duplicate": 0},
-        "cndic": {"file": 0, "db": 0, "new": 0, "duplicate": 0},
-        "thesaurus": {"file": 0, "db": 0, "new": None, "duplicate": None},
+        "udic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0},
+        "cndic": {"file": 0, "db": 0, "new": 0, "modified": 0, "same": 0, "duplicate": 0},
+        "thesaurus": {"file": 0, "db": 0, "new": None, "modified": None, "same": None, "duplicate": None},
     }
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
     추가경로 = _extra_search_paths(site)
@@ -401,24 +417,37 @@ def preview_dict_import_diff(db: Session, site: str) -> dict:
         if not (파일경로 and os.path.isfile(파일경로)):
             continue
         try:
-            파일단어 = _file_unique_words(파일경로)
+            파일맵 = _file_unique_word_memo(파일경로)  # {word: memo}
             tbl = _dict_table(db, site, dic_type)
-            db단어 = set(r[0] for r in db.execute(select(tbl.c._WORD)).all())
-            new_count = len(파일단어 - db단어)
-            dup_count = len(파일단어 & db단어)
+            db맵 = {r[0]: r[1] for r in db.execute(select(tbl.c._WORD, tbl.c._MEMO)).all()}
+
+            new_count = 0
+            modified_count = 0
+            same_count = 0
+            for word, memo in 파일맵.items():
+                if word not in db맵:
+                    new_count += 1
+                elif db맵[word] != memo:
+                    modified_count += 1
+                else:
+                    same_count += 1
+
             결과[dic_type] = {
-                "file": len(파일단어),
-                "db": len(db단어),
+                "file": len(파일맵),
+                "db": len(db맵),
                 "new": new_count,
-                "duplicate": dup_count,
+                "modified": modified_count,
+                "same": same_count,
+                "duplicate": modified_count + same_count,
             }
         except Exception:
             pass
 
-    # thesaurus는 파일 라인 수 + DB 건수만 반환
+    # thesaurus: (head, tail, memo) 완전 일치 기준
     thes_파일 = _find_dict_file(도메인경로, _사전파일패턴["thesaurus"], 추가경로=추가경로)
     if thes_파일 and os.path.isfile(thes_파일):
         try:
+            # 파일 파싱: 단순 라인 수는 빠르게 셈 (그룹/탭 형식은 미리보기에서 정확 대조 생략)
             with open(thes_파일, 'rb') as f:
                 thes_cnt = sum(1 for line in f if line.strip())
             tbl = _dict_table(db, site, "thesaurus")
@@ -427,6 +456,8 @@ def preview_dict_import_diff(db: Session, site: str) -> dict:
                 "file": thes_cnt,
                 "db": thes_db,
                 "new": None,
+                "modified": None,
+                "same": None,
                 "duplicate": None,
             }
         except Exception:
@@ -665,17 +696,25 @@ def _import_thesaurus_file(
     progress_site: Optional[str] = None, progress_offset: int = 0,
     mode: str = "create",
 ) -> dict:
-    """addedsyn 파일을 읽어 thesaurus DB에 INSERT.
-    mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE).
+    """addedsyn/synonym.UTF-8 파일을 읽어 thesaurus DB에 INSERT.
+
+    최적화(2026-04-13): DB 집합 1회 로드 + 메모리 dict 대조 + bulk INSERT/UPDATE.
+    - mode=create: DELETE ALL → 파일 전량 bulk INSERT
+    - mode=overwrite: DB dict 1회 로드 → 신규 INSERT, 기존은 _TAIL_WORD/_MEMO 변경 시만 UPDATE
+    - mode=append: DB 집합 1회 로드 → 신규만 INSERT, 기존은 SKIP
 
     지원 형식:
     1) 탭 구분: head_word\\ttail_word[\\tmemo]
-    2) 그룹 형식: 빈줄로 구분된 단어 그룹 (첫 단어=head, 나머지=tail 쉼표 결합)
+    2) 쉼표 구분: head,tail1,tail2,...
+    3) 그룹 형식: 빈줄로 구분된 단어 그룹 (첫 단어=head, 나머지=tail 쉼표 결합)
     """
     tbl = _dict_table(db, site, "thesaurus")
+    BATCH = 2000
 
-    if mode == "create":
-        db.execute(delete(tbl))
+    # 1) 파일 읽기
+    _check_cancelled(progress_site)
+    if progress_site:
+        _update_progress(progress_site, progress_offset, "thesaurus_reading")
 
     빈줄포함list_tasks = []
     for enc in ("utf-8-sig", "utf-8", "euc-kr", "cp949"):
@@ -693,48 +732,11 @@ def _import_thesaurus_file(
     탭형식 = any("\t" in l for l in 비공백줄[:10])
     쉼표형식 = not 탭형식 and any("," in l for l in 비공백줄[:10])
 
-    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
+    # 2) 파일에서 유일 항목 추출 (head 중복 제거)
+    파일항목: list = []  # (head, tail, memo)
     중복set: set = set()
-    처리수 = 0
-
-    def _process_thesaurus_row(head: str, tail: str, memo: Optional[str] = None):
-        nonlocal 삽입수, 업데이트수, 스킵수, 처리수
-        _check_cancelled(progress_site)
-        if mode == "create":
-            db.execute(insert(tbl).values(
-                _HEAD_WORD=head, _TAIL_WORD=tail,
-                _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-            ))
-            삽입수 += 1
-        elif mode == "overwrite":
-            존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == head)).first()
-            if 존재:
-                db.execute(update(tbl).where(tbl.c._HEAD_WORD == head).values(
-                    _TAIL_WORD=tail, _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                업데이트수 += 1
-            else:
-                db.execute(insert(tbl).values(
-                    _HEAD_WORD=head, _TAIL_WORD=tail,
-                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
-        elif mode == "append":
-            존재 = db.execute(select(tbl.c._HEAD_WORD).where(tbl.c._HEAD_WORD == head)).first()
-            if 존재:
-                스킵수 += 1
-            else:
-                db.execute(insert(tbl).values(
-                    _HEAD_WORD=head, _TAIL_WORD=tail,
-                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
-        처리수 += 1
-        if progress_site and 처리수 % 1000 == 0:
-            _update_progress(progress_site, progress_offset + 처리수)
 
     if 쉼표형식:
-        # 쉼표 구분: 대표어,유의어1,유의어2,... (quasisynonym 형식)
         for 줄 in 비공백줄:
             parts = 줄.split(",")
             head = normalize_word(parts[0].strip())
@@ -743,7 +745,7 @@ def _import_thesaurus_file(
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            _process_thesaurus_row(head, tail)
+            파일항목.append((head, tail, None))
     elif 탭형식:
         for 줄 in 비공백줄:
             parts = 줄.split("\t")
@@ -755,9 +757,8 @@ def _import_thesaurus_file(
             if not head or not tail or head in 중복set:
                 continue
             중복set.add(head)
-            _process_thesaurus_row(head, tail, memo)
+            파일항목.append((head, tail, memo))
     else:
-        # 그룹 형식: 빈줄로 구분
         빈줄있음 = any(l == "" for l in 빈줄포함list_tasks)
         if 빈줄있음:
             groups: List[List[str]] = []
@@ -777,18 +778,113 @@ def _import_thesaurus_file(
                 if not head or head in 중복set:
                     continue
                 중복set.add(head)
-                _process_thesaurus_row(head, ",".join(tail_words) if tail_words else "")
+                파일항목.append((head, ",".join(tail_words) if tail_words else "", None))
         else:
-            # 빈줄 없는 그룹 형식: 각 단어를 개별 head_word로 등록
             for 줄 in 비공백줄:
                 word = normalize_word(줄)
                 if not word or word in 중복set:
                     continue
                 중복set.add(word)
-                _process_thesaurus_row(word, "")
+                파일항목.append((word, "", None))
+
+    파일총수 = len(파일항목)
+    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
+
+    if mode == "create":
+        # 전체 삭제 후 파일 전량 bulk INSERT
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, "thesaurus_deleting")
+        db.execute(delete(tbl))
+
+        if progress_site:
+            _update_progress(progress_site, progress_offset, "thesaurus_inserting")
+        now = datetime.now()
+        batch: list = []
+        처리수 = 0
+        for head, tail, memo in 파일항목:
+            _check_cancelled(progress_site)
+            batch.append({
+                "_HEAD_WORD": head, "_TAIL_WORD": tail, "_MEMO": memo,
+                "_USER_ID": user_id, "_UPDATED": now,
+            })
+            if len(batch) >= BATCH:
+                db.execute(insert(tbl), batch)
+                batch = []
+            처리수 += 1
+            if progress_site and 처리수 % 1000 == 0:
+                _update_progress(progress_site, progress_offset + 처리수)
+        if batch:
+            db.execute(insert(tbl), batch)
+        삽입수 = 파일총수
+
+    else:
+        # overwrite/append: DB (_HEAD_WORD, _TAIL_WORD, _MEMO) 1회 로드
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, "thesaurus_loading_db")
+        db_rows = db.execute(select(tbl.c._HEAD_WORD, tbl.c._TAIL_WORD, tbl.c._MEMO)).all()
+        db맵: dict = {r[0]: (r[1], r[2]) for r in db_rows}
+
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, "thesaurus_matching")
+
+        new_batch: list = []
+        update_batch: list = []
+        now = datetime.now()
+        처리수 = 0
+
+        for head, tail, memo in 파일항목:
+            _check_cancelled(progress_site)
+            if head in db맵:
+                if mode == "overwrite":
+                    cur_tail, cur_memo = db맵[head]
+                    # _TAIL_WORD 또는 _MEMO 변경된 경우만 UPDATE
+                    if cur_tail != tail or cur_memo != memo:
+                        update_batch.append({
+                            "head_": head, "_TAIL_WORD": tail, "_MEMO": memo,
+                            "_USER_ID": user_id, "_UPDATED": now,
+                        })
+                        업데이트수 += 1
+                    else:
+                        스킵수 += 1
+                else:  # append
+                    스킵수 += 1
+            else:
+                new_batch.append({
+                    "_HEAD_WORD": head, "_TAIL_WORD": tail, "_MEMO": memo,
+                    "_USER_ID": user_id, "_UPDATED": now,
+                })
+                삽입수 += 1
+            처리수 += 1
+            if progress_site and 처리수 % 2000 == 0:
+                _update_progress(progress_site, progress_offset + 처리수)
+
+        # bulk INSERT (신규)
+        if new_batch:
+            _check_cancelled(progress_site)
+            if progress_site:
+                _update_progress(progress_site, progress_offset + 처리수, "thesaurus_inserting")
+            for i in range(0, len(new_batch), BATCH):
+                _check_cancelled(progress_site)
+                db.execute(insert(tbl), new_batch[i:i + BATCH])
+
+        # bulk UPDATE (변경된 기존)
+        if update_batch:
+            _check_cancelled(progress_site)
+            if progress_site:
+                _update_progress(progress_site, progress_offset + 처리수, "thesaurus_updating")
+            upd_stmt = update(tbl).where(tbl.c._HEAD_WORD == bindparam("head_")).values(
+                _TAIL_WORD=bindparam("_TAIL_WORD"), _MEMO=bindparam("_MEMO"),
+                _USER_ID=bindparam("_USER_ID"), _UPDATED=bindparam("_UPDATED"),
+            )
+            for i in range(0, len(update_batch), BATCH):
+                _check_cancelled(progress_site)
+                db.execute(upd_stmt, update_batch[i:i + BATCH])
 
     if progress_site:
-        _update_progress(progress_site, progress_offset + 처리수)
+        _update_progress(progress_site, progress_offset + 파일총수)
     db.commit()
     return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
