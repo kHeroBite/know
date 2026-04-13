@@ -595,12 +595,12 @@ def _copy_domain_task(name: str, 원본: str, 대상: str,
                         return
                     shutil.copy2(os.path.join(dirpath, 파일명), os.path.join(대상디렉토리, 파일명))
                     복사complete += 1
-                    _write_domain_progress(name, {"percent": int(복사complete / 전체파일수 * 90), "status": "copying", "file_count": 전체파일수})
+                    _write_domain_progress(name, {"percent": int(복사complete / 전체파일수 * 50), "status": "copying", "file_count": 전체파일수})
 
         # 사전 테이블 생성 + 사전 복사 (파일 복사 complete 후)
         dict_result = None
         if copy_dict_from or mysql_dict_from:
-            _write_domain_progress(name, {"percent": 92, "status": "dict_copying", "file_count": 전체파일수})
+            _write_domain_progress(name, {"percent": 50, "status": "dict_copying", "file_count": 전체파일수})
             from models.dictionary import create_domain_table
             from core.database import 엔진, 세션팩토리
             create_domain_table(name.upper(), 엔진)
@@ -614,7 +614,9 @@ def _copy_domain_task(name: str, 원본: str, 대상: str,
                     db.close()
             elif mysql_dict_from:
                 from services.dictionary_service import migrate_dict_from_mysql
-                dict_result = migrate_dict_from_mysql(name, mysql_dict_from)
+                def _mysql_진행률콜백(pct: int) -> None:
+                    _write_domain_progress(name, {"percent": pct, "status": "dict_copying", "file_count": 전체파일수})
+                dict_result = migrate_dict_from_mysql(name, mysql_dict_from, progress_callback=_mysql_진행률콜백)
 
         경과 = round(time.time() - 시작시간, 1)
         결과 = {"percent": 100, "status": "done", "elapsed": 경과, "file_count": 전체파일수}
