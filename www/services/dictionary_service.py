@@ -337,7 +337,12 @@ def get_dict_db_count(db: Session, site: str) -> dict:
 
 
 def preview_dict_file_count(site: str) -> dict:
-    """도메인 사전 파일의 줄 수(예상 건수)를 반환. DB 접근 없음."""
+    """도메인 사전 파일의 예상 insert 건수를 반환 (실제 import와 동일 로직).
+
+    udic/cndic: normalize_word + 중복 제거 후 유일한 단어 개수
+    thesaurus: 줄 수 (tab 구분) 또는 그룹 단위
+    DB 접근 없음.
+    """
     결과 = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     도메인경로 = os.path.join(DOMAIN_DIR, site.lower())
     추가경로 = _extra_search_paths(site)
@@ -347,8 +352,21 @@ def preview_dict_file_count(site: str) -> dict:
         파일경로 = _find_dict_file(도메인경로, patterns, 추가경로=추가경로)
         if 파일경로 and os.path.isfile(파일경로):
             try:
-                with open(파일경로, 'rb') as f:
-                    결과[dic_type] = sum(1 for line in f if line.strip())
+                if dic_type in ("udic", "cndic"):
+                    # 실제 _import_udic_cndic_file과 동일하게 normalize_word + 중복 제거
+                    줄list = _read_file(파일경로)
+                    중복set: set = set()
+                    for 줄 in 줄list:
+                        parts = 줄.split("\t", 1)
+                        word = normalize_word(parts[0].strip())
+                        if not word or word in 중복set:
+                            continue
+                        중복set.add(word)
+                    결과[dic_type] = len(중복set)
+                else:
+                    # thesaurus: 단순 줄 수 (빈 줄 제외)
+                    with open(파일경로, 'rb') as f:
+                        결과[dic_type] = sum(1 for line in f if line.strip())
             except Exception:
                 pass
     return 결과
