@@ -253,7 +253,7 @@ export default function DomainManage() {
           set진행률(res.data)
           const percent: number = res.data.percent ?? 0
           _updateProgress(taskId, percent)
-          if (res.data.status === 'done' || res.data.status === 'error') {
+          if (res.data.status === 'done' || res.data.status === 'error' || res.data.status === 'cancelled') {
             clearInterval(poll); set임포트중(false)
             if (res.data.status === 'done') {
               _finishTask(taskId, 'done')
@@ -270,6 +270,12 @@ export default function DomainManage() {
               setDicKey(k => k + 1)
               setTimeout(() => set임포트모달(false), 1500)
             }
+            if (res.data.status === 'cancelled') {
+              _finishTask(taskId, 'cancelled')
+              message.info('임포트가 취소되었습니다')
+              setDicKey(k => k + 1)
+              setTimeout(() => set임포트모달(false), 1000)
+            }
             if (res.data.status === 'error') {
               _finishTask(taskId, 'error')
               message.error('임포트 실패: ' + (res.data.result?.error || '알 수 없는 오류'))
@@ -285,7 +291,44 @@ export default function DomainManage() {
   }
 
   const 단계라벨 = (stage: string) => {
-    switch (stage) { case 'udic': return '사용자사전'; case 'cndic': return '복합명사사전'; case 'thesaurus': return '유사어사전'; default: return '준비 중' }
+    // 사전 타입
+    const 사전이름: Record<string, string> = { udic: '사용자사전', cndic: '복합명사사전', thesaurus: '유사어사전' }
+    // stage 형식: {dic_type} 또는 {dic_type}_{작업}
+    if (!stage || stage === 'preparing') return '준비 중'
+    if (사전이름[stage]) return 사전이름[stage]
+    const match = stage.match(/^(udic|cndic|thesaurus)_(.+)$/)
+    if (match) {
+      const [, 타입, 작업] = match
+      const 작업라벨: Record<string, string> = {
+        reading: '파일 읽는 중',
+        loading_db: 'DB 대조 준비',
+        matching: '신규/중복 대조 중',
+        deleting: '기존 삭제 중',
+        inserting: '신규 추가 중',
+        updating: '변경 항목 반영 중',
+      }
+      return `${사전이름[타입]} — ${작업라벨[작업] || 작업}`
+    }
+    return stage
+  }
+
+  const 임포트취소 = async () => {
+    if (!사전도메인 || !임포트중) return
+    Modal.confirm({
+      title: '임포트 중지',
+      content: '현재 진행 중인 사전 임포트 작업을 중지하시겠습니까? 이미 반영된 일부 변경사항은 롤백됩니다.',
+      okText: '중지',
+      okButtonProps: { danger: true },
+      cancelText: '계속 진행',
+      onOk: async () => {
+        try {
+          await 클라이언트.post(`/dictionaries/${사전도메인}/cancel-import`)
+          message.info('중지 요청을 전송했습니다. 곧 작업이 중단됩니다.')
+        } catch (e: any) {
+          message.error(e?.response?.data?.detail || '중지 요청 실패')
+        }
+      },
+    })
   }
 
   return (
@@ -565,7 +608,9 @@ export default function DomainManage() {
       {/* ─── 사전 임포트 모달 ─── */}
       <Modal title="파일에서 사전 가져오기" open={임포트모달}
         onCancel={() => !임포트중 && set임포트모달(false)} width={780} closable={!임포트중} maskClosable={false}
-        footer={임포트중 ? null : [
+        footer={임포트중 ? [
+          <Button key="cancel-import" danger onClick={임포트취소}>중지</Button>,
+        ] : [
           <Button key="cancel" onClick={() => set임포트모달(false)}>취소</Button>,
           <Button key="ok" type="primary" danger={임포트모드 === 'create'} onClick={임포트실행}
             disabled={!파일건수 || (!임포트옵션.udic && !임포트옵션.cndic && !임포트옵션.thesaurus)}>

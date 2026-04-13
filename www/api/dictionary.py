@@ -29,6 +29,7 @@ from services.dictionary_service import (
     preview_dict_file_count,
     preview_dict_import_diff,
     get_dict_db_count,
+    request_import_cancel,
     get_mysql_dict_count,
     start_async_file_import,
     get_import_progress_service,
@@ -102,6 +103,17 @@ def import_dict_file(
 def get_import_progress(domain: str, _: dict = Depends(get_current_user)):
     """임포트 진행률 조회."""
     return get_import_progress_service(domain.upper())
+
+
+@라우터.post("/{domain}/cancel-import")
+def cancel_import(domain: str, current: dict = Depends(get_current_user)):
+    """진행 중인 사전 임포트 작업 취소 요청."""
+    if current.get("auth") not in ("W", "A"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="쓰기 권한 필요")
+    ok = request_import_cancel(domain.upper())
+    if not ok:
+        raise HTTPException(status_code=404, detail="진행 중인 임포트 작업이 없습니다")
+    return {"status": "cancelling", "message": "취소 요청 전송됨"}
 
 
 # ─── THESAURUS (먼저 등록 — 동적 라우트보다 구체적인 경로 우선) ──────

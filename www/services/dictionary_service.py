@@ -6,7 +6,7 @@ import threading
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import select, insert, update, delete, func, case, MetaData
+from sqlalchemy import select, insert, update, delete, func, case, MetaData, bindparam
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from fastapi import HTTPException
 from models.dictionary import validate_site_name, get_dict_table
@@ -441,6 +441,27 @@ def preview_dict_import_diff(db: Session, site: str) -> dict:
 # ─── 비동기 임포트 + 진행률 추적 ────────────────────────────────
 
 _임포트진행률: dict = {}
+_임포트취소: dict = {}  # site -> bool (취소 요청 플래그)
+
+
+class _ImportCancelled(Exception):
+    """임포트 취소 요청 감지 시 발생."""
+    pass
+
+
+def request_import_cancel(site: str) -> bool:
+    """임포트 작업 취소 요청. 진행 중이면 True, 아니면 False."""
+    진행 = _임포트진행률.get(site)
+    if not 진행 or 진행.get("status") != "running":
+        return False
+    _임포트취소[site] = True
+    return True
+
+
+def _check_cancelled(site: Optional[str]) -> None:
+    """취소 요청 확인. 요청됐으면 _ImportCancelled 예외 발생."""
+    if site and _임포트취소.get(site):
+        raise _ImportCancelled()
 
 
 def start_async_file_import(site: str, user_id: str = None,
@@ -461,9 +482,11 @@ def start_async_file_import(site: str, user_id: str = None,
         "status": "running", "total": 전체건수, "current": 0,
         "percent": 0, "stage": "preparing", "result": None, "run_id": run_id,
     }
+    _임포트취소.pop(site, None)  # 이전 취소 플래그 정리
 
     def _task():
         from core.database import 세션팩토리
+        db = None
         try:
             db = 세션팩토리()
             결과 = _sync_file_import(db, site, user_id=user_id, progress_site=site,
@@ -472,10 +495,23 @@ def start_async_file_import(site: str, user_id: str = None,
             _임포트진행률[site]["status"] = "done"
             _임포트진행률[site]["percent"] = 100
             _임포트진행률[site]["result"] = 결과
-            db.close()
+        except _ImportCancelled:
+            if db:
+                try: db.rollback()
+                except Exception: pass
+            _임포트진행률[site]["status"] = "cancelled"
+            _임포트진행률[site]["result"] = {"message": "사용자 취소"}
         except Exception as e:
+            if db:
+                try: db.rollback()
+                except Exception: pass
             _임포트진행률[site]["status"] = "error"
             _임포트진행률[site]["result"] = {"error": str(e)}
+        finally:
+            if db:
+                try: db.close()
+                except Exception: pass
+            _임포트취소.pop(site, None)
 
     threading.Thread(target=_task, daemon=True).start()
     return run_id
@@ -504,16 +540,24 @@ def _import_udic_cndic_file(
     mode: str = "create",
 ) -> dict:
     """udic/cndic .ks 파일을 읽어 DB에 INSERT.
-    mode: create(DELETE ALL→INSERT), overwrite(UPDATE+INSERT), append(INSERT OR IGNORE)."""
+
+    최적화(2026-04-13): DB 단어 집합을 1회만 로드해 메모리 set 대조 + bulk INSERT/UPDATE.
+    - mode=create: DELETE ALL → 파일 전량 bulk INSERT (DB 조회 불필요)
+    - mode=overwrite: DB 집합 1회 로드 → 신규는 INSERT, 기존은 UPDATE(_MEMO 변경 시만)
+    - mode=append: DB 집합 1회 로드 → 신규만 INSERT, 기존은 SKIP
+
+    진행률(stage): loading_db / matching / inserting / updating
+    """
     tbl = _dict_table(db, site, dic_type)
+    BATCH = 2000
 
-    if mode == "create":
-        db.execute(delete(tbl))
-
+    # 1) 파일에서 유일 단어 목록 추출
+    _check_cancelled(progress_site)
+    if progress_site:
+        _update_progress(progress_site, progress_offset, f"{dic_type}_reading")
     줄list_tasks = _read_file(파일경로)
-    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
+    파일항목: list = []  # (word, memo)
     중복set: set = set()
-    처리수 = 0
     for 줄 in 줄list_tasks:
         parts = 줄.split("\t", 1)
         word = normalize_word(parts[0].strip())
@@ -521,42 +565,96 @@ def _import_udic_cndic_file(
         if not word or word in 중복set:
             continue
         중복set.add(word)
+        파일항목.append((word, memo))
+    파일총수 = len(파일항목)
 
-        if mode == "create":
-            db.execute(insert(tbl).values(
-                _WORD=word, _MEMO=memo,
-                _USER_ID=user_id, _UPDATED=datetime.now(),
-            ))
-            삽입수 += 1
-        elif mode == "overwrite":
-            존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
-            if 존재:
-                db.execute(update(tbl).where(tbl.c._WORD == word).values(
-                    _MEMO=memo, _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                업데이트수 += 1
-            else:
-                db.execute(insert(tbl).values(
-                    _WORD=word, _MEMO=memo,
-                    _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
-        elif mode == "append":
-            존재 = db.execute(select(tbl.c._WORD).where(tbl.c._WORD == word)).first()
-            if 존재:
-                스킵수 += 1
-            else:
-                db.execute(insert(tbl).values(
-                    _WORD=word, _MEMO=memo,
-                    _USER_ID=user_id, _UPDATED=datetime.now(),
-                ))
-                삽입수 += 1
+    삽입수 = 0; 업데이트수 = 0; 스킵수 = 0
 
-        처리수 += 1
-        if progress_site and 처리수 % 1000 == 0:
-            _update_progress(progress_site, progress_offset + 처리수)
+    if mode == "create":
+        # 기존 전체 삭제 후 파일 전량 INSERT
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, f"{dic_type}_deleting")
+        db.execute(delete(tbl))
+
+        if progress_site:
+            _update_progress(progress_site, progress_offset, f"{dic_type}_inserting")
+        now = datetime.now()
+        batch: list = []
+        처리수 = 0
+        for word, memo in 파일항목:
+            _check_cancelled(progress_site)
+            batch.append({"_WORD": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
+            if len(batch) >= BATCH:
+                db.execute(insert(tbl), batch)
+                batch = []
+            처리수 += 1
+            if progress_site and 처리수 % 1000 == 0:
+                _update_progress(progress_site, progress_offset + 처리수)
+        if batch:
+            db.execute(insert(tbl), batch)
+        삽입수 = 파일총수
+
+    else:
+        # overwrite/append: DB 집합 1회 로드 → 메모리 set 대조
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, f"{dic_type}_loading_db")
+        # _WORD + _MEMO 함께 로드 (overwrite 모드에서 _MEMO 비교용)
+        rows = db.execute(select(tbl.c._WORD, tbl.c._MEMO)).all()
+        db맵: dict = {r[0]: r[1] for r in rows}
+
+        _check_cancelled(progress_site)
+        if progress_site:
+            _update_progress(progress_site, progress_offset, f"{dic_type}_matching")
+
+        new_batch: list = []
+        update_batch: list = []
+        now = datetime.now()
+        처리수 = 0
+
+        for word, memo in 파일항목:
+            _check_cancelled(progress_site)
+            if word in db맵:
+                if mode == "overwrite":
+                    # _MEMO 변경된 경우만 UPDATE
+                    if db맵[word] != memo:
+                        update_batch.append({"word_": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
+                        업데이트수 += 1
+                    else:
+                        스킵수 += 1
+                else:  # append
+                    스킵수 += 1
+            else:
+                new_batch.append({"_WORD": word, "_MEMO": memo, "_USER_ID": user_id, "_UPDATED": now})
+                삽입수 += 1
+            처리수 += 1
+            if progress_site and 처리수 % 2000 == 0:
+                _update_progress(progress_site, progress_offset + 처리수)
+
+        # bulk INSERT (신규)
+        if new_batch:
+            _check_cancelled(progress_site)
+            if progress_site:
+                _update_progress(progress_site, progress_offset + 처리수, f"{dic_type}_inserting")
+            for i in range(0, len(new_batch), BATCH):
+                _check_cancelled(progress_site)
+                db.execute(insert(tbl), new_batch[i:i + BATCH])
+
+        # bulk UPDATE (_MEMO 변경된 기존)
+        if update_batch:
+            _check_cancelled(progress_site)
+            if progress_site:
+                _update_progress(progress_site, progress_offset + 처리수, f"{dic_type}_updating")
+            upd_stmt = update(tbl).where(tbl.c._WORD == bindparam("word_")).values(
+                _MEMO=bindparam("_MEMO"), _USER_ID=bindparam("_USER_ID"), _UPDATED=bindparam("_UPDATED"),
+            )
+            for i in range(0, len(update_batch), BATCH):
+                _check_cancelled(progress_site)
+                db.execute(upd_stmt, update_batch[i:i + BATCH])
+
     if progress_site:
-        _update_progress(progress_site, progress_offset + 처리수)
+        _update_progress(progress_site, progress_offset + 파일총수)
     db.commit()
     return {"inserted": 삽입수, "updated": 업데이트수, "skipped": 스킵수}
 
@@ -601,6 +699,7 @@ def _import_thesaurus_file(
 
     def _process_thesaurus_row(head: str, tail: str, memo: Optional[str] = None):
         nonlocal 삽입수, 업데이트수, 스킵수, 처리수
+        _check_cancelled(progress_site)
         if mode == "create":
             db.execute(insert(tbl).values(
                 _HEAD_WORD=head, _TAIL_WORD=tail,
