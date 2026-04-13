@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Spin, Typography, Empty, Input, Button, Modal, message, Tabs } from 'antd'
 import { EditOutlined, SettingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -255,8 +255,8 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
     return renderTextResult(state.data?.result, state.data?.error)
   }
 
-  // 탭 아이템 구성
-  const tabItems = [
+  // 탭 아이템 구성 (메모이제이션 — providerResults 변경 시 해당 탭만 재계산)
+  const tabItems = useMemo(() => [
     // 로컬LLM 탭 (활성화된 경우에만)
     ...(baseResult?.local_active ? [{
       key: 'local',
@@ -284,7 +284,8 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
       ),
       children: renderProviderTab(provider),
     })),
-  ]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [baseResult, hasWikiResult, providersLoaded, activeProviders, providerResults, searchKeyword])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
