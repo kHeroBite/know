@@ -38,7 +38,7 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const location = useLocation()
-  const { selectedWorkspace, selectedDomain, selectedColor, phase, myPhase } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedDomainLabel, selectedColor, phase, myPhase } = useWorkspaceStore()
   const wsSelected = !!selectedWorkspace
   const currentTask = useGlobalTaskStore(s => s.currentTask)
 
@@ -185,7 +185,7 @@ export default function Layout() {
           <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, letterSpacing: '1px' }}>
             {selectedWorkspace
               ? selectedDomain
-                ? `${selectedWorkspace} : ${selectedDomain}`
+                ? `${selectedWorkspace}:${selectedDomain}${selectedDomainLabel ? `(${selectedDomainLabel})` : ''}`
                 : selectedWorkspace
               : '미선택'}
           </div>

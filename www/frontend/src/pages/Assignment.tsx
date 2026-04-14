@@ -265,7 +265,7 @@ export default function Assignment() {
                   onClick={() => 할당실행(isReprocessMode ? 'reprocess' : undefined)}
                   disabled={filter !== 'pending'}
                 >
-                  {isReprocessMode ? `재처리 ${stats.reprocess_count.toLocaleString()}건 중 할당받기` : '할당받기'}
+                  할당받기
                 </Button>
               </Space>
           </Col>

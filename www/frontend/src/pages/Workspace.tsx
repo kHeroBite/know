@@ -274,7 +274,7 @@ export default function Workspace() {
       set색상팝업WS(null)
       if (selectedWorkspace === wsName) {
         const ws = 목록.find(w => w.name === wsName)
-        if (ws?.domain) setWorkspace(wsName, ws.domain, color)
+        if (ws?.domain) setWorkspace(wsName, ws.domain, color, 도메인목록.find(d => d.id === ws.domain)?.name ?? null)
       }
       await 목록조회()
     } catch (err: any) {
@@ -576,7 +576,7 @@ export default function Workspace() {
                                 disabled={!currentUser}
                                 onClick={async () => {
                                   if (ws.domain) {
-                                    setWorkspace(ws.name, ws.domain, ws.color)
+                                    setWorkspace(ws.name, ws.domain, ws.color, 도메인목록.find(d => d.id === ws.domain)?.name ?? null)
                                     message.success(`워크스페이스 "${ws.name}" 선택됨`)
                                     try {
                                       const res = await assignmentApi.작업상태(ws.name, ws.domain)

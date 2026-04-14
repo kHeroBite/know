@@ -10,12 +10,13 @@ export type MyPhase = 'idle' | 'working' | 'done'
 interface WorkspaceState {
   selectedWorkspace: string | null
   selectedDomain: string | null
+  selectedDomainLabel: string | null
   selectedColor: string | null
   lastMenu: string | null
   phase: Phase
   myPhase: MyPhase
   _statusLoaded: boolean
-  setWorkspace: (name: string, domain: string, color: string | null) => void
+  setWorkspace: (name: string, domain: string, color: string | null, label?: string | null) => void
   clearWorkspace: () => void
   setPhase: (p: Phase) => void
   setMyPhase: (p: MyPhase) => void
@@ -33,13 +34,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set, get) => ({
       selectedWorkspace: null,
       selectedDomain: null,
+      selectedDomainLabel: null,
       selectedColor: null,
       lastMenu: null,
       phase: 'preprocess',
       myPhase: 'idle',
       _statusLoaded: false,
-      setWorkspace: (name, domain, color) => {
-        set({ selectedWorkspace: name, selectedDomain: domain, selectedColor: color, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
+      setWorkspace: (name, domain, color, label) => {
+        set({ selectedWorkspace: name, selectedDomain: domain, selectedDomainLabel: label ?? null, selectedColor: color, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
         // phase/myPhase 상태 복원
@@ -48,7 +50,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }).catch(() => {})
       },
       clearWorkspace: () => {
-        set({ selectedWorkspace: null, selectedDomain: null, selectedColor: null, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
+        set({ selectedWorkspace: null, selectedDomain: null, selectedDomainLabel: null, selectedColor: null, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버 설정도 초기화 — 재로그인 시 이전 워크스페이스 복원 방지
         클라이언트.put('/workspaces/preference', { workspace: '', domain: null, color: null }).catch(() => {})
       },
@@ -137,6 +139,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         return data
       },
     }),
-    { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedColor: s.selectedColor, lastMenu: s.lastMenu }) }
+    { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedDomainLabel: s.selectedDomainLabel, selectedColor: s.selectedColor, lastMenu: s.lastMenu }) }
   )
 )
