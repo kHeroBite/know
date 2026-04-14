@@ -47,13 +47,15 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
             continue
         meta = _read_metadata(item)
         if meta:
+            has_db_backup = bool(meta.get("backup_files")) or bool(meta.get("backup_tables"))
             entry = {
                 "name": item.name,
                 "path": str(item),
                 "timestamp": meta.get("timestamp", ""),
                 "dict_counts": meta.get("dict_counts", {}),
-                "has_db_backup": bool(meta.get("backup_tables")),
+                "has_db_backup": has_db_backup,
                 "files": meta.get("files", []),
+                "backup_files": meta.get("backup_files", []),
                 "backup_tables": meta.get("backup_tables", []),
             }
         else:
@@ -105,44 +107,34 @@ def _backup_current_state(domain: str, db) -> dict[str, Any]:
         files.append("synonym.UTF-8")
 
     dict_counts = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
-    backup_tables: list[str] = []
-    try:
-        engine = db.get_bind()
-        dst_site = domain.upper()
-        type_map = [
-            ("udic", "_UDIC"),
-            ("cndic", "_CNDIC"),
-            ("thesaurus", "_THESAURUS"),
-            ("category", "_CATEGORY"),
-        ]
-        with engine.connect() as conn:
-            for type_key, suffix in type_map:
-                src_table = f"{dst_site}{suffix}"
-                bak_table = f"BAK_{timestamp_str}_{dst_site}{suffix}"
-                row = conn.execute(
-                    text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-                    {"n": src_table},
-                ).fetchone()
-                if not row:
-                    continue
-                conn.exec_driver_sql(
-                    f"CREATE TABLE {bak_table} AS SELECT * FROM {src_table}"
-                )
-                cnt = conn.execute(
-                    text(f"SELECT COUNT(*) FROM {bak_table}")
-                ).scalar() or 0
-                dict_counts[type_key] = int(cnt)
-                backup_tables.append(bak_table)
-            conn.commit()
-    except Exception as e:
-        logger.warning("현재상태 DB 백업 실패 (무시): %s", e)
+    backup_db_files: list[str] = []
+    dst_site = domain.upper()
+    type_map = [
+        ("udic", "_UDIC"),
+        ("cndic", "_CNDIC"),
+        ("thesaurus", "_THESAURUS"),
+        ("category", "_CATEGORY"),
+    ]
+    for type_key, suffix in type_map:
+        src_table = f"{dst_site}{suffix}"
+        try:
+            rows = db.execute(text(f"SELECT * FROM {src_table}")).mappings().all()
+            data = [dict(r) for r in rows]
+            json_filename = f"db{suffix}.json"
+            json_path = backup_path / json_filename
+            json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            dict_counts[type_key] = len(data)
+            backup_db_files.append(json_filename)
+            logger.info("DB 백업 파일 생성: %s (%d rows)", json_path, len(data))
+        except Exception as e:
+            logger.warning("DB 백업 실패 %s: %s", src_table, e)
 
     metadata = {
         "domain": domain,
         "ws_name": None,
         "timestamp": datetime.now().isoformat(),
         "dict_counts": dict_counts,
-        "backup_tables": backup_tables,
+        "backup_files": backup_db_files,
         "files": files,
         "auto": True,
     }
@@ -212,25 +204,58 @@ def restore_backup(domain: str, backup_name: str, skip_backup: bool, db) -> dict
         shutil.copy2(str(syn_src), str(domain_path / "synonym.UTF-8"))
         restored_files.append("synonym.UTF-8")
 
-    # DB 복원 (BAK_ 테이블 → 원본 테이블)
+    # DB 복원
     db_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     meta = _read_metadata(backup_path) or {}
-    backup_tables: list[str] = meta.get("backup_tables", [])
-    if backup_tables:
+    suffix_to_type = {
+        "_UDIC": "udic",
+        "_CNDIC": "cndic",
+        "_THESAURUS": "thesaurus",
+        "_CATEGORY": "category",
+    }
+    dst_site = domain.upper()
+
+    if meta.get("backup_files"):
+        # 신규 JSON 파일 방식
+        try:
+            for filename in meta["backup_files"]:
+                # filename 예: "db_UDIC.json" → suffix: "_UDIC"
+                suffix = filename.replace("db", "").replace(".json", "")
+                target_table = f"{dst_site}{suffix}"
+                json_path = backup_path / filename
+                if not json_path.exists():
+                    logger.warning("백업 파일 없음: %s", json_path)
+                    continue
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                db.execute(text(f"DELETE FROM {target_table}"))
+                if data:
+                    columns = list(data[0].keys())
+                    col_names = ", ".join(columns)
+                    placeholders = ", ".join([f":{c}" for c in columns])
+                    db.execute(
+                        text(f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"),
+                        data,
+                    )
+                type_key = suffix_to_type.get(suffix, "")
+                if type_key:
+                    db_counts[type_key] = len(data)
+                logger.info("DB 복원 완료: %s (%d rows)", target_table, len(data))
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning("DB 복원 실패: %s", e)
+            raise HTTPException(status_code=500, detail=f"DB 복원 실패: {e}")
+
+    elif meta.get("backup_tables"):
+        # 레거시 BAK 테이블 방식 (하위 호환)
+        backup_tables: list[str] = meta["backup_tables"]
         try:
             engine = db.get_bind()
-            dst_site = domain.upper()
-            suffix_to_type = {
-                "_UDIC": "udic",
-                "_CNDIC": "cndic",
-                "_THESAURUS": "thesaurus",
-                "_CATEGORY": "category",
-            }
             with engine.connect() as conn:
                 trans = conn.begin()
                 try:
                     for bak_table in backup_tables:
-                        # 백업 테이블 존재 확인
                         row = conn.execute(
                             text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
                             {"n": bak_table},
@@ -238,7 +263,6 @@ def restore_backup(domain: str, backup_name: str, skip_backup: bool, db) -> dict
                         if not row:
                             logger.warning("백업 테이블 없음: %s", bak_table)
                             continue
-                        # suffix 추출 → 원본 테이블 결정
                         matched_suffix = None
                         for suf in suffix_to_type.keys():
                             if bak_table.endswith(suf):
@@ -286,27 +310,10 @@ def delete_backup(domain: str, backup_name: str, db) -> dict[str, Any]:
             detail=f"백업이 도메인 '{domain}'에 속하지 않습니다",
         )
 
-    meta = _read_metadata(backup_path) or {}
-    backup_tables: list[str] = meta.get("backup_tables", [])
-    deleted_tables: list[str] = []
-    if backup_tables:
-        try:
-            engine = db.get_bind()
-            with engine.connect() as conn:
-                for bak_table in backup_tables:
-                    try:
-                        conn.exec_driver_sql(f"DROP TABLE IF EXISTS {bak_table}")
-                        deleted_tables.append(bak_table)
-                    except Exception as e:
-                        logger.warning("DROP TABLE 실패 (%s): %s", bak_table, e)
-                conn.commit()
-        except Exception as e:
-            logger.warning("DB 테이블 삭제 실패 (무시): %s", e)
-
-    # 디렉토리 제거
+    # 디렉토리 제거 (BAK_ 테이블은 수동 정리 대상 — DROP 하지 않음)
     try:
         shutil.rmtree(str(backup_path))
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"백업 디렉토리 삭제 실패: {e}")
 
-    return {"deleted_tables": deleted_tables, "deleted_dir": str(backup_path)}
+    return {"deleted_dir": str(backup_path)}

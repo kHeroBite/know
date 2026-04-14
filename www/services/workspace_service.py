@@ -941,7 +941,6 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     backup_path: Path | None = None
-    backup_tables: list[str] = []
     dict_counts_backup: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     backup_files: list[str] = []
 
@@ -968,10 +967,10 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
             shutil.copy2(str(syn_src), str(backup_path / "synonym.UTF-8"))
             backup_files.append("synonym.UTF-8")
 
-        # DB 백업 (CREATE TABLE AS SELECT)
+        # DB 백업: 사전 테이블을 JSON 파일로 저장
+        backup_db_files: list[str] = []
         try:
             from sqlalchemy import text as _sql_text
-            engine = db.get_bind()
             dst_site = domain.upper()
             type_map = [
                 ("udic", "_UDIC"),
@@ -979,30 +978,24 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
                 ("thesaurus", "_THESAURUS"),
                 ("category", "_CATEGORY"),
             ]
-            with engine.connect() as conn:
-                for type_key, suffix in type_map:
-                    src_table = f"{dst_site}{suffix}"
-                    bak_table = f"BAK_{timestamp_str}_{dst_site}{suffix}"
-                    # 원본 존재 확인
-                    row = conn.execute(
-                        _sql_text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-                        {"n": src_table},
-                    ).fetchone()
-                    if not row:
-                        continue
-                    # CREATE TABLE AS SELECT (값만 보존)
-                    conn.exec_driver_sql(
-                        f"CREATE TABLE {bak_table} AS SELECT * FROM {src_table}"
-                    )
-                    cnt = conn.execute(
-                        _sql_text(f"SELECT COUNT(*) FROM {bak_table}")
-                    ).scalar() or 0
-                    dict_counts_backup[type_key] = int(cnt)
-                    backup_tables.append(bak_table)
-                conn.commit()
+            for type_key, suffix in type_map:
+                src_table = f"{dst_site}{suffix}"
+                try:
+                    rows = db.execute(_sql_text(f"SELECT * FROM {src_table}")).mappings().all()
+                    data = [dict(r) for r in rows]
+                    json_filename = f"db{suffix}.json"
+                    json_path = backup_path / json_filename
+                    json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    dict_counts_backup[type_key] = len(data)
+                    backup_db_files.append(json_filename)
+                    import logging
+                    logging.getLogger(__name__).info("DB 백업 파일 생성: %s (%d rows)", json_path, len(data))
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("DB 백업 실패 %s: %s", src_table, e)
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning("DB 백업 실패 (무시): %s", e)
+            logging.getLogger(__name__).warning("DB 백업 전체 실패 (무시): %s", e)
 
         # metadata.json 기록
         metadata = {
@@ -1010,7 +1003,7 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
             "ws_name": ws_name,
             "timestamp": datetime.now().isoformat(),
             "dict_counts": dict_counts_backup,
-            "backup_tables": backup_tables,
+            "backup_files": backup_db_files,
             "files": backup_files,
         }
         try:
