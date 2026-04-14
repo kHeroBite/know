@@ -354,9 +354,6 @@ def release_workspace_handler(
         # 개인 phase
         db.execute(text("DELETE FROM user_work_phase WHERE workspace=:ws AND domain=:dom"),
                    {"ws": name, "dom": 도메인})
-        # 빌드 이력
-        db.execute(text("DELETE FROM build_history WHERE domain=:dom"),
-                   {"dom": 도메인})
         db.commit()
         # 워크스페이스 사전 테이블 DROP
         try:
@@ -529,6 +526,7 @@ def complete_workspace_api(
     """워크스페이스 완료 처리 — 도메인 백업 + WS→도메인 복사 + phase 'complete' 전이."""
     from services.workspace_service import _read_state
     domain = body.get("domain", "")
+    skip_backup = bool(body.get("skip_backup", False))
     if not domain:
         raise HTTPException(status_code=400, detail="domain 필수")
     상태 = _read_state()
@@ -543,5 +541,5 @@ def complete_workspace_api(
             status_code=409,
             detail=f"완료 처리는 사전 검증(verify) 단계 이후에만 가능합니다 (현재: {current_phase})",
         )
-    result = complete_workspace(name, domain, db)
+    result = complete_workspace(name, domain, db, skip_backup=skip_backup)
     return {"status": "ok", **result}

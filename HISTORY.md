@@ -1,5 +1,43 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-14] 완료 단계 + 도메인 적용 + 백업 관리 시스템 (o4 Full)
+
+> **작업 요약**: Know 워크플로우 완료 단계 통합 구축. (1) 사전빌드 이력 영구 보존(DELETE 3곳 제거), (2) 완료 메뉴 워크플로우 게이트(Layout disabled + DictVerify 다음단계 버튼), (3) 도메인 적용 역방향 복사(WS→도메인), (4) 백업 관리 메뉴 신설(BAK_ 테이블 + metadata.json 패턴).
+
+### 변경 파일 (19개)
+
+**Batch 1 — 빌드이력 보존 + 완료 게이트 (7개)**:
+- `www/api/assignment.py`, `www/api/workspace.py`, `www/api/build.py`: `build_history` DELETE 제거, `delete_build_history` 엔드포인트 제거
+- `www/models/pipeline.py`: `BuildHistory` docstring에 영구 보존 정책 명시
+- `www/frontend/src/components/Layout.tsx`: 완료 메뉴 disabled 게이트
+- `www/frontend/src/pages/DictVerify.tsx`: `showNext` + `handleComplete` Modal.confirm 다음단계 유도
+- `www/frontend/src/pages/WorkComplete.tsx`: 반영 버튼 제거
+
+**Batch 2 — 도메인 적용 + 백업 관리 (12개)**:
+- `www/models/dictionary.py`: `ws_reverse_copy_dict_data` 신규 (WS→도메인 역방향 복사)
+- `www/services/workspace_service.py`: `complete_workspace` 백업+역방향 통합
+- `www/api/workspace.py`: `skip_backup` 파라미터 파싱
+- `www/services/backup_service.py` 신규: 백업 목록/복원/삭제 로직
+- `www/api/backup.py` 신규: 백업 REST API
+- `www/main.py`: backup 라우터 등록
+- `www/frontend/src/api/workspace.ts`: `completeWorkspace` 시그니처
+- `www/frontend/src/api/backup.ts` 신규
+- `www/frontend/src/stores/workspaceStore.ts`: `lastCompleteResult` 필드
+- `www/frontend/src/components/BackupManager.tsx` 신규
+- `www/frontend/src/pages/DomainManage.tsx`: 백업 관리 버튼
+
+### 핵심 설계
+
+- **빌드이력 영구 보존**: `build_history`는 감사용 누적 데이터로 reset/release 범주에서 분리. 워크스페이스 초기화/해제 시 DELETE 금지.
+- **완료 게이트**: 사용자가 사전검증 후 직접 "다음 단계(작업완료)" 버튼을 눌러야만 완료 메뉴 활성화. UX 흐름 강제.
+- **도메인 적용**: 워크스페이스 완료 시 도메인 사전을 BAK_ 테이블로 백업 후 WS 데이터를 도메인으로 역방향 복사. 되돌리기는 백업 복원으로 수행.
+- **백업 시스템**: `metadata.json` + `BAK_{prefix}_{timestamp}` 테이블 패턴. 향후 유사 백업 기능에 재사용 가능한 템플릿.
+
+### 검증
+- 테스트 16/17 PASS (Batch 분할로 의존성 명확화)
+
+---
+
 ## [2026-04-14] reprocess flag 마커 시스템 구현 — 할당 페이지 재처리 전용 분기
 
 > **작업 요약**: 재처리된 키워드에 `flag='reprocess'` 마커를 DB에 설정하고, 할당 페이지에서 이를 자동 감지하여 재처리 전용 할당 UI를 표시하는 마커 시스템 구현. `get_stats()`에 `reprocess_count` 추가, `/assign` 엔드포인트에 `mode` 파라미터(normal/reprocess) 추가.

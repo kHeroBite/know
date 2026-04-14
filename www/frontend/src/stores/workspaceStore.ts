@@ -26,7 +26,8 @@ interface WorkspaceState {
   loadPreference: () => Promise<void>
   savePreference: () => Promise<void>
   loadWorkspaceStatus: () => Promise<void>
-  completeWorkspace: (wsName: string, domain: string) => Promise<{ backup_path: string; copied_files: number }>
+  lastCompleteResult: any | null
+  completeWorkspace: (wsName: string, domain: string, skipBackup?: boolean) => Promise<any>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -40,6 +41,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       phase: 'preprocess',
       myPhase: 'idle',
       _statusLoaded: false,
+      lastCompleteResult: null,
       setWorkspace: (name, domain, color, label) => {
         set({ selectedWorkspace: name, selectedDomain: domain, selectedDomainLabel: label ?? null, selectedColor: color, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버에 비동기 저장
@@ -120,23 +122,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           set({ _statusLoaded: true })
         }
       },
-      completeWorkspace: async (wsName: string, domain: string) => {
-        const token = localStorage.getItem('access_token')
-        const res = await fetch(`/api/workspaces/${wsName}/complete`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ domain }),
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.detail || '작업 완료 실패')
-        }
-        const data = await res.json()
+      completeWorkspace: async (wsName: string, domain: string, skipBackup: boolean = false) => {
+        const res = await workspaceAPI.completeWorkspace(wsName, domain, skipBackup)
+        set({ lastCompleteResult: res.data })
         await get().loadWorkspaceStatus()
-        return data
+        return res.data
       },
     }),
     { name: 'know-workspace', partialize: s => ({ selectedWorkspace: s.selectedWorkspace, selectedDomain: s.selectedDomain, selectedDomainLabel: s.selectedDomainLabel, selectedColor: s.selectedColor, lastMenu: s.lastMenu }) }

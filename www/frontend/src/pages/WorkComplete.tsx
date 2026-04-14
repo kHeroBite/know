@@ -1,29 +1,12 @@
-import { useState } from 'react'
-import { Button, Card, Alert, Spin, Typography, Space } from 'antd'
+import { Card, Alert, Typography, Space } from 'antd'
 import { CheckCircleOutlined } from '@ant-design/icons'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title, Text } = Typography
 
 export default function WorkComplete() {
-  const { selectedWorkspace, selectedDomain, completeWorkspace } = useWorkspaceStore()
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<{ backup_path: string; copied_files: number } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleComplete = async () => {
-    if (!selectedWorkspace || !selectedDomain) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await completeWorkspace(selectedWorkspace, selectedDomain)
-      setResult(res)
-    } catch (e: any) {
-      setError(e.message || '작업 완료 처리 중 오류가 발생했습니다')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const completeResult = (useWorkspaceStore.getState() as any).completeResult || null
 
   if (!selectedWorkspace || !selectedDomain) {
     return (
@@ -46,41 +29,35 @@ export default function WorkComplete() {
     <div style={{ padding: '24px' }}>
       <Title level={3}>
         <CheckCircleOutlined style={{ marginRight: 8 }} />
-        작업 완료
+        작업 완료 결과
       </Title>
       <Card>
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Text>사전 검증이 완료되었습니다. 아래 버튼을 누르면 워크스페이스 사전을 도메인에 반영합니다.</Text>
-          <Text type="secondary">
-            · 도메인 사전 백업 후 워크스페이스 사전을 도메인에 복사합니다.<br />
-            · 이 작업은 되돌릴 수 없습니다. 신중하게 진행하세요.
-          </Text>
-          {!result && (
-            <Button
-              type="primary"
-              size="large"
-              onClick={handleComplete}
-              disabled={loading}
-              loading={loading}
-            >
-              도메인 반영
-            </Button>
+          {!completeResult && (
+            <Alert
+              type="info"
+              message="완료 처리 결과가 없습니다"
+              description="사전 검증 페이지에서 '다음단계로 (완료)' 버튼을 눌러 완료 처리를 실행하세요."
+              showIcon
+            />
           )}
-          {loading && <Spin tip="백업 및 복사 중..." />}
-          {error && <Alert type="error" message={error} showIcon />}
-          {result && (
+          {completeResult && (
             <Alert
               type="success"
               message="작업 완료"
               showIcon
               description={
                 <>
-                  <div>백업 경로: {result.backup_path}</div>
-                  <div>복사된 항목: {result.copied_files}개</div>
+                  <div>백업 경로: {completeResult.backup_path}</div>
+                  <div>완료 일시: {completeResult.completed_at || '-'}</div>
+                  <div>복사된 항목: {completeResult.copied_files}개</div>
                 </>
               }
             />
           )}
+          <Text type="secondary">
+            완료 처리는 사전 검증 페이지의 '다음단계로 (완료)' 버튼에서 실행됩니다.
+          </Text>
         </Space>
       </Card>
     </div>

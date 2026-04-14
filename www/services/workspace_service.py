@@ -914,14 +914,22 @@ def _auto_migrate_phase(db) -> None:
         _write_state(상태)
 
 
-def complete_workspace(ws_name: str, domain: str, db) -> dict:
+def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False) -> dict:
     """
-    6.1 도메인 백업: DOMAIN_DIR/{domain}/{data,txt_resrc,synonym.UTF-8}
-        → DICT_BACKUP_DIR/{domain}_{YYYYMMDD}/ (중복 시 _001, _002 suffix)
-    6.2 WS→도메인 복사: WORKSPACE_BASE/{ws}/{data,txt_resrc,synonym.UTF-8}
-        → DOMAIN_DIR/{domain}/
+    6.1 백업 단계 (skip_backup=False일 때만):
+        - 파일: DOMAIN_DIR/{domain}/{data,txt_resrc,synonym.UTF-8}
+          → DICT_BACKUP_DIR/{domain}_{YYYYMMDD_HHMMSS}/
+        - DB: 도메인 사전 테이블 4개 → BAK_{TS}_{DOMAIN}_{TYPE}
+          (CREATE TABLE AS SELECT 사용)
+        - metadata.json 기록 (dict_counts, backup_tables, files, timestamp)
+    6.2 역방향 복사 (항상 수행):
+        - 파일: WS→도메인
+        - DB: ws_reverse_copy_dict_data 호출
     6.3 phase → 'complete' 전이 (phase_forward 호출)
-    반환: {"backup_path": str, "copied_files": int, "phase": "complete"}
+
+    Returns:
+        {"backup_path": str|None, "copied_files": list[str], "db_copy_counts": dict,
+         "phase": "complete", "skip_backup": bool}
     """
     import shutil
     from datetime import datetime
@@ -930,40 +938,116 @@ def complete_workspace(ws_name: str, domain: str, db) -> dict:
 
     domain_path = Path(DOMAIN_DIR) / domain
     ws_path = Path(WORKSPACE_BASE) / ws_name
-    today = datetime.now().strftime("%Y%m%d")
+    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # 백업 경로 결정 (중복 시 suffix)
-    base_name = f"{domain}_{today}"
-    backup_path = Path(DICT_BACKUP_DIR) / base_name
-    if backup_path.exists():
-        for i in range(1, 100):
-            backup_path = Path(DICT_BACKUP_DIR) / f"{base_name}_{i:03d}"
-            if not backup_path.exists():
-                break
+    backup_path: Path | None = None
+    backup_tables: list[str] = []
+    dict_counts_backup: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    backup_files: list[str] = []
 
-    # 6.1 도메인 백업
-    backup_path.mkdir(parents=True, exist_ok=True)
-    copied = 0
-    for item in ["data", "txt_resrc"]:
-        src = domain_path / item
-        if src.exists():
-            shutil.copytree(str(src), str(backup_path / item), dirs_exist_ok=True)
-            copied += 1
-    syn_src = domain_path / "synonym.UTF-8"
-    if syn_src.exists():
-        shutil.copy2(str(syn_src), str(backup_path / "synonym.UTF-8"))
-        copied += 1
+    # 6.1 백업 단계
+    if not skip_backup:
+        base_name = f"{domain}_{timestamp_str}"
+        backup_path = Path(DICT_BACKUP_DIR) / base_name
+        # 동일 타임스탬프 충돌 시 suffix (드물지만 안전장치)
+        if backup_path.exists():
+            for i in range(1, 100):
+                backup_path = Path(DICT_BACKUP_DIR) / f"{base_name}_{i:03d}"
+                if not backup_path.exists():
+                    break
+        backup_path.mkdir(parents=True, exist_ok=True)
 
-    # 6.2 WS→도메인 복사
+        # 파일 백업
+        for item in ["data", "txt_resrc"]:
+            src = domain_path / item
+            if src.exists():
+                shutil.copytree(str(src), str(backup_path / item), dirs_exist_ok=True)
+                backup_files.append(item)
+        syn_src = domain_path / "synonym.UTF-8"
+        if syn_src.exists():
+            shutil.copy2(str(syn_src), str(backup_path / "synonym.UTF-8"))
+            backup_files.append("synonym.UTF-8")
+
+        # DB 백업 (CREATE TABLE AS SELECT)
+        try:
+            from sqlalchemy import text as _sql_text
+            engine = db.get_bind()
+            dst_site = domain.upper()
+            type_map = [
+                ("udic", "_UDIC"),
+                ("cndic", "_CNDIC"),
+                ("thesaurus", "_THESAURUS"),
+                ("category", "_CATEGORY"),
+            ]
+            with engine.connect() as conn:
+                for type_key, suffix in type_map:
+                    src_table = f"{dst_site}{suffix}"
+                    bak_table = f"BAK_{timestamp_str}_{dst_site}{suffix}"
+                    # 원본 존재 확인
+                    row = conn.execute(
+                        _sql_text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+                        {"n": src_table},
+                    ).fetchone()
+                    if not row:
+                        continue
+                    # CREATE TABLE AS SELECT (값만 보존)
+                    conn.exec_driver_sql(
+                        f"CREATE TABLE {bak_table} AS SELECT * FROM {src_table}"
+                    )
+                    cnt = conn.execute(
+                        _sql_text(f"SELECT COUNT(*) FROM {bak_table}")
+                    ).scalar() or 0
+                    dict_counts_backup[type_key] = int(cnt)
+                    backup_tables.append(bak_table)
+                conn.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("DB 백업 실패 (무시): %s", e)
+
+        # metadata.json 기록
+        metadata = {
+            "domain": domain,
+            "ws_name": ws_name,
+            "timestamp": datetime.now().isoformat(),
+            "dict_counts": dict_counts_backup,
+            "backup_tables": backup_tables,
+            "files": backup_files,
+        }
+        try:
+            with open(backup_path / "metadata.json", "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("metadata.json 기록 실패: %s", e)
+
+    # 6.2 역방향 복사 (항상 수행)
+    copied_files: list[str] = []
     for item in ["data", "txt_resrc"]:
         src = ws_path / item
         if src.exists():
             shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+            copied_files.append(item)
     ws_syn = ws_path / "synonym.UTF-8"
     if ws_syn.exists():
         shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
+        copied_files.append("synonym.UTF-8")
+
+    # DB 역방향 복사
+    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    try:
+        from models.dictionary import ws_reverse_copy_dict_data
+        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
 
     # 6.3 phase → complete
     phase_forward(ws_name, "complete")
 
-    return {"backup_path": str(backup_path), "copied_files": copied, "phase": "complete"}
+    return {
+        "backup_path": str(backup_path) if backup_path else None,
+        "copied_files": copied_files,
+        "db_copy_counts": db_copy_counts,
+        "phase": "complete",
+        "skip_backup": skip_backup,
+    }

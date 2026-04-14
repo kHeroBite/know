@@ -52,6 +52,7 @@ class TaskAssignment(Base):
 
 
 class BuildHistory(Base):
+    """빌드 이력 감사 로그 — 누적 영구 보존 (reset/release에서 삭제 금지)"""
     __tablename__ = "build_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

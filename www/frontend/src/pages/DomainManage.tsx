@@ -7,12 +7,13 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, FolderOutlined,
-  ImportOutlined, SearchOutlined, BookOutlined,
+  ImportOutlined, SearchOutlined, BookOutlined, DatabaseOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import { useGlobalTaskStore } from '../stores/globalTaskStore'
+import BackupManager from '../components/BackupManager'
 
 const { Title, Text } = Typography
 
@@ -172,6 +173,8 @@ export default function DomainManage() {
   // 사전관리 선택
   const [사전도메인, set사전도메인] = useState<string | null>(null)
   const [dicKey, setDicKey] = useState(0)
+  const [백업도메인, set백업도메인] = useState<string | null>(null)
+  const [backupOpen, setBackupOpen] = useState(false)
 
   // 임포트
   const [임포트모달, set임포트모달] = useState(false)
@@ -432,6 +435,10 @@ export default function DomainManage() {
                       disabled={isBlocked}
                       onClick={() => { set사전도메인(선택됨 ? null : dm.id); setDicKey(k => k + 1) }}
                     >사전 관리</Button>
+                    <Button icon={<DatabaseOutlined />}
+                      disabled={isBlocked}
+                      onClick={() => { set백업도메인(dm.id); setBackupOpen(true) }}
+                    >백업 관리</Button>
                     {isSuper && <>
                       <Button icon={<EditOutlined />} disabled={연결됨}
                         onClick={() => { set이름변경대상(dm); set변경후이름(dm.name ?? '') }}>이름 변경</Button>
@@ -784,6 +791,12 @@ export default function DomainManage() {
           </div>
         )}
       </Modal>
+
+      <BackupManager
+        open={backupOpen}
+        onClose={() => setBackupOpen(false)}
+        domain={백업도메인 || ''}
+      />
     </div>
   )
 }

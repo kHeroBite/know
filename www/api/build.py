@@ -95,19 +95,6 @@ def cancel_build(
     return {"success": False, "message": "진행 중인 빌드가 없습니다."}
 
 
-@라우터.delete("/{domain}/history")
-def delete_build_history(
-    domain: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(db_session),
-):
-    """도메인 빌드 이력 전체 삭제"""
-    from sqlalchemy import text
-    result = db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
-    db.commit()
-    return {"deleted": result.rowcount, "domain": domain}
-
-
 @라우터.get("/{domain}/status")
 def get_build_status(
     domain: str,

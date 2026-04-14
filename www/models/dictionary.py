@@ -127,3 +127,61 @@ def ws_copy_dict_data(workspace: str, domain: str, engine) -> int:
                 pass  # 원본 테이블이 비어있거나 없으면 무시
         conn.commit()
     return total
+
+
+def ws_reverse_copy_dict_data(workspace: str, domain: str, engine) -> dict:
+    """워크스페이스 사전 4개 테이블 데이터를 도메인 사전으로 역방향 복사.
+
+    트랜잭션 내에서 DELETE FROM {domain}_{TYPE} + INSERT FROM WS_{SAFE_WS}_{DOMAIN}_{TYPE}.
+    WS 테이블이 없으면 해당 타입 0건으로 진행(에러 없음).
+
+    Returns:
+        {"udic": N, "cndic": N, "thesaurus": N, "category": N}
+    """
+    import logging
+    from sqlalchemy import text
+    logger = logging.getLogger(__name__)
+
+    dst_site = domain.upper()
+    src_site = ws_dict_site_name(workspace, domain)
+    validate_site_name(dst_site)
+    validate_site_name(src_site)
+
+    type_map = [
+        ("udic", "_UDIC"),
+        ("cndic", "_CNDIC"),
+        ("thesaurus", "_THESAURUS"),
+        ("category", "_CATEGORY"),
+    ]
+    result_counts = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+
+    with engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            for type_key, suffix in type_map:
+                src_table = f"{src_site}{suffix}"
+                dst_table = f"{dst_site}{suffix}"
+                # WS 테이블 존재 확인 (SQLite sqlite_master)
+                try:
+                    exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+                        {"n": src_table},
+                    ).fetchone()
+                except Exception:
+                    exists = None
+                if not exists:
+                    logger.info("ws_reverse_copy: %s 테이블 없음 — 0건 복사", src_table)
+                    continue
+                # 도메인 테이블 비우고 WS 데이터 전체 삽입
+                conn.execute(text(f"DELETE FROM {dst_table}"))
+                insert_res = conn.execute(
+                    text(f"INSERT INTO {dst_table} SELECT * FROM {src_table}")
+                )
+                cnt = insert_res.rowcount if insert_res.rowcount is not None else 0
+                result_counts[type_key] = cnt
+                logger.info("ws_reverse_copy: %s → %s %d건 복사", src_table, dst_table, cnt)
+            trans.commit()
+        except Exception:
+            trans.rollback()
+            raise
+    return result_counts

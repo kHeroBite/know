@@ -4,6 +4,31 @@
 
 ## 교훈 항목
 
+### L-audit-data (2026-04-14) — 감사용 누적 데이터를 reset/release 범주에서 분리
+
+**문제**: `build_history` DELETE가 3곳(assignment.py, workspace.py, build.py)에 산재. 워크스페이스 초기화/해제 흐름에 섞여 감사용 빌드이력까지 함께 삭제되는 구조였음.
+
+**원인**: "워크스페이스 관련 데이터"라는 범주에 감사용 누적 데이터(build_history)를 같이 묶어 관리. reset/release 의미론과 audit 의미론이 충돌.
+
+**조치**:
+- build_history DELETE 3곳 모두 제거
+- `BuildHistory` docstring에 "영구 보존 (감사용)" 명시
+- `delete_build_history` 엔드포인트 제거
+
+**재발방지 원칙**: 감사용 누적 데이터(*_history, audit_*)는 "reset/release" 범주에서 물리적으로 분리. 워크스페이스 생애주기와 독립된 저장소/정책으로 관리.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-backup-pattern (2026-04-14) — BAK_ 테이블 + metadata.json 백업 템플릿
+
+**패턴**: 도메인 적용 기능에서 사용한 백업 구조.
+- `BAK_{prefix}_{timestamp}` 명명으로 원본 스키마 복제
+- `metadata.json`에 원본 테이블명/시각/컨텍스트 기록
+- `backup_service.py`에 목록/복원/삭제 일원화
+- REST API는 `/api/backup/*`로 분리
+
+**재사용 권장**: 향후 "되돌릴 수 있는 일괄 쓰기" 기능(예: 대량 import, 마이그레이션)에 동일 패턴 재사용 가능.
+**Level**: 1
+
 ### L-001 (2026-04-09) — 프론트엔드 빌드 미수행으로 변경사항 미반영
 
 **문제**: kdone이 Git 커밋+푸시 완료 후 파이프라인 종료. 그러나 프론트 소스는 서버에 rsync됐지만 `npm run build`를 실행하지 않아 dist/ 가 이전 빌드(1시간 전) 상태로 남음. 사용자가 변경사항이 반영되지 않았다고 보고.

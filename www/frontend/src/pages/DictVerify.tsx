@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Input, Tabs, Progress,
-  message, Statistic, Row, Col, Checkbox,
+  message, Statistic, Row, Col, Checkbox, Modal,
 } from 'antd'
 import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
@@ -18,6 +18,31 @@ export default function DictVerify() {
   const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const currentDomain = selectedDomain || ''
+
+  const doComplete = async (skipBackup: boolean) => {
+    if (!selectedWorkspace || !selectedDomain) {
+      message.warning('워크스페이스(도메인)이 선택되지 않았습니다')
+      return
+    }
+    try {
+      await useWorkspaceStore.getState().completeWorkspace(selectedWorkspace, selectedDomain, skipBackup)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
+      navigate('/work-complete')
+    } catch (e: any) {
+      message.error('작업 완료 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    }
+  }
+
+  const handleComplete = () => {
+    Modal.confirm({
+      title: '백업하시겠습니까?',
+      content: '도메인의 현재 사전/파일 상태를 백업한 후 워크스페이스 변경사항을 적용합니다.',
+      okText: '예 (백업하고 적용)',
+      cancelText: '아니오 (바로 적용)',
+      onOk: async () => { await doComplete(false) },
+      onCancel: async () => { await doComplete(true) },
+    })
+  }
 
   // --- 형태소분석 테스트 ---
   const [분석키워드, set분석키워드] = useState('')
@@ -229,6 +254,9 @@ export default function DictVerify() {
             message.error(err.response?.data?.detail || 'phase 전이 실패')
           }
         }}
+        showNext={!!selectedWorkspace && !!selectedDomain}
+        nextLabel="다음단계로 (완료)"
+        onNext={handleComplete}
       />
 
       {/* 형태소분석 테스트 */}

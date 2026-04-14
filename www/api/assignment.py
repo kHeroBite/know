@@ -242,7 +242,7 @@ def get_last_selected_api(
 @라우터.post("/reset")
 def initialize(workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(db_session), current: dict = Depends(get_current_user)):
-    """데이터 전처리 데이터 완전 삭제: keyword_assignments + phase1 + build_history + work_history + 파일."""
+    """데이터 전처리 데이터 완전 삭제: keyword_assignments + phase1 + work_history + 파일."""
     try:
         # 1. phase1_logs 삭제 (phase1_runs 자식 테이블 — 선 삭제)
         db.execute(text(
@@ -253,10 +253,7 @@ def initialize(workspace: str = Query(...), domain: str = Query(...),
         # 2. phase1_runs 삭제
         db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": domain})
 
-        # 3. build_history 삭제
-        db.execute(text("DELETE FROM build_history WHERE domain=:dom"), {"dom": domain})
-
-        # 4. keyword_assignments 삭제
+        # 3. keyword_assignments 삭제
         db.execute(text("DELETE FROM keyword_assignments WHERE workspace=:ws AND domain=:dom"),
                    {"ws": workspace, "dom": domain})
 

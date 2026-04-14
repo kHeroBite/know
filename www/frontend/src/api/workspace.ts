@@ -124,4 +124,7 @@ export const workspaceAPI = {
 
   멤버상태조회: (workspace: string) =>
     클라이언트.get(`/workspaces/${encodeURIComponent(workspace)}/members-status`),
+
+  completeWorkspace: (ws: string, domain: string, skip_backup: boolean) =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(ws)}/complete`, { domain, skip_backup }),
 }

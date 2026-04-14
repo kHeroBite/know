@@ -120,7 +120,7 @@ export default function Layout() {
         { key: '/knowledge-work', label: tooltipLabel('작업실', '/knowledge-work', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <EditOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/build-history', label: tooltipLabel('사전 빌드', '/build-history', !wsSelected || phase !== 'build'), icon: <HistoryOutlined />, disabled: !wsSelected || phase !== 'build' },
         { key: '/dict-verify', label: tooltipLabel('사전 검증', '/dict-verify', !wsSelected || phase !== 'verify'), icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'verify' },
-        { key: '/work-complete', label: tooltipLabel('작업완료', '/work-complete', !wsSelected || (phase !== 'verify' && phase !== 'complete')), icon: <CheckCircleOutlined />, disabled: !wsSelected || (phase !== 'verify' && phase !== 'complete') },
+        { key: '/work-complete', label: tooltipLabel('작업완료', '/work-complete', !wsSelected || phase !== 'complete'), icon: <CheckCircleOutlined />, disabled: !wsSelected || phase !== 'complete' },
         { key: '/category', label: tooltipLabel('카테고리 관리', '/category', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <TagsOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/pipeline', label: tooltipLabel('파이프라인', '/pipeline', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <RocketOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
         { key: '/knowledge', label: tooltipLabel('지식작업', '/knowledge', !wsSelected || phase !== 'work' || myPhase !== 'working'), icon: <BulbOutlined />, disabled: !wsSelected || phase !== 'work' || myPhase !== 'working' },
