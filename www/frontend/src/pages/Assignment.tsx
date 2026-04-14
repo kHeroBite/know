@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Table, Radio, Button, InputNumber, Select, Tag, Typography, Card, Space, Statistic, Row, Col, message, Modal } from 'antd'
 import { UserAddOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { assignmentApi, KeywordItem, AssignmentStats } from '../api/assignment'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
@@ -35,6 +35,7 @@ const 분석결과렌더 = (analysis: string) => {
 
 export default function Assignment() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [stats, setStats] = useState<AssignmentStats>({ total: 0, pending: 0, assigned: 0, completed: 0 })
   const [filter, setFilter] = useState<string>('pending')
@@ -77,11 +78,11 @@ export default function Assignment() {
     통계조회()
     setPage(1)
     setSelectedItem(null)
-  }, [selectedWorkspace, selectedDomain])
+  }, [selectedWorkspace, selectedDomain, location.key])
 
   useEffect(() => {
     목록조회(page)
-  }, [selectedWorkspace, selectedDomain, filter, page])
+  }, [selectedWorkspace, selectedDomain, filter, page, location.key])
 
   const 할당실행 = async () => {
     if (!selectedWorkspace || !selectedDomain) return
