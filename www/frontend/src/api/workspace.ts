@@ -13,6 +13,9 @@ export const workspaceAPI = {
   도메인연결: (wsName: string, domain: string, jianaVersion?: string) =>
     클라이언트.post(`/workspaces/${wsName}/connect`, { domain, jiana_version: jianaVersion }),
 
+  사이트연결: (wsName: string, siteCode: string, jianaVersion: string) =>
+    클라이언트.post(`/workspaces/${wsName}/connect`, { site_code: siteCode, jiana_version: jianaVersion }),
+
   연결취소: (wsName: string) =>
     클라이언트.post(`/workspaces/${wsName}/cancel-connect`),
 

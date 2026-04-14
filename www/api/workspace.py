@@ -15,6 +15,7 @@ from schemas.workspace import (
     PhaseAdvanceRequest,
     WorkspacePhaseResponse,
 )
+import services.site_service as site_service
 from services.workspace_service import (
     phase_forward,
     phase_backward,
@@ -60,7 +61,8 @@ class 워크스페이스생성요청(BaseModel):
 
 
 class 도메인연결요청(BaseModel):
-    domain: str
+    site_code: Optional[str] = None   # 신규 (site_code 기반 연결)
+    domain: Optional[str] = None      # 기존 (하위 호환)
     jiana_version: Optional[str] = None
 
 
@@ -311,13 +313,27 @@ def remove_workspace(
 def link_domain_handler(
     name: str,
     요청: 도메인연결요청,
+    db: Session = Depends(db_session),
     current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """도메인 연결."""
+    """도메인 연결. site_code 또는 domain 중 하나 필수."""
     이름 = current.get("name", "")
     아이디 = current.get("user_id", "")
     connected_by = f"{이름}({아이디})" if 이름 else 아이디
-    return link_domain(name, 요청.domain, connected_by, jiana_version=요청.jiana_version)
+
+    if 요청.site_code:
+        site = site_service.get_site_by_code(요청.site_code, db)
+        if not site:
+            raise HTTPException(status_code=400, detail="사이트를 찾을 수 없습니다")
+        if site.get("orphaned"):
+            raise HTTPException(status_code=400, detail="연결 끊긴 사이트는 연결할 수 없습니다")
+        domain = site["domain_code"]
+    elif 요청.domain:
+        domain = 요청.domain
+    else:
+        raise HTTPException(status_code=400, detail="site_code 또는 domain 중 하나는 필수입니다")
+
+    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version)
 
 
 @라우터.post("/{name}/cancel-connect")

@@ -6,7 +6,7 @@ from sqlalchemy import text
 from fastapi import HTTPException
 
 
-def _row_to_site(row) -> dict:
+def _row_to_site(row, orphaned: bool = False) -> dict:
     return {
         "id": row["id"],
         "site_code": row["site_code"],
@@ -15,16 +15,41 @@ def _row_to_site(row) -> dict:
         "description": row["description"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "orphaned": orphaned,
     }
 
 
 def list_sites(db: Session) -> list[dict]:
-    """전체 사이트 목록 조회 (id 오름차순)."""
+    """전체 사이트 목록 조회 (id 오름차순). orphaned 포함."""
     rows = db.execute(
-        text("SELECT id, site_code, name, domain_code, description, created_at, updated_at "
-             "FROM sites ORDER BY id ASC")
+        text(
+            "SELECT s.id, s.site_code, s.name, s.domain_code, s.description, "
+            "s.created_at, s.updated_at, "
+            "CASE WHEN d._SITE IS NULL THEN 1 ELSE 0 END as orphaned "
+            "FROM sites s "
+            "LEFT JOIN domains d ON s.domain_code = d._SITE "
+            "ORDER BY s.id ASC"
+        )
     ).mappings().all()
-    return [_row_to_site(r) for r in rows]
+    return [_row_to_site(r, orphaned=bool(r["orphaned"])) for r in rows]
+
+
+def get_site_by_code(site_code: str, db: Session) -> Optional[dict]:
+    """site_code로 사이트 단건 조회 (없으면 None). orphaned 여부 포함."""
+    row = db.execute(
+        text(
+            "SELECT s.id, s.site_code, s.name, s.domain_code, s.description, "
+            "s.created_at, s.updated_at, "
+            "CASE WHEN d._SITE IS NULL THEN 1 ELSE 0 END as orphaned "
+            "FROM sites s "
+            "LEFT JOIN domains d ON s.domain_code = d._SITE "
+            "WHERE s.site_code = :code"
+        ),
+        {"code": site_code},
+    ).mappings().first()
+    if not row:
+        return None
+    return _row_to_site(row, orphaned=bool(row["orphaned"]))
 
 
 def get_site(site_id: int, db: Session) -> dict:

@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Button, Input, Select, Space, Popconfirm, message,
-  Modal, Form, Table,
+  Modal, Form, Row, Col, Card, Tag, Typography,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, WarningOutlined } from '@ant-design/icons'
 import PageHeader from '../components/PageHeader'
 import { listSites, createSite, updateSite, deleteSite, type Site, type SiteInput } from '../api/site'
 import { workspaceAPI } from '../api/workspace'
+
+const { Text } = Typography
 
 interface DomainOption {
   id: string
@@ -104,69 +106,82 @@ export default function SiteManage() {
     return found.name ? `${code} (${found.name})` : code
   }
 
-  const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
-    { title: '사이트 ID', dataIndex: 'site_code', key: 'site_code', width: 160, ellipsis: true },
-    { title: '사이트명', dataIndex: 'name', key: 'name', ellipsis: true },
-    {
-      title: '도메인',
-      dataIndex: 'domain_code',
-      key: 'domain_code',
-      width: 220,
-      render: (code: string) => 도메인표시(code),
-    },
-    { title: '설명', dataIndex: 'description', key: 'description', ellipsis: true },
-    {
-      title: '생성일',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 170,
-      render: (v: string) => v || '-',
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 100,
-      render: (_: unknown, record: Site) => (
-        <Space size={4}>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            type="text"
-            onClick={() => 수정모달열기(record)}
-          />
-          <Popconfirm
-            title="삭제하시겠습니까?"
-            onConfirm={() => 삭제(record)}
-            okText="삭제"
-            cancelText="취소"
-          >
-            <Button size="small" icon={<DeleteOutlined />} danger type="text" />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box' }}>
       <PageHeader title="사이트 관리" />
-      <div style={{ padding: '0 16px 16px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '0 16px 16px', flex: 1, overflowY: 'auto' }}>
         <Space style={{ marginBottom: 12 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={추가모달열기}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={추가모달열기} loading={로딩}>
             사이트 추가
           </Button>
         </Space>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <Table
-            rowKey="id"
-            columns={columns}
-            dataSource={사이트목록}
-            loading={로딩}
-            pagination={false}
-            size="middle"
-          />
-        </div>
+
+        <Row gutter={[16, 16]}>
+          {사이트목록.map(site => (
+            <Col xs={24} sm={12} key={site.id}>
+              <Card
+                style={{
+                  borderColor: site.orphaned ? '#d9d9d9' : '#1677ff',
+                  borderWidth: 1,
+                  borderStyle: 'solid',
+                  background: site.orphaned ? '#f5f5f5' : undefined,
+                }}
+                styles={{ body: { padding: 16 } }}
+              >
+                {/* 카드 헤더 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <Text strong style={{ fontSize: 15 }}>{site.name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}> ({site.site_code})</Text>
+                  </div>
+                  {site.orphaned && (
+                    <Tag icon={<WarningOutlined />} color="orange">연결 끊김</Tag>
+                  )}
+                </div>
+
+                {/* 도메인 정보 */}
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    도메인: {도메인표시(site.domain_code)}
+                  </Text>
+                  {site.description && (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{site.description}</Text>
+                    </div>
+                  )}
+                </div>
+
+                {/* 버튼 */}
+                <Space size={6}>
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => 수정모달열기(site)}
+                  >
+                    편집
+                  </Button>
+                  <Popconfirm
+                    title="삭제하시겠습니까?"
+                    onConfirm={() => 삭제(site)}
+                    okText="삭제"
+                    cancelText="취소"
+                  >
+                    <Button size="small" icon={<DeleteOutlined />} danger>
+                      삭제
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              </Card>
+            </Col>
+          ))}
+          {사이트목록.length === 0 && !로딩 && (
+            <Col span={24}>
+              <Card>
+                <Text type="secondary">사이트가 없습니다</Text>
+              </Card>
+            </Col>
+          )}
+        </Row>
       </div>
 
       <Modal

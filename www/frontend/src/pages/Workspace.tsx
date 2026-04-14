@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { workspaceAPI } from '../api/workspace'
+import { listSites, type Site } from '../api/site'
 import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -60,12 +61,14 @@ export default function Workspace() {
   const navigate = useNavigate()
   const [목록, set목록] = useState<워크스페이스항목[]>([])
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
+  const [사이트목록, set사이트목록] = useState<Site[]>([])
   const [로딩, set로딩] = useState(false)
   const [새이름, set새이름] = useState('')
   const [새색상, set새색상] = useState<string | null>(null)
   const 생성중 = currentTask?.status === 'running' && currentTask.id.startsWith('ws-create-')
   const [연결팝업WS, set연결팝업WS] = useState<string | null>(null)
   const [선택도메인, set선택도메인] = useState<string | null>(null)
+  const [선택사이트, set선택사이트] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
   const [선택jiana, set선택jiana] = useState<string>('')
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
@@ -85,15 +88,17 @@ export default function Workspace() {
   const 목록조회 = async () => {
     set로딩(true)
     try {
-      const [wsRes, dmRes, jianaRes] = await Promise.all([
+      const [wsRes, dmRes, jianaRes, siteRes] = await Promise.all([
         workspaceAPI.워크스페이스목록(),
         workspaceAPI.도메인목록(),
         workspaceAPI.jiana버전목록(),
+        listSites(),
       ])
       const wsList: 워크스페이스항목[] = wsRes.data
       set목록(wsList)
       await restoreWorkspacePolling(wsList)
       set도메인목록(dmRes.data)
+      set사이트목록(siteRes)
       const versions = jianaRes.data?.versions || []
       setJiana버전목록(versions)
       if (!선택jiana && versions.length > 0) set선택jiana(versions[versions.length - 1])
@@ -174,8 +179,8 @@ export default function Workspace() {
   }
 
   const 연결확인핸들러 = async () => {
-    if (!연결팝업WS || !선택도메인) {
-      message.warning('도메인을 선택하세요')
+    if (!연결팝업WS || !선택사이트) {
+      message.warning('사이트를 선택하세요')
       return
     }
     if (!선택jiana) {
@@ -183,9 +188,12 @@ export default function Workspace() {
       return
     }
     const wsName = 연결팝업WS
-    const domain = 선택도메인
+    const siteCode = 선택사이트
     const jianaVer = 선택jiana
+    const site = 사이트목록.find(s => s.site_code === siteCode)
+    const domain = site?.domain_code ?? siteCode
     set연결팝업WS(null)
+    set선택사이트(null)
     set선택도메인(null)
 
     await executeConnect(wsName, domain, jianaVer, {
@@ -538,6 +546,7 @@ export default function Workspace() {
                             disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
                             onClick={() => {
                               set연결팝업WS(ws.name)
+                              set선택사이트(null)
                               set선택도메인(null)
                             }}
                           >
@@ -659,43 +668,52 @@ export default function Workspace() {
         </Row>
       </Spin>
 
-      {/* 도메인 연결 모달 */}
+      {/* 사이트 연결 모달 */}
       <Modal
-        title={`도메인 연결 — ${연결팝업WS}`}
+        title={`사이트 연결 — ${연결팝업WS}`}
         open={!!연결팝업WS}
         onOk={연결확인핸들러}
         onCancel={() => {
           set연결팝업WS(null)
+          set선택사이트(null)
           set선택도메인(null)
         }}
         okText="연결"
         cancelText="취소"
-        okButtonProps={{ disabled: !선택도메인 || !선택jiana }}
+        okButtonProps={{ disabled: !선택사이트 || !선택jiana }}
       >
         <Select
           style={{ width: '100%', marginTop: 8 }}
-          placeholder="연결할 도메인 선택"
-          options={도메인목록.map(d => {
-            const 연결됨WS = 목록.find(ws => ws.domain === d.id && ws.status === 'USED')
-            const 표시명 = d.name ? `${d.name} (${d.id})` : d.id
+          placeholder="연결할 사이트 선택"
+          options={사이트목록.map(s => {
+            const 연결됨WS = 목록.find(ws => ws.domain === s.domain_code && ws.status === 'USED')
+            const 표시명 = `${s.site_code} (${s.name})`
             return {
-              label: 연결됨WS ? `${표시명} (${연결됨WS.name}에 연결됨)` : 표시명,
-              value: d.id,
-              disabled: !!연결됨WS,
+              label: s.orphaned
+                ? `${표시명} (연결 끊김)`
+                : 연결됨WS
+                  ? `${표시명} (${연결됨WS.name}에 연결됨)`
+                  : 표시명,
+              value: s.site_code,
+              disabled: s.orphaned || !!연결됨WS,
             }
           })}
           onChange={v => {
-            set선택도메인(v)
+            set선택사이트(v)
             if (v) {
-              workspaceAPI.도메인jiana설정(v).then(res => {
-                const saved = res.data?.jiana_version
-                if (saved && jiana버전목록.includes(saved)) {
-                  set선택jiana(saved)
-                }
-              }).catch(() => {})
+              const site = 사이트목록.find(s => s.site_code === v)
+              if (site?.domain_code) {
+                set선택도메인(site.domain_code)
+                workspaceAPI.도메인jiana설정(site.domain_code).then(res => {
+                  const saved = res.data?.jiana_version
+                  if (saved && jiana버전목록.includes(saved)) {
+                    set선택jiana(saved)
+                  }
+                }).catch(() => {})
+              }
             }
           }}
-          value={선택도메인}
+          value={선택사이트}
         />
         <Select
           style={{ width: '100%', marginTop: 12 }}

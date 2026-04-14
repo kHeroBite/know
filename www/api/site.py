@@ -24,6 +24,7 @@ class 사이트응답(BaseModel):
     description: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    orphaned: bool = False
 
 
 class create_site(BaseModel):
