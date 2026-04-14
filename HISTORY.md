@@ -1,5 +1,29 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-14] reprocess flag 마커 시스템 구현 — 할당 페이지 재처리 전용 분기
+
+> **작업 요약**: 재처리된 키워드에 `flag='reprocess'` 마커를 DB에 설정하고, 할당 페이지에서 이를 자동 감지하여 재처리 전용 할당 UI를 표시하는 마커 시스템 구현. `get_stats()`에 `reprocess_count` 추가, `/assign` 엔드포인트에 `mode` 파라미터(normal/reprocess) 추가.
+
+### 변경 파일
+- **www/services/dict_verify_service.py**:
+  - `reprocess_keywords()`: 재처리 후 해당 키워드에 `flag='reprocess'` 마커 설정
+- **www/services/assignment_service.py**:
+  - `get_stats()`: `reprocess_count` 필드 추가 (flag='reprocess' 키워드 수 집계)
+  - `get_assignment()`: `mode` 파라미터 추가 (normal/reprocess 분기 처리)
+- **www/api/assignment.py**:
+  - `GET /assign` 엔드포인트: `mode` 쿼리 파라미터 추가
+- **www/frontend/src/api/assignment.ts**:
+  - `AssignmentStats` 타입: `reprocess_count` 필드 추가
+  - 할당 함수: `mode` 파라미터 추가
+- **www/frontend/src/pages/Assignment.tsx**:
+  - `stats.reprocess_count > 0` 자동 감지 → 재처리 전용 할당 UI 표시
+
+### 배경
+- 재처리 후 할당 페이지로 이동해도 재처리 키워드인지 일반 키워드인지 구분 불가
+- flag 마커 방식으로 재처리 대상을 명확히 분리하여 전용 UI로 안내
+
+---
+
 ## [2026-04-13] 사전 import 3모드 프로세스 재정비 + UI 개선
 
 > **작업 요약**: create/overwrite/append 각 모드의 의미를 명확히 하고, 작업대상을 실제 I/O 건수와 1:1 대응하도록 로직 정비. 미리보기 UI를 7열→5열로 축소하고 기본값을 create→append로 변경.

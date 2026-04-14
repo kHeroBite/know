@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS keyword_assignments (
     assigned_to TEXT,
     assigned_at TEXT,
     completed_at TEXT,
-    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료
+    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료, 'reprocess'=재처리 대상
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS kw_{workspace} (
     assigned_to TEXT,
     assigned_at TEXT,
     completed_at TEXT,
-    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료
+    flag TEXT DEFAULT '',           -- 읽음/작업 상태: ''=미확인, 'R'=읽음, 'W'=작업완료, 'reprocess'=재처리 대상
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
@@ -198,6 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_kw_{workspace}_status ON kw_{workspace}(status);
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-14 | kw_{workspace}.flag 값 확장: 'reprocess' 마커 추가 (재처리 대상 키워드 식별) | dict_verify_service.py, assignment_service.py |
 | 2026-04-10 | MySQL 사전 마이그레이션 4종 정합성 수정: CATEGORY 타입 추가 + Java 원본 스키마 기반 컬럼 방어적 SELECT (UDIC/CNDIC: _WORD만, THESAURUS: _HEAD_WORD+_TAIL_WORD만) + _DISPLAY_CATEGORY String(128)→String(1024) | dictionary_service.py, models/dictionary.py |
 | 2026-04-09 | `trg_phase1_runs_delete` 트리거 추가 (phase1_runs 삭제 시 phase1_logs 자동 연쇄 삭제) + `idx_wh_ws_dom`(work_history), `idx_bh_domain`(build_history) 복합 인덱스 추가 | init_db.py |
 | 2026-04-09 | kw_{workspace} 워크스페이스별 전용 테이블 전환 (keyword_assignments 분리) + 이전단계 이동 시 TRUNCATE | assignment_service.py, workspace_service.py, init_db.py |

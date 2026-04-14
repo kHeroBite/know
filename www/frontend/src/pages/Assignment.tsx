@@ -37,7 +37,7 @@ export default function Assignment() {
   const navigate = useNavigate()
   const location = useLocation()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
-  const [stats, setStats] = useState<AssignmentStats>({ total: 0, pending: 0, assigned: 0, completed: 0 })
+  const [stats, setStats] = useState<AssignmentStats>({ total: 0, pending: 0, assigned: 0, completed: 0, reprocess_count: 0 })
   const [filter, setFilter] = useState<string>('pending')
   const [items, setItems] = useState<KeywordItem[]>([])
   const [total, setTotal] = useState(0)
@@ -84,15 +84,15 @@ export default function Assignment() {
     목록조회(page)
   }, [selectedWorkspace, selectedDomain, filter, page, location.key])
 
-  const 할당실행 = async () => {
+  const 할당실행 = async (mode?: string) => {
     if (!selectedWorkspace || !selectedDomain) return
-    if (fromLine > toLine) {
+    if (!mode && fromLine > toLine) {
       message.warning('시작 번호가 종료 번호보다 큽니다')
       return
     }
     try {
-      const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine)
-      message.success(data.message || `${fromLine}~${toLine} 할당 완료`)
+      const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine, mode)
+      message.success(data.message || (mode === 'reprocess' ? '재처리 할당 완료' : `${fromLine}~${toLine} 할당 완료`))
       await useWorkspaceStore.getState().loadWorkspaceStatus()
       navigate('/knowledge-work')
       통계조회()
@@ -230,21 +230,27 @@ export default function Assignment() {
           </Col>
           <Col flex="auto" />
           <Col>
-            <Space>
-              <Text>시작</Text>
-              <InputNumber min={1} value={fromLine} onChange={v => setFromLine(v || 1)} style={{ width: 100 }} />
-              <Text>~</Text>
-              <Text>종료</Text>
-              <InputNumber min={1} value={toLine} onChange={v => setToLine(v || 1)} style={{ width: 100 }} />
-              <Select
-                placeholder="건수 선택"
-                style={{ width: 120 }}
-                options={건수선택옵션}
-                onChange={건수선택처리}
-                allowClear
-              />
-              <Button type="primary" icon={<UserAddOutlined />} onClick={할당실행} disabled={filter !== 'pending'}>할당받기</Button>
-            </Space>
+            {stats.reprocess_count > 0 ? (
+              <Button type="primary" icon={<UserAddOutlined />} onClick={() => 할당실행('reprocess')}>
+                재처리 대상 {stats.reprocess_count.toLocaleString()}건 할당받기
+              </Button>
+            ) : (
+              <Space>
+                <Text>시작</Text>
+                <InputNumber min={1} value={fromLine} onChange={v => setFromLine(v || 1)} style={{ width: 100 }} />
+                <Text>~</Text>
+                <Text>종료</Text>
+                <InputNumber min={1} value={toLine} onChange={v => setToLine(v || 1)} style={{ width: 100 }} />
+                <Select
+                  placeholder="건수 선택"
+                  style={{ width: 120 }}
+                  options={건수선택옵션}
+                  onChange={건수선택처리}
+                  allowClear
+                />
+                <Button type="primary" icon={<UserAddOutlined />} onClick={() => 할당실행()} disabled={filter !== 'pending'}>할당받기</Button>
+              </Space>
+            )}
           </Col>
         </Row>
       </Card>

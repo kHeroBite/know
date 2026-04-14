@@ -313,20 +313,32 @@ def get_stats(db: Session, workspace: str, domain: str) -> dict:
     for status_val, cnt in rows:
         result[status_val] = cnt
         result["total"] += cnt
+    reprocess_count = db.execute(text(f"""
+        SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag='reprocess' AND status='pending'
+    """), {"dom": domain}).scalar() or 0
+    result["reprocess_count"] = reprocess_count
     return result
 
 
-def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str) -> dict:
-    """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 assign."""
+def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str, mode: str = '') -> dict:
+    """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 assign.
+
+    mode='reprocess'이면 flag='reprocess' AND status='pending' 인 키워드만 대상.
+    mode=''이면 기존 동작(status='pending' 전체).
+    """
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
     offset = max(0, from_pos - 1)
     limit = to_pos - from_pos + 1
     # pending 목록에서 순번 기준으로 대상 ID 조회
+    if mode == 'reprocess':
+        where_clause = "domain=:dom AND flag='reprocess' AND status='pending'"
+    else:
+        where_clause = "domain=:dom AND status='pending'"
     ids = db.execute(text(f"""
         SELECT id FROM {tbl}
-        WHERE domain=:dom AND status='pending'
+        WHERE {where_clause}
         ORDER BY line_num ASC LIMIT :lim OFFSET :off
     """), {"dom": domain, "lim": limit, "off": offset}).fetchall()
     if not ids:

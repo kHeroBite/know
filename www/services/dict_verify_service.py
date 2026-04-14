@@ -280,7 +280,7 @@ def reprocess_keywords(db, workspace: str, domain: str, keywords: List[str]) -> 
     params["dom"] = domain
     db.execute(text(
         f"UPDATE {tbl} SET status='pending', assigned_to=NULL, "
-        f"assigned_at=NULL, completed_at=NULL, flag='' "
+        f"assigned_at=NULL, completed_at=NULL, flag='reprocess' "
         f"WHERE domain=:dom AND keyword IN ({placeholders})"
     ), params)
     db.commit()

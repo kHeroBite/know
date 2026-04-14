@@ -18,6 +18,7 @@ export interface AssignmentStats {
   pending: number
   assigned: number
   completed: number
+  reprocess_count: number
 }
 
 export const assignmentApi = {
@@ -27,8 +28,8 @@ export const assignmentApi = {
     클라이언트.get('/assignments/list', { params: { workspace, domain, filter, page, size, ...(assigned_to ? { assigned_to } : {}) } }),
   통계: (workspace: string, domain: string) =>
     클라이언트.get<AssignmentStats>('/assignments/stats', { params: { workspace, domain } }),
-  할당: (workspace: string, domain: string, from_line: number, to_line: number) =>
-    클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line } }),
+  할당: (workspace: string, domain: string, from_line: number, to_line: number, mode?: string) =>
+    클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line, ...(mode ? { mode } : {}) } }),
   완료: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/complete', null, { params: { workspace, domain } }),
   초기화: (workspace: string, domain: string) =>

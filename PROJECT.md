@@ -282,7 +282,7 @@ www/
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함) + POST /{name}/complete (작업완료 처리)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
-│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
+│   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, GET /api/assignments/assign?mode=normal|reprocess, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status, POST /api/dict-verify/reprocess)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
@@ -316,7 +316,7 @@ www/
     │   └── ControlPanel.tsx   # 파이프라인 제어 패널
     │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
-    ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag, 키워드페이지조회)
+    ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag, 키워드페이지조회, AssignmentStats.reprocess_count)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API)
     ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
