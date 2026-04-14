@@ -63,6 +63,7 @@ export default function Assignment() {
         const { data: rData } = await assignmentApi.통계(selectedWorkspace, selectedDomain, 'reprocess')
         console.log('[REPROCESS_DEBUG] 2차 통계(reprocess) 수신:', rData)
         setStats(rData)
+        setFilter('all')   // 재처리 모드 진입 시 filter 강제 전환 → 목록조회 경쟁 조건 방지
       } else {
         setStats(data)
       }
@@ -176,7 +177,7 @@ export default function Assignment() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader
         title="데이터 할당"
-        showPrev
+        showPrev={!isReprocessMode}
         prevLabel="이전단계로 (전처리)"
         onPrev={() => {
           Modal.confirm({

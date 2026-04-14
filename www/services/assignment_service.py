@@ -272,16 +272,17 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     where = "domain=:dom"
     params: dict = {"dom": domain}
 
-    if filter == "pending":
-        where += " AND status='pending'"
-    elif filter == "assigned":
-        where += " AND status='assigned'"
-    elif filter == "completed":
-        where += " AND status='completed'"
-    # filter == "all" → 조건 없음
-
     if mode == 'reprocess':
+        # 재처리 모드: filter 무시, flag='reprocess'인 모든 status 포함
         where += " AND flag='reprocess'"
+    else:
+        if filter == "pending":
+            where += " AND status='pending'"
+        elif filter == "assigned":
+            where += " AND status='assigned'"
+        elif filter == "completed":
+            where += " AND status='completed'"
+        # filter == "all" → 조건 없음
 
     if assigned_to:
         where += " AND assigned_to=:uid"
@@ -465,7 +466,9 @@ def process_all_complete(db: Session, workspace: str, domain: str, user_id: str)
     ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
     result = db.execute(text(f"""
-        UPDATE {tbl} SET status='completed', flag='W', completed_at=:now, assigned_to=NULL
+        UPDATE {tbl} SET status='completed',
+            flag=CASE WHEN flag='reprocess' THEN 'reprocess' ELSE 'W' END,
+            completed_at=:now, assigned_to=NULL
         WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
     """), {"now": now, "dom": domain, "uid": user_id})
     db.commit()
@@ -477,7 +480,9 @@ def process_all_incomplete(db: Session, workspace: str, domain: str, user_id: st
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
     result = db.execute(text(f"""
-        UPDATE {tbl} SET status='pending', flag='', assigned_to=NULL, assigned_at=NULL, completed_at=NULL
+        UPDATE {tbl} SET status='pending',
+            flag=CASE WHEN flag='reprocess' THEN 'reprocess' ELSE '' END,
+            assigned_to=NULL, assigned_at=NULL, completed_at=NULL
         WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
     """), {"dom": domain, "uid": user_id})
     db.commit()
