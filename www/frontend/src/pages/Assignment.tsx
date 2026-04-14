@@ -103,7 +103,7 @@ export default function Assignment() {
 
   const 할당실행 = async (mode?: string) => {
     if (!selectedWorkspace || !selectedDomain) return
-    if (!mode && fromLine > toLine) {
+    if (fromLine > toLine) {
       message.warning('시작 번호가 종료 번호보다 큽니다')
       return
     }
@@ -247,12 +247,7 @@ export default function Assignment() {
           </Col>
           <Col flex="auto" />
           <Col>
-            {stats.reprocess_count > 0 ? (
-              <Button type="primary" icon={<UserAddOutlined />} onClick={() => 할당실행('reprocess')}>
-                재처리 대상 {stats.reprocess_count.toLocaleString()}건 할당받기
-              </Button>
-            ) : (
-              <Space>
+            <Space>
                 <Text>시작</Text>
                 <InputNumber min={1} value={fromLine} onChange={v => setFromLine(v || 1)} style={{ width: 100 }} />
                 <Text>~</Text>
@@ -265,9 +260,15 @@ export default function Assignment() {
                   onChange={건수선택처리}
                   allowClear
                 />
-                <Button type="primary" icon={<UserAddOutlined />} onClick={() => 할당실행()} disabled={filter !== 'pending'}>할당받기</Button>
+                <Button
+                  type="primary"
+                  icon={<UserAddOutlined />}
+                  onClick={() => 할당실행(isReprocessMode ? 'reprocess' : undefined)}
+                  disabled={!isReprocessMode && filter !== 'pending'}
+                >
+                  {isReprocessMode ? `재처리 ${stats.reprocess_count.toLocaleString()}건 중 할당받기` : '할당받기'}
+                </Button>
               </Space>
-            )}
           </Col>
         </Row>
       </Card>
