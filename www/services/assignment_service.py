@@ -347,11 +347,11 @@ def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_p
     now = datetime.now().isoformat()
     offset = max(0, from_pos - 1)
     limit = to_pos - from_pos + 1
-    # pending 목록에서 순번 기준으로 대상 ID 조회
+    # 해당 탭(전체/미완료/완료) 순번 기준으로 대상 ID 조회 — status 무관
     if mode == 'reprocess':
-        where_clause = "domain=:dom AND flag='reprocess' AND status='pending'"
+        where_clause = "domain=:dom AND flag='reprocess'"
     else:
-        where_clause = "domain=:dom AND status='pending'"
+        where_clause = "domain=:dom"
     ids = db.execute(text(f"""
         SELECT id FROM {tbl}
         WHERE {where_clause}

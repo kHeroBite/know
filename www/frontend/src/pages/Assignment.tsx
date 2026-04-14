@@ -259,14 +259,24 @@ export default function Assignment() {
                   onChange={건수선택처리}
                   allowClear
                 />
-                <Button
-                  type="primary"
-                  icon={<UserAddOutlined />}
-                  onClick={() => 할당실행(isReprocessMode ? 'reprocess' : undefined)}
-                  disabled={filter !== 'pending'}
-                >
-                  할당받기
-                </Button>
+                {(() => {
+                  const currentTabCount =
+                    filter === 'all' ? stats.total :
+                    filter === 'pending' ? stats.pending :
+                    filter === 'assigned' ? stats.assigned :
+                    filter === 'completed' ? stats.completed : 0
+                  const canAssign = filter !== 'assigned' && currentTabCount > 0
+                  return (
+                    <Button
+                      type="primary"
+                      icon={<UserAddOutlined />}
+                      onClick={() => 할당실행(isReprocessMode ? 'reprocess' : undefined)}
+                      disabled={!canAssign}
+                    >
+                      할당받기
+                    </Button>
+                  )
+                })()}
               </Space>
           </Col>
         </Row>
