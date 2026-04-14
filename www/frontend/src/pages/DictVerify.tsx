@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Input, Tabs, Progress,
-  message, Statistic, Row, Col,
+  message, Statistic, Row, Col, Checkbox,
 } from 'antd'
 import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
@@ -12,14 +12,14 @@ import {
 import { 사전검증API, 검증결과, 분석결과 } from '../api/dict_verify'
 import PageHeader from '../components/PageHeader'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 export default function DictVerify() {
   const navigate = useNavigate()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const currentDomain = selectedDomain || ''
 
-  // ─── 형태소분석 테스트 ────────────────────────
+  // --- 형태소분석 테스트 ---
   const [분석키워드, set분석키워드] = useState('')
   const [분석결과목록, set분석결과목록] = useState<분석결과[]>([])
   const [분석중, set분석중] = useState(false)
@@ -72,17 +72,20 @@ export default function DictVerify() {
     },
   ]
 
-  // ─── 사전 검증 실행 (분리형: 완료/미완료) ──────────────────────────
+  // --- 사전 검증 실행 ---
   const [완료검증, set완료검증] = useState<검증결과 | null>(null)
   const [미완료검증, set미완료검증] = useState<검증결과 | null>(null)
   const [검증중, set검증중] = useState(false)
   const [진행률, set진행률] = useState(0)
 
-  // ─── 재처리 상태 ────────────────────────────────────────
-  const [완료선택키워드, set완료선택키워드] = useState<Set<string>>(new Set())
-  const [미작업선택키워드, set미작업선택키워드] = useState<Set<string>>(new Set())
-  const [재처리중, set재처리중] = useState(false)
-  const 총선택건수 = 완료선택키워드.size + 미작업선택키워드.size
+  // --- 재처리 체크박스 상태 (2그룹) ---
+  // 그룹1: 작업 상태
+  const [selCompleted, setSelCompleted] = useState(false)
+  const [selPending, setSelPending] = useState(false)
+  // 그룹2: 분류 타입
+  const [selMissing, setSelMissing] = useState(false)
+  const [selUkall, setSelUkall] = useState(false)
+  const [reprocessLoading, setReprocessLoading] = useState(false)
 
   const 전체검증 = useCallback(async () => {
     if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
@@ -95,6 +98,8 @@ export default function DictVerify() {
       set진행률(100)
       set완료검증(res.data.completed)
       set미완료검증(res.data.pending)
+      setSelCompleted(false); setSelPending(false)
+      setSelMissing(false); setSelUkall(false)
       const cm = res.data.completed.missing.length
       const cu = res.data.completed.ukall.length
       const pm = res.data.pending.missing.length
@@ -107,28 +112,65 @@ export default function DictVerify() {
     }
   }, [selectedWorkspace, currentDomain])
 
-  const 재처리실행 = useCallback(async () => {
-    const allKeywords = [...완료선택키워드, ...미작업선택키워드]
-    if (!selectedWorkspace || !currentDomain || allKeywords.length === 0) return
-    set재처리중(true)
+  // 선택 건수 계산 (교차 조합)
+  const selectedCount = (() => {
+    let count = 0
+    if (selCompleted && 완료검증) {
+      if (selMissing) count += 완료검증.missing.length
+      if (selUkall) count += 완료검증.ukall.length
+    }
+    if (selPending && 미완료검증) {
+      if (selMissing) count += 미완료검증.missing.length
+      if (selUkall) count += 미완료검증.ukall.length
+    }
+    return count
+  })()
+
+  const canReprocess = (selCompleted || selPending) && (selMissing || selUkall) && selectedCount > 0
+
+  const collectKeywords = useCallback((): string[] => {
+    const result: string[] = []
+    const pushMissing = (r: 검증결과 | null) => {
+      r?.missing.forEach((item: any) => {
+        const kw = typeof item === 'string' ? item : item.keyword
+        if (kw) result.push(kw)
+      })
+    }
+    const pushUkall = (r: 검증결과 | null) => {
+      r?.ukall.forEach((kw: string) => result.push(kw))
+    }
+    if (selCompleted) {
+      if (selMissing) pushMissing(완료검증)
+      if (selUkall) pushUkall(완료검증)
+    }
+    if (selPending) {
+      if (selMissing) pushMissing(미완료검증)
+      if (selUkall) pushUkall(미완료검증)
+    }
+    return [...new Set(result)]
+  }, [selCompleted, selPending, selMissing, selUkall, 완료검증, 미완료검증])
+
+  const runReprocess = useCallback(async () => {
+    const keywords = collectKeywords()
+    if (!selectedWorkspace || !currentDomain || keywords.length === 0) return
+    setReprocessLoading(true)
     try {
-      await 사전검증API.재처리(selectedWorkspace, currentDomain, allKeywords)
+      await 사전검증API.재처리(selectedWorkspace, currentDomain, keywords)
       await useWorkspaceStore.getState().loadWorkspaceStatus()
-      set완료검증(null)
-      set미완료검증(null)
-      set완료선택키워드(new Set())
-      set미작업선택키워드(new Set())
-      message.success(`${allKeywords.length}개 키워드 재처리 완료. 할당 페이지로 이동합니다.`)
+      set완료검증(null); set미완료검증(null)
+      setSelCompleted(false); setSelPending(false)
+      setSelMissing(false); setSelUkall(false)
+      message.success(`${keywords.length}개 키워드 재처리 완료. 할당 페이지로 이동합니다.`)
       navigate('/assignment')
     } catch (e: any) {
       message.error('재처리 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     } finally {
-      set재처리중(false)
+      setReprocessLoading(false)
     }
-  }, [완료선택키워드, 미작업선택키워드, selectedWorkspace, currentDomain, navigate])
+  }, [collectKeywords, selectedWorkspace, currentDomain, navigate])
 
-  // ─── 검증 결과 렌더 헬퍼 ───────────────────────────────
-  const missing컬럼 = [
+  // --- 컬럼 정의 ---
+  const missingColumns = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword', width: 180 },
     {
@@ -140,67 +182,34 @@ export default function DictVerify() {
       render: () => <Tag color="error" icon={<CloseCircleOutlined />}>누락</Tag>,
     },
   ]
-  const ukall컬럼 = [
+  const ukallColumns = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
     { title: '상태', key: 'status', width: 100, render: () => <Tag color="warning" icon={<WarningOutlined />}>미등록</Tag> },
   ]
-  const skipped컬럼 = [
+  const skippedColumns = [
     { title: '#', key: 'idx', width: 50, render: (_: any, __: any, i: number) => i + 1 },
     { title: '키워드', dataIndex: 'keyword', key: 'keyword' },
     { title: '상태', key: 'status', width: 100, render: () => <Tag color="success" icon={<CheckOutlined />}>통과</Tag> },
   ]
 
-  const 결과패널 = (
-    제목: string,
-    결과: 검증결과 | null,
-    showCheckbox: boolean,
-    선택키워드: Set<string>,
-    on선택변경: (keys: Set<string>) => void,
-  ) => {
-    if (!결과) return null
-    const missing = (결과.missing || []).map((item: any, i: number) => ({ key: i, ...(typeof item === 'string' ? { keyword: item } : item) }))
-    const ukall = (결과.ukall || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
-    const skipped = (결과.skipped || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
-
-    const missingRowSelection = showCheckbox ? {
-      selectedRowKeys: missing.filter((r: any) => 선택키워드.has(r.keyword)).map((r: any) => r.key),
-      onChange: (selectedKeys: React.Key[]) => {
-        const next = new Set(선택키워드)
-        missing.forEach((r: any) => next.delete(r.keyword))
-        selectedKeys.forEach((k) => {
-          const row = missing.find((r: any) => r.key === k)
-          if (row) next.add(row.keyword)
-        })
-        on선택변경(next)
-      },
-    } : undefined
-
-    const ukallRowSelection = showCheckbox ? {
-      selectedRowKeys: ukall.filter((r: any) => 선택키워드.has(r.keyword)).map((r: any) => r.key),
-      onChange: (selectedKeys: React.Key[]) => {
-        const next = new Set(선택키워드)
-        ukall.forEach((r: any) => next.delete(r.keyword))
-        selectedKeys.forEach((k) => {
-          const row = ukall.find((r: any) => r.key === k)
-          if (row) next.add(row.keyword)
-        })
-        on선택변경(next)
-      },
-    } : undefined
-
+  const renderPanel = (title: string, result: 검증결과 | null) => {
+    if (!result) return null
+    const missing = (result.missing || []).map((item: any, i: number) => ({ key: i, ...(typeof item === 'string' ? { keyword: item } : item) }))
+    const ukall = (result.ukall || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
+    const skipped = (result.skipped || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
     return (
-      <Card size="small" title={제목} style={{ flex: 1 }}>
+      <Card size="small" title={title} style={{ flex: 1 }}>
         <Row gutter={8} style={{ marginBottom: 12 }}>
-          <Col span={6}><Statistic title="전체" value={결과.total} /></Col>
+          <Col span={6}><Statistic title="전체" value={result.total} /></Col>
           <Col span={6}><Statistic title="통과" value={skipped.length} valueStyle={{ color: '#52c41a' }} prefix={<CheckOutlined />} /></Col>
           <Col span={6}><Statistic title="누락" value={missing.length} valueStyle={{ color: '#cf1322' }} prefix={<CloseCircleOutlined />} /></Col>
           <Col span={6}><Statistic title="미등록" value={ukall.length} valueStyle={{ color: '#faad14' }} prefix={<WarningOutlined />} /></Col>
         </Row>
         <Tabs defaultActiveKey="missing" items={[
-          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missing컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} rowSelection={missingRowSelection} /> },
-          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukall컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} rowSelection={ukallRowSelection} /> },
-          { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skipped컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missingColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukallColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skippedColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
         ]} />
       </Card>
     )
@@ -222,11 +231,8 @@ export default function DictVerify() {
         }}
       />
 
-      {/* ═══ 형태소분석 테스트 ═══ */}
-      <Card
-        size="small"
-        title={<><ExperimentOutlined /> 형태소분석 테스트</>}
-      >
+      {/* 형태소분석 테스트 */}
+      <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트</>}>
         <Space style={{ marginBottom: 12 }}>
           <Input
             placeholder="키워드 입력 (여러 개: 쉼표/줄바꿈 구분)"
@@ -236,21 +242,8 @@ export default function DictVerify() {
             style={{ width: 360 }}
             allowClear
           />
-          <Button
-            type="primary"
-            icon={<SearchOutlined />}
-            onClick={단일분석}
-            loading={분석중}
-          >
-            분석
-          </Button>
-          <Button
-            icon={<ExperimentOutlined />}
-            onClick={일괄분석}
-            loading={분석중}
-          >
-            일괄
-          </Button>
+          <Button type="primary" icon={<SearchOutlined />} onClick={단일분석} loading={분석중}>분석</Button>
+          <Button icon={<ExperimentOutlined />} onClick={일괄분석} loading={분석중}>일괄</Button>
         </Space>
         {분석결과목록.length > 0 && (
           <Table
@@ -264,7 +257,7 @@ export default function DictVerify() {
         )}
       </Card>
 
-      {/* ═══ 사전 검증 실행 ═══ */}
+      {/* 사전 검증 실행 */}
       <Card
         size="small"
         title={<><CheckCircleOutlined /> 사전 검증 실행</>}
@@ -281,31 +274,55 @@ export default function DictVerify() {
         }
       >
         <Text type="secondary">형태소분석(Java) 기반으로 복합어 누락·미등록어·통과 키워드를 분류합니다.</Text>
-        {검증중 && (
-          <div style={{ marginTop: 12 }}>
-            <Progress percent={진행률} status="active" />
-          </div>
-        )}
+        {검증중 && <div style={{ marginTop: 12 }}><Progress percent={진행률} status="active" /></div>}
       </Card>
 
-      {/* ═══ 검증 결과 (좌: 작업완료분 / 우: 미작업분) ═══ */}
+      {/* 검증 결과 */}
       {(완료검증 || 미완료검증) && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="primary"
-              danger
-              icon={<RedoOutlined />}
-              onClick={재처리실행}
-              loading={재처리중}
-              disabled={총선택건수 === 0}
-            >
-              선택 재처리 ({총선택건수})
-            </Button>
-          </div>
+          {/* 선택 재처리 컨트롤 */}
+          <Card size="small" title={<><RedoOutlined /> 선택 재처리</>}>
+            <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <Space size="large">
+                {/* 그룹1: 작업 상태 */}
+                <Space direction="vertical" size={4}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>작업 상태</Text>
+                  <Space>
+                    <Checkbox checked={selCompleted} onChange={e => setSelCompleted(e.target.checked)}>작업완료</Checkbox>
+                    <Checkbox checked={selPending} onChange={e => setSelPending(e.target.checked)}>미작업</Checkbox>
+                  </Space>
+                </Space>
+                <div style={{ width: 1, height: 36, background: '#d9d9d9' }} />
+                {/* 그룹2: 분류 */}
+                <Space direction="vertical" size={4}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>분류</Text>
+                  <Space>
+                    <Checkbox checked={selMissing} onChange={e => setSelMissing(e.target.checked)}>누락</Checkbox>
+                    <Checkbox checked={selUkall} onChange={e => setSelUkall(e.target.checked)}>미등록</Checkbox>
+                  </Space>
+                </Space>
+              </Space>
+              <Button
+                type="primary"
+                danger
+                icon={<RedoOutlined />}
+                onClick={runReprocess}
+                loading={reprocessLoading}
+                disabled={!canReprocess}
+              >
+                선택 재처리 ({selectedCount}건)
+              </Button>
+            </Space>
+            {(selCompleted || selPending || selMissing || selUkall) && !canReprocess && (
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+                ※ 작업 상태와 분류를 각각 1개 이상 선택해야 합니다.
+              </Text>
+            )}
+          </Card>
+
           <Row gutter={16}>
-            <Col span={12}>{결과패널('작업 완료 키워드', 완료검증, true, 완료선택키워드, set완료선택키워드)}</Col>
-            <Col span={12}>{결과패널('미작업 키워드', 미완료검증, true, 미작업선택키워드, set미작업선택키워드)}</Col>
+            <Col span={12}>{renderPanel('작업 완료 키워드', 완료검증)}</Col>
+            <Col span={12}>{renderPanel('미작업 키워드', 미완료검증)}</Col>
           </Row>
         </>
       )}
