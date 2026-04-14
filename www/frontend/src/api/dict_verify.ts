@@ -38,4 +38,7 @@ export const 사전검증API = {
 
   분리검증: (workspace: string, domain: string) =>
     클라이언트.post<{ completed: 검증결과, pending: 검증결과 }>('/dict-verify/run-split', { workspace, domain }),
+
+  재처리: (workspace: string, domain: string, keywords: string[]) =>
+    클라이언트.post<{ updated: number; phase: string }>('/dict-verify/reprocess', { workspace, domain, keywords }),
 }

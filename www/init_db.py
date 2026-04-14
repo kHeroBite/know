@@ -1,6 +1,6 @@
-"""know-api SQLite DB initialize 스크립트.
+"""know-ops SQLite DB initialize 스크립트.
 
-run_phase1_service: cd know-api && python init_db.py
+run_phase1_service: cd know-ops/www && python init_db.py
 결과: know.db 파일 생성 + 전체 테이블 + 시드 데이터
 
 CLI:
@@ -14,7 +14,7 @@ import sys
 import os
 import argparse
 
-# know-api 디렉토리를 path에 추가
+# www 디렉토리를 path에 추가
 sys.path.insert(0, os.path.dirname(__file__))
 
 from datetime import datetime
@@ -399,7 +399,7 @@ def import_dict(도메인: str, 사전타입: str, 파일경로: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="know-api DB initialize 및 관리 도구")
+    parser = argparse.ArgumentParser(description="know-ops DB initialize 및 관리 도구")
     parser.add_argument("--reset-password", nargs="+", metavar=("USER_ID", "NEW_PW"),
                         help="계정 비밀번호 initialize (기본: 1111)")
     parser.add_argument("--import", nargs=3, metavar=("DOMAIN", "DIC_TYPE", "FILE"),

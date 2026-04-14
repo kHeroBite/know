@@ -18,6 +18,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import List
 
 from sqlalchemy import text
 
@@ -253,6 +254,42 @@ def load_file(jiana_home: str) -> tuple[set, set, set]:
     syn_set = _read_synonym(syn_path)
     logger.info("사전 파일 로딩: user=%d, cn=%d, syn=%d", len(user_set), len(cn_set), len(syn_set))
     return user_set, cn_set, syn_set
+
+
+def reprocess_keywords(db, workspace: str, domain: str, keywords: List[str]) -> dict:
+    """선택 키워드 pending 초기화 + 2단계 phase 역전이 (verify→build→work).
+
+    Args:
+        db: SQLAlchemy 세션
+        workspace: 워크스페이스명
+        domain: 도메인명
+        keywords: 재처리할 키워드 목록
+
+    Returns:
+        {"updated": int, "phase": "work"}
+    """
+    if not keywords:
+        raise ValueError("재처리할 키워드가 없습니다")
+
+    from services.assignment_service import _kw_table
+    from services.workspace_service import phase_backward
+
+    tbl = _kw_table(workspace)
+    placeholders = ",".join([f":kw{i}" for i in range(len(keywords))])
+    params = {f"kw{i}": kw for i, kw in enumerate(keywords)}
+    params["dom"] = domain
+    db.execute(text(
+        f"UPDATE {tbl} SET status='pending', assigned_to=NULL, "
+        f"assigned_at=NULL, completed_at=NULL, flag='' "
+        f"WHERE domain=:dom AND keyword IN ({placeholders})"
+    ), params)
+    db.commit()
+
+    # verify→build→work 2단계 역전이
+    phase_backward(workspace, "build")   # verify → build
+    phase_backward(workspace, "work")    # build  → work
+
+    return {"updated": len(keywords), "phase": "work"}
 
 
 def verify_dict_from_file(db, workspace: str, domain: str, jiana_home: str) -> dict:

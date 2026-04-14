@@ -1140,6 +1140,28 @@
 
 ---
 
+## [2026-04-14] 사전검증(DictVerify) 누락/미등록 키워드 재처리 프로세스 신규 구현
+
+> **작업 요약**: 사전검증 페이지에서 완료 패널·미작업 패널 양쪽에 체크박스를 추가하고, 선택한 키워드를 재처리(phase_backward × 2회 순차 호출)하여 데이터 할당 단계로 되돌리는 기능 구현. 재처리 완료 후 `/assignment` 페이지로 자동 이동.
+
+### 변경 파일
+- **www/services/dict_verify_service.py**:
+  - `reprocess_keywords(db, workspace, keyword_ids)` 신규 추가: `phase_backward` 2회 순차 호출로 키워드를 데이터 할당 단계로 복원
+- **www/api/dict_verify.py**:
+  - `POST /dict-verify/reprocess` 엔드포인트 추가: keyword_ids 배열을 받아 재처리 서비스 호출
+- **www/frontend/src/api/dict_verify.ts**:
+  - `재처리(workspace, keywordIds)` API 클라이언트 함수 추가
+- **www/frontend/src/pages/DictVerify.tsx**:
+  - 완료 패널·미작업 패널 양쪽에 체크박스(rowSelection) 추가
+  - 재처리 버튼 추가: 선택 키워드 재처리 API 호출 후 `navigate('/assignment')` 이동
+  - TypeScript 타입 오류 수정: `rowSelection.onChange` 파라미터를 `React.Key[]`로 명시
+
+### 배경
+- 사전검증 페이지에서 누락되거나 미등록된 키워드를 발견했을 때 재처리할 방법이 없었음
+- 완료/미작업 상태 키워드를 선택해 데이터 할당 단계로 되돌리는 재처리 워크플로우 필요
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.

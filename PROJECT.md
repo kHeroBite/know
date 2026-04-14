@@ -270,7 +270,7 @@ www/
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
 │   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify/complete) + user_work_phase (idle/working/done) + complete_workspace(도메인백업+WS→도메인복사)
-│   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증 — 파일 기반 재작성)
+│   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증, reprocess_keywords — phase_backward 2회 순차 호출)
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
 │   ├── ai_analysis_service.py # AI 분석 서비스 (LLM + Wikipedia — LLM탭/Wikipedia탭 2종)
@@ -283,7 +283,7 @@ www/
 │   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함) + POST /{name}/complete (작업완료 처리)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
-│   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status)
+│   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status, POST /api/dict-verify/reprocess)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
 │   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
 ├── migrations/                # DB 마이그레이션 SQL

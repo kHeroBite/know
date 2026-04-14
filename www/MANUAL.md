@@ -1,4 +1,4 @@
-# 지식작업소 (know-api) 사용 매뉴얼
+# 지식작업소 사용 매뉴얼
 
 > 버전: 2.0.0 | 최종 수정: 2026-03-29
 > 서버: http://133.186.132.245:18000
@@ -63,7 +63,7 @@
 
 ### 2.3 서비스 시작
 
-    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-api.log 2>&1 &
+    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-ops.log 2>&1 &
     curl http://localhost:18000/api/health
     # {"status":"ok","db":true}
 
@@ -284,21 +284,21 @@ CATEGORY (탭 구분: 단어 -> 카테고리):
 ### 14.1 서비스 시작/중지/재시작
 
     # 시작
-    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-api.log 2>&1 &
+    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-ops.log 2>&1 &
 
     # 중지
     kill $(pgrep -f 'uvicorn.*main')
 
     # 재시작
     kill $(pgrep -f 'uvicorn.*main'); sleep 2; \
-    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-api.log 2>&1 &
+    nohup python3 -B -m uvicorn main:앱 --host 0.0.0.0 --port 18000 --workers 2 > /tmp/know-ops.log 2>&1 &
 
     # 상태 확인
     curl http://localhost:18000/api/health
 
 ### 14.2 로그 확인
 
-    tail -f /tmp/know-api.log
+    tail -f /tmp/know-ops.log
 
 ### 14.3 DB 백업/복원
 

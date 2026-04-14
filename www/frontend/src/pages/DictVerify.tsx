@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
-  WarningOutlined, CloseCircleOutlined, CheckOutlined,
+  WarningOutlined, CloseCircleOutlined, CheckOutlined, RedoOutlined,
 } from '@ant-design/icons'
 import { 사전검증API, 검증결과, 분석결과 } from '../api/dict_verify'
 import PageHeader from '../components/PageHeader'
@@ -78,6 +78,12 @@ export default function DictVerify() {
   const [검증중, set검증중] = useState(false)
   const [진행률, set진행률] = useState(0)
 
+  // ─── 재처리 상태 ────────────────────────────────────────
+  const [완료선택키워드, set완료선택키워드] = useState<Set<string>>(new Set())
+  const [미작업선택키워드, set미작업선택키워드] = useState<Set<string>>(new Set())
+  const [재처리중, set재처리중] = useState(false)
+  const 총선택건수 = 완료선택키워드.size + 미작업선택키워드.size
+
   const 전체검증 = useCallback(async () => {
     if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
     if (!currentDomain) { message.warning('워크스페이스(도메인) 선택 필요'); return }
@@ -100,6 +106,26 @@ export default function DictVerify() {
       set검증중(false)
     }
   }, [selectedWorkspace, currentDomain])
+
+  const 재처리실행 = useCallback(async () => {
+    const allKeywords = [...완료선택키워드, ...미작업선택키워드]
+    if (!selectedWorkspace || !currentDomain || allKeywords.length === 0) return
+    set재처리중(true)
+    try {
+      await 사전검증API.재처리(selectedWorkspace, currentDomain, allKeywords)
+      await useWorkspaceStore.getState().loadWorkspaceStatus()
+      set완료검증(null)
+      set미완료검증(null)
+      set완료선택키워드(new Set())
+      set미작업선택키워드(new Set())
+      message.success(`${allKeywords.length}개 키워드 재처리 완료. 할당 페이지로 이동합니다.`)
+      navigate('/assignment')
+    } catch (e: any) {
+      message.error('재처리 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    } finally {
+      set재처리중(false)
+    }
+  }, [완료선택키워드, 미작업선택키워드, selectedWorkspace, currentDomain, navigate])
 
   // ─── 검증 결과 렌더 헬퍼 ───────────────────────────────
   const missing컬럼 = [
@@ -125,11 +151,44 @@ export default function DictVerify() {
     { title: '상태', key: 'status', width: 100, render: () => <Tag color="success" icon={<CheckOutlined />}>통과</Tag> },
   ]
 
-  const 결과패널 = (제목: string, 결과: 검증결과 | null) => {
+  const 결과패널 = (
+    제목: string,
+    결과: 검증결과 | null,
+    showCheckbox: boolean,
+    선택키워드: Set<string>,
+    on선택변경: (keys: Set<string>) => void,
+  ) => {
     if (!결과) return null
     const missing = (결과.missing || []).map((item: any, i: number) => ({ key: i, ...(typeof item === 'string' ? { keyword: item } : item) }))
     const ukall = (결과.ukall || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
     const skipped = (결과.skipped || []).map((kw: string, i: number) => ({ key: i, keyword: kw }))
+
+    const missingRowSelection = showCheckbox ? {
+      selectedRowKeys: missing.filter((r: any) => 선택키워드.has(r.keyword)).map((r: any) => r.key),
+      onChange: (selectedKeys: React.Key[]) => {
+        const next = new Set(선택키워드)
+        missing.forEach((r: any) => next.delete(r.keyword))
+        selectedKeys.forEach((k) => {
+          const row = missing.find((r: any) => r.key === k)
+          if (row) next.add(row.keyword)
+        })
+        on선택변경(next)
+      },
+    } : undefined
+
+    const ukallRowSelection = showCheckbox ? {
+      selectedRowKeys: ukall.filter((r: any) => 선택키워드.has(r.keyword)).map((r: any) => r.key),
+      onChange: (selectedKeys: React.Key[]) => {
+        const next = new Set(선택키워드)
+        ukall.forEach((r: any) => next.delete(r.keyword))
+        selectedKeys.forEach((k) => {
+          const row = ukall.find((r: any) => r.key === k)
+          if (row) next.add(row.keyword)
+        })
+        on선택변경(next)
+      },
+    } : undefined
+
     return (
       <Card size="small" title={제목} style={{ flex: 1 }}>
         <Row gutter={8} style={{ marginBottom: 12 }}>
@@ -139,8 +198,8 @@ export default function DictVerify() {
           <Col span={6}><Statistic title="미등록" value={ukall.length} valueStyle={{ color: '#faad14' }} prefix={<WarningOutlined />} /></Col>
         </Row>
         <Tabs defaultActiveKey="missing" items={[
-          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missing컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
-          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukall컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missing컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} rowSelection={missingRowSelection} /> },
+          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukall컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} rowSelection={ukallRowSelection} /> },
           { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skipped컬럼} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
         ]} />
       </Card>
@@ -231,10 +290,24 @@ export default function DictVerify() {
 
       {/* ═══ 검증 결과 (좌: 작업완료분 / 우: 미작업분) ═══ */}
       {(완료검증 || 미완료검증) && (
-        <Row gutter={16}>
-          <Col span={12}>{결과패널('작업 완료 키워드', 완료검증)}</Col>
-          <Col span={12}>{결과패널('미작업 키워드', 미완료검증)}</Col>
-        </Row>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              type="primary"
+              danger
+              icon={<RedoOutlined />}
+              onClick={재처리실행}
+              loading={재처리중}
+              disabled={총선택건수 === 0}
+            >
+              선택 재처리 ({총선택건수})
+            </Button>
+          </div>
+          <Row gutter={16}>
+            <Col span={12}>{결과패널('작업 완료 키워드', 완료검증, true, 완료선택키워드, set완료선택키워드)}</Col>
+            <Col span={12}>{결과패널('미작업 키워드', 미완료검증, true, 미작업선택키워드, set미작업선택키워드)}</Col>
+          </Row>
+        </>
       )}
     </Space>
   )

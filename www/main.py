@@ -39,7 +39,7 @@ logging.basicConfig(
 )
 _접근로그 = logging.getLogger("access")
 # 멀티워커 환경에서도 로그가 파일에 기록되도록 FileHandler 추가
-_log_file_handler = logging.FileHandler("/tmp/know-api.log", encoding="utf-8")
+_log_file_handler = logging.FileHandler("/tmp/know-ops.log", encoding="utf-8")
 _log_file_handler.setFormatter(logging.Formatter(
     "%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%H:%M:%S"
 ))
@@ -81,7 +81,7 @@ async def _lifespan(app: FastAPI):
 
 
 앱 = FastAPI(
-    title="know-api",
+    title="know-ops",
     description="검색엔진 지식작업 관리도구 API",
     version="2.0.0",
     lifespan=_lifespan,

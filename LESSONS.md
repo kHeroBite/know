@@ -611,3 +611,17 @@ elif os.path.isdir(path):
 **재발방지**: `revertPhase()`는 워크스페이스 상태(phase)만 변경. 빌드 이력/로그 등 데이터 삭제는 명시적인 사용자 요청(별도 삭제 버튼, 확인 모달)에 의해서만 수행. 단계 전환 ≠ 데이터 초기화.
 **Level**: 2
 
+
+### L-056: know 프론트엔드 빌드는 반드시 서버에서만 실행 (2026-04-14)
+
+**현상**: 로컬(`/mnt/c/DATA/Project/Know/www/frontend/`)에서 `npm run build`를 반복 실행했으나 브라우저는 계속 구버전(`index-c399b893.js`)을 로드함. 서버(`133.186.132.245`)는 빌드 결과를 받지 못해 수정 사항이 전혀 반영되지 않은 상태로 수 차례 시도를 낭비.
+**원인**: `oinfra_know` SKILL.md에 "로컬 빌드 금지, 서버에서만 빌드"가 명시되어 있음에도 무시하고 로컬에서 빌드. 서버는 `/home/know/apps/know-ops/www/frontend/dist/`를 서빙하므로 로컬 빌드 결과는 서버에 전달되지 않음.
+**재발방지**: 프론트엔드 소스 수정 후 반드시 ① rsync로 소스 업로드 → ② 서버에서 `npm run build` → ③ `✓ built in` 확인. 로컬 `npm run build` 절대 금지. `oinfra_know` SKILL.md의 "서버빌드" 섹션 필수 참조.
+**Level**: 3 (반복 위반 — 사용자 엄명)
+
+### L-057: Ant Design Table rowSelection.onChange의 selectedRowKeys 타입은 React.Key[]로 명시 (2026-04-14)
+
+**현상**: `DictVerify.tsx`에서 `rowSelection.onChange` 콜백의 첫 번째 파라미터 타입이 `number[] | string[]`으로 기본 추론되어 TypeScript 컴파일 에러 발생.
+**원인**: Ant Design의 `Table` 컴포넌트에서 `rowSelection.onChange` 콜백의 `selectedRowKeys` 파라미터 타입은 `React.Key[]`로 명시해야 함. 상태 변수 선언 시 타입 미지정으로 타입 불일치 발생.
+**재발방지**: Ant Design Table에서 체크박스 선택 상태를 관리할 때 `const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])` 형태로 명시. `rowSelection.onChange: (keys: React.Key[]) => void` 시그니처 준수.
+**Level**: 1

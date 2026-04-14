@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from api.auth import get_current_user
 from core.database import db_session
-from services.dict_verify_service import verify_dict, auto_verify_dict
+from services.dict_verify_service import verify_dict, auto_verify_dict, reprocess_keywords
 from services.morpheme_service import analyze_morpheme
 from services.workspace_service import get_jiana_home_path
 from services.assignment_service import _kw_table
@@ -41,6 +41,12 @@ class 분석요청(BaseModel):
 class 자동검증요청(BaseModel):
     workspace: str
     domain: str
+
+
+class 재처리요청(BaseModel):
+    workspace: str
+    domain: str
+    keywords: List[str]
 
 
 @라우터.post("/run")
@@ -102,6 +108,12 @@ def get_verify_result(domain: str, _current: dict = Depends(get_current_user)):
     if domain in _최근결과:
         return _최근결과[domain]
     return {"missing": [], "ukall": [], "skipped": [], "total": 0, "domain": domain}
+
+
+@라우터.post("/reprocess")
+def reprocess(요청: 재처리요청, db: Session = Depends(db_session), _current: dict = Depends(get_current_user)):
+    """선택 키워드 재처리 — pending 초기화 + verify→build→work 2단계 역전이."""
+    return reprocess_keywords(db, 요청.workspace, 요청.domain, 요청.keywords)
 
 
 @라우터.post("/analyze")
