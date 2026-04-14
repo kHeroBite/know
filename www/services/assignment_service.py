@@ -272,17 +272,18 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     where = "domain=:dom"
     params: dict = {"dom": domain}
 
+    # filter 조건 (전체/미완료/할당됨/완료) — 일반 모드와 동일
+    if filter == "pending":
+        where += " AND status='pending'"
+    elif filter == "assigned":
+        where += " AND status='assigned'"
+    elif filter == "completed":
+        where += " AND status='completed'"
+    # filter == "all" → status 조건 없음
+
+    # reprocess 모드 추가 조건 (AND 조합)
     if mode == 'reprocess':
-        # 재처리 모드: filter 무시, flag='reprocess'인 모든 status 포함
         where += " AND flag='reprocess'"
-    else:
-        if filter == "pending":
-            where += " AND status='pending'"
-        elif filter == "assigned":
-            where += " AND status='assigned'"
-        elif filter == "completed":
-            where += " AND status='completed'"
-        # filter == "all" → 조건 없음
 
     if assigned_to:
         where += " AND assigned_to=:uid"

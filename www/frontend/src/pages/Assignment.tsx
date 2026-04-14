@@ -63,7 +63,6 @@ export default function Assignment() {
         const { data: rData } = await assignmentApi.통계(selectedWorkspace, selectedDomain, 'reprocess')
         console.log('[REPROCESS_DEBUG] 2차 통계(reprocess) 수신:', rData)
         setStats(rData)
-        setFilter('all')   // 재처리 모드 진입 시 filter 강제 전환 → 목록조회 경쟁 조건 방지
       } else {
         setStats(data)
       }
@@ -264,7 +263,7 @@ export default function Assignment() {
                   type="primary"
                   icon={<UserAddOutlined />}
                   onClick={() => 할당실행(isReprocessMode ? 'reprocess' : undefined)}
-                  disabled={!isReprocessMode && filter !== 'pending'}
+                  disabled={filter !== 'pending'}
                 >
                   {isReprocessMode ? `재처리 ${stats.reprocess_count.toLocaleString()}건 중 할당받기` : '할당받기'}
                 </Button>
