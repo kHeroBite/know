@@ -107,10 +107,10 @@ export const workspaceAPI = {
     클라이언트.put('/workspaces/hotkeys', { hotkeys }),
 
   // Phase 전이
-  advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete') =>
+  advancePhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete' | 'finished') =>
     클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/advance`, { to }),
 
-  revertPhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete') =>
+  revertPhase: (workspace: string, to: 'preprocess' | 'work' | 'build' | 'verify' | 'complete' | 'finished') =>
     클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/phase/revert`, { to }),
 
   getPhase: (workspace: string) =>
@@ -127,4 +127,36 @@ export const workspaceAPI = {
 
   completeWorkspace: (ws: string, domain: string, skip_backup: boolean) =>
     클라이언트.post(`/workspaces/${encodeURIComponent(ws)}/complete`, { domain, skip_backup }),
+
+  // 2단계 완료 프로세스 (Batch 2)
+  prepareComplete: (ws: string) =>
+    클라이언트.post<{ phase: string; snapshot_before: Record<string, number>; prepared_at: string }>(
+      `/workspaces/${encodeURIComponent(ws)}/prepare-complete`, {}
+    ),
+
+  finalizeComplete: (ws: string, opts: { backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) =>
+    클라이언트.post<{ phase: string; backup_folder: string | null; snapshot_after: Record<string, number>; finished_at: string }>(
+      `/workspaces/${encodeURIComponent(ws)}/finalize-complete`,
+      {
+        ...(opts.backup_folder !== undefined ? { backup_folder: opts.backup_folder } : {}),
+        skip_backup: opts.skip_backup ?? false,
+        ...(opts.site_id !== undefined && opts.site_id !== null ? { site_id: opts.site_id } : {}),
+      }
+    ),
+
+  getParticipantsStats: (ws: string) =>
+    클라이언트.get<{ participants: { user_id: string; name: string; r_count: number; w_count: number }[] }>(
+      `/workspaces/${encodeURIComponent(ws)}/participants`
+    ),
+
+  getWorkspaceSnapshots: (ws: string) =>
+    클라이언트.get<{
+      workspace: string
+      domain: string | null
+      before: Record<string, number> | null
+      after: Record<string, number> | null
+      prepared_at: string | null
+      finished_at: string | null
+      created_at: string | null
+    }>(`/workspaces/${encodeURIComponent(ws)}/snapshots`),
 }

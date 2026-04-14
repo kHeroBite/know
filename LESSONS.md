@@ -4,6 +4,29 @@
 
 ## 교훈 항목
 
+### L-finished-phase (2026-04-14) — "되돌릴 수 없는 상태"는 별도 phase로 표현
+
+**문제**: 완료 단계(`complete`)와 영구 확정 상태(`finished`)를 같은 phase로 뭉치면, UI에서 "확정 전/후" 경계가 흐려져 사용자가 실수로 되돌릴 수 없는 동작을 트리거하기 쉽다.
+
+**조치**: `workspace.phase`에 `finished` 값을 신설해 비즈니스 경계를 명확히 함. prepare(준비) → finalize(확정) 2단계 UI로 분리해, finalize 단계는 별도 확인을 요구.
+
+**재발방지 원칙**: "되돌릴 수 없는 상태 전이"는 별도의 phase/status 값으로 표현하라. 같은 phase 내 flag 토글로 처리하면 UI·API 양쪽에서 경계가 흐려진다.
+**Level**: 2 (MEMORY.md 반영)
+
+### L-public-share-route (2026-04-14) — 공개 공유 페이지는 PrivateRoute 밖 + /api/public/* 인증 예외
+
+**패턴**: 외부 공유용 페이지(`PublicShare.tsx`)는 반드시 `PrivateRoute` 래퍼 밖에 두고, 백엔드는 `/api/public/*` prefix로 인증 미들웨어 화이트리스트에 등록. "조건부 인증 해제"보다 경로 분리가 깔끔.
+
+**재사용 권장**: 향후 외부 공유/임베드 기능에 동일 패턴 재사용 가능. 공개/비공개 혼재 엔드포인트 금지.
+**Level**: 1
+
+### L-multi-batch-oplan-deep (2026-04-14) — oplan_deep 4-batch 분할이 대규모 작업에 효과적
+
+**패턴**: ~2000줄 규모 작업(완료 프로세스 재설계)에서 oplan_deep이 4개 batch로 자연스레 분할(DB/서비스, UI 대시보드, 리포트/메일/공유, 공개 공유 페이지). 각 batch는 독립 팀에이전트로 위임 가능해 Auto-Loop가 끝까지 자동 진행됨.
+
+**재사용 권장**: o5 Massive 작업에서 기능 축 기준(DB → 서비스 → UI → 통합) batch 분할을 기본 템플릿으로 고려.
+**Level**: 1
+
 ### L-audit-data (2026-04-14) — 감사용 누적 데이터를 reset/release 범주에서 분리
 
 **문제**: `build_history` DELETE가 3곳(assignment.py, workspace.py, build.py)에 산재. 워크스페이스 초기화/해제 흐름에 섞여 감사용 빌드이력까지 함께 삭제되는 구조였음.

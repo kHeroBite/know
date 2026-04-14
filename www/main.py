@@ -31,6 +31,9 @@ from api.llm_settings import 라우터 as LLM설정라우터
 from api.dict_verify import 라우터 as 사전검증라우터
 from api.dashboard import 라우터 as 대시보드라우터
 from api.notification import 라우터 as 알림라우터
+from api.site import 라우터 as 사이트라우터
+from api.reports import 라우터 as 리포트라우터
+from api.share import 라우터 as 공유라우터
 
 
 logging.basicConfig(
@@ -136,6 +139,9 @@ else:
 앱.include_router(사전검증라우터, prefix="/api", tags=["verify_dict"])
 앱.include_router(대시보드라우터)
 앱.include_router(알림라우터)
+앱.include_router(사이트라우터)
+앱.include_router(리포트라우터)
+앱.include_router(공유라우터)
 
 
 # ── 전역 예외 핸들러 ──────────────────────────────────────

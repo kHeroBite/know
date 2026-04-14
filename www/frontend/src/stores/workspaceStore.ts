@@ -4,7 +4,7 @@ import 클라이언트 from '../api/client'
 import { assignmentApi } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
 
-export type Phase = 'preprocess' | 'work' | 'build' | 'verify' | 'complete'
+export type Phase = 'preprocess' | 'work' | 'build' | 'verify' | 'complete' | 'finished'
 export type MyPhase = 'idle' | 'working' | 'done'
 
 interface WorkspaceState {
@@ -28,6 +28,8 @@ interface WorkspaceState {
   loadWorkspaceStatus: () => Promise<void>
   lastCompleteResult: any | null
   completeWorkspace: (wsName: string, domain: string, skipBackup?: boolean) => Promise<any>
+  prepareComplete: (wsName: string) => Promise<any>
+  finalizeComplete: (wsName: string, opts: { backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) => Promise<any>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -124,6 +126,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
       completeWorkspace: async (wsName: string, domain: string, skipBackup: boolean = false) => {
         const res = await workspaceAPI.completeWorkspace(wsName, domain, skipBackup)
+        set({ lastCompleteResult: res.data })
+        await get().loadWorkspaceStatus()
+        return res.data
+      },
+      prepareComplete: async (wsName: string) => {
+        const res = await workspaceAPI.prepareComplete(wsName)
+        await get().loadWorkspaceStatus()
+        return res.data
+      },
+      finalizeComplete: async (wsName: string, opts) => {
+        const res = await workspaceAPI.finalizeComplete(wsName, opts)
         set({ lastCompleteResult: res.data })
         await get().loadWorkspaceStatus()
         return res.data

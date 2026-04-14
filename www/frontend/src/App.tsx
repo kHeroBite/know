@@ -22,6 +22,8 @@ import LLMSettings from './pages/LLMSettings'
 import DictVerify from './pages/DictVerify'
 import WorkComplete from './pages/WorkComplete'
 import Dashboard from './pages/Dashboard'
+import SiteManage from './pages/SiteManage'
+import PublicShare from './pages/PublicShare'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -41,8 +43,9 @@ export function isMenuEnabled(
     '/knowledge': wsSelected && phase === 'work' && myPhase === 'working',
     '/build-history': wsSelected && phase === 'build',
     '/dict-verify': wsSelected && phase === 'verify',
-    '/work-complete': wsSelected && (phase === 'verify' || phase === 'complete'),
+    '/work-complete': wsSelected && (phase === 'verify' || phase === 'complete' || phase === 'finished'),
     '/domain-manage': true,
+    '/site-manage': true,
     '/statistics': true,
     '/accounts': true,
     '/llm-settings': true,
@@ -71,6 +74,7 @@ function DefaultRoute() {
   if (phase === 'build') return <Navigate to="/build-history" replace />
   if (phase === 'verify') return <Navigate to="/dict-verify" replace />
   if (phase === 'complete') return <Navigate to="/work-complete" replace />
+  if (phase === 'finished') return <Navigate to="/work-complete" replace />
   // 폴백 (phase === 'work' && myPhase === 'done' 등)
   return <Navigate to="/workspace" replace />
 }
@@ -84,6 +88,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* 공개 공유 페이지 — PrivateRoute/Layout 없음 (사이드바 제거) */}
+      <Route path="/public/share/:token" element={<PublicShare />} />
       <Route path="/" element={<PrivateRoute><ErrorBoundary><Layout /></ErrorBoundary></PrivateRoute>}>
         <Route index element={<DefaultRoute />} />
         <Route path="dashboard" element={<Dashboard />} />
@@ -94,6 +100,7 @@ export default function App() {
         <Route path="domains" element={<DomainList />} />
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="domain-manage" element={<DomainManage />} />
+        <Route path="site-manage" element={<SiteManage />} />
         <Route path="category" element={<CategoryManage />} />
         <Route path="statistics" element={<Statistics />} />
         <Route path="pipeline" element={<Pipeline />} />

@@ -193,6 +193,48 @@ def create_tables():
             )
         """))
 
+        # 9. sites (사이트 CRUD — 여러 도메인을 묶어 외부 공유용)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS sites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                domain_code TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_domain ON sites(domain_code)"))
+
+        # 10. workspace_snapshots (완료 대시보드 전/후 카운트)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS workspace_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_name TEXT NOT NULL,
+                domain_code TEXT NOT NULL,
+                snapshot_type TEXT NOT NULL,
+                udic_count INTEGER DEFAULT 0,
+                cndic_count INTEGER DEFAULT 0,
+                thesaurus_count INTEGER DEFAULT 0,
+                category_count INTEGER DEFAULT 0,
+                taken_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ws_snap_name ON workspace_snapshots(workspace_name)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ws_snap_type ON workspace_snapshots(workspace_name, snapshot_type)"))
+
+        # 11. share_tokens (공유 페이지 토큰)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS share_tokens (
+                token TEXT PRIMARY KEY,
+                workspace_name TEXT NOT NULL,
+                backup_folder TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                expires_at TEXT
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_share_ws ON share_tokens(workspace_name)"))
+
         conn.commit()
     print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log, user_last_selected 테이블 생성")
 

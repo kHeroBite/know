@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Input, Tabs, Progress,
-  message, Statistic, Row, Col, Checkbox, Modal,
+  message, Statistic, Row, Col, Checkbox,
 } from 'antd'
 import {
   CheckCircleOutlined, SearchOutlined, ExperimentOutlined,
@@ -19,29 +19,18 @@ export default function DictVerify() {
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const currentDomain = selectedDomain || ''
 
-  const doComplete = async (skipBackup: boolean) => {
+  const handleComplete = async () => {
     if (!selectedWorkspace || !selectedDomain) {
       message.warning('워크스페이스(도메인)이 선택되지 않았습니다')
       return
     }
     try {
-      await useWorkspaceStore.getState().completeWorkspace(selectedWorkspace, selectedDomain, skipBackup)
-      await useWorkspaceStore.getState().loadWorkspaceStatus()
+      await useWorkspaceStore.getState().prepareComplete(selectedWorkspace)
+      message.success('완료 대시보드로 이동합니다. 내용 확인 후 최종 완료 버튼을 눌러주세요.')
       navigate('/work-complete')
     } catch (e: any) {
-      message.error('작업 완료 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+      message.error('완료 준비 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     }
-  }
-
-  const handleComplete = () => {
-    Modal.confirm({
-      title: '백업하시겠습니까?',
-      content: '도메인의 현재 사전/파일 상태를 백업한 후 워크스페이스 변경사항을 적용합니다.',
-      okText: '예 (백업하고 적용)',
-      cancelText: '아니오 (바로 적용)',
-      onOk: async () => { await doComplete(false) },
-      onCancel: async () => { await doComplete(true) },
-    })
   }
 
   // --- 형태소분석 테스트 ---

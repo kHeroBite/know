@@ -24,8 +24,9 @@ from core.constants import (
     OLD_DOMAIN_DIR, DOMAIN_PROGRESS_DIR,
 )
 
-# 워크스페이스 phase 순서 (preprocess → work → build → verify → complete)
-PHASES = ["preprocess", "work", "build", "verify", "complete"]
+# 워크스페이스 phase 순서 (preprocess → work → build → verify → complete → finished)
+# finished: 터미널 상태. 되돌리기 절대 금지(phase_backward에서 하드 블록).
+PHASES = ["preprocess", "work", "build", "verify", "complete", "finished"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
 
 
@@ -246,6 +247,18 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
         if ws_name in 상태:
             상태[ws_name]["status"] = "USED"
             _write_state(상태)
+        # snapshot_before 기록 (완료 대시보드용 — 도메인 연결 직후 기준선)
+        try:
+            from services import snapshot_service
+            from core.database import SessionLocal
+            _sess = SessionLocal()
+            try:
+                snapshot_service.take_snapshot(ws_name, domain, "before", _sess)
+            finally:
+                _sess.close()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("_copy_task snapshot_before 실패 (무시): %s", e)
     except InterruptedError:
         경과 = round(time.time() - 시작시간, 1)
         COPY_PROGRESS[ws_name] = {"percent": 0, "status": "cancelled", "message": "사용자 취소", "elapsed": 경과}
@@ -818,6 +831,12 @@ def phase_backward(ws_name: str, prev_phase: str) -> dict[str, Any]:
             detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
         )
     현재 = 상태[ws_name].get("phase", "preprocess")
+    # 하드 블록: finished는 터미널 상태 — 어떤 이전 상태로도 되돌릴 수 없음
+    if 현재 == "finished":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="finished 상태에서는 되돌리기 불가 (터미널 상태)",
+        )
     현재순서 = PHASE_ORDER.get(현재, 0)
     이전순서 = PHASE_ORDER[prev_phase]
     if 이전순서 != 현재순서 - 1:
@@ -912,6 +931,272 @@ def _auto_migrate_phase(db) -> None:
         변경 = True
     if 변경:
         _write_state(상태)
+
+
+def prepare_complete(ws_name: str, domain: str, db) -> dict:
+    """완료 1단계 — phase만 verify → complete 로 전환하고 snapshot_before 확정.
+
+    - 백업/역방향 복사 절대 금지 (사용자가 대시보드 확인 후 다시 되돌릴 수 있어야 함).
+    - phase=verify 가 아니면 409.
+    - snapshot_before 는 _copy_task 단계에서 이미 기록되었으나, 없으면 fallback 으로 지금 기록.
+    """
+    상태 = _read_state()
+    if ws_name not in 상태:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
+        )
+    현재 = 상태[ws_name].get("phase", "preprocess")
+    if 현재 != "verify":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"prepare_complete 는 verify 상태에서만 호출 가능합니다 (현재: {현재})",
+        )
+
+    # snapshot_before 보장 (없으면 지금 기록)
+    snapshot_before = None
+    try:
+        from services import snapshot_service
+        snapshot_before = snapshot_service.get_snapshot(ws_name, "before", db)
+        if snapshot_before is None:
+            snapshot_before = snapshot_service.take_snapshot(ws_name, domain, "before", db)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("prepare_complete snapshot_before 실패 (무시): %s", e)
+
+    # phase 전이: verify → complete
+    phase_forward(ws_name, "complete")
+
+    from datetime import datetime
+    prepared_at = datetime.now().isoformat(sep=" ", timespec="seconds")
+    상태 = _read_state()
+    상태[ws_name]["prepared_at"] = prepared_at
+    _write_state(상태)
+
+    return {
+        "name": ws_name,
+        "phase": "complete",
+        "snapshot_before": snapshot_before,
+        "prepared_at": prepared_at,
+    }
+
+
+def finalize_complete(
+    ws_name: str,
+    domain: str,
+    db,
+    skip_backup: bool = False,
+    backup_folder: str | None = None,
+    site_id: int | None = None,
+) -> dict:
+    """완료 2단계 — 실제 백업 + 역방향 복사 + snapshot_after + phase complete → finished.
+
+    - phase=complete 가 아니면 409.
+    - 실패 시 phase 는 complete 유지 (사용자가 재시도 가능).
+    """
+    import shutil
+    from datetime import datetime
+    from pathlib import Path
+    from core.constants import DICT_BACKUP_DIR, WORKSPACE_BASE, DOMAIN_DIR
+
+    상태 = _read_state()
+    if ws_name not in 상태:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"워크스페이스를 찾을 수 없습니다: {ws_name}",
+        )
+    현재 = 상태[ws_name].get("phase", "preprocess")
+    if 현재 != "complete":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"finalize_complete 는 complete 상태에서만 호출 가능합니다 (현재: {현재})",
+        )
+
+    domain_path = Path(DOMAIN_DIR) / domain
+    ws_path = Path(WORKSPACE_BASE) / ws_name
+    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    backup_path: Path | None = None
+    dict_counts_backup: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    backup_files: list[str] = []
+
+    # 1. 백업 단계
+    if not skip_backup:
+        base_name = backup_folder.strip() if backup_folder else f"{domain}_{timestamp_str}"
+        backup_path = Path(DICT_BACKUP_DIR) / base_name
+        if backup_path.exists():
+            for i in range(1, 100):
+                backup_path = Path(DICT_BACKUP_DIR) / f"{base_name}_{i:03d}"
+                if not backup_path.exists():
+                    break
+        backup_path.mkdir(parents=True, exist_ok=True)
+
+        for item in ["data", "txt_resrc"]:
+            src = domain_path / item
+            if src.exists():
+                shutil.copytree(str(src), str(backup_path / item), dirs_exist_ok=True)
+                backup_files.append(item)
+        syn_src = domain_path / "synonym.UTF-8"
+        if syn_src.exists():
+            shutil.copy2(str(syn_src), str(backup_path / "synonym.UTF-8"))
+            backup_files.append("synonym.UTF-8")
+
+        backup_db_files: list[str] = []
+        try:
+            from sqlalchemy import text as _sql_text
+            dst_site = domain.upper()
+            type_map = [
+                ("udic", "_UDIC"),
+                ("cndic", "_CNDIC"),
+                ("thesaurus", "_THESAURUS"),
+                ("category", "_CATEGORY"),
+            ]
+            for type_key, suffix in type_map:
+                src_table = f"{dst_site}{suffix}"
+                try:
+                    rows = db.execute(_sql_text(f"SELECT * FROM {src_table}")).mappings().all()
+                    data = [dict(r) for r in rows]
+                    json_filename = f"db{suffix}.json"
+                    json_path = backup_path / json_filename
+                    json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    dict_counts_backup[type_key] = len(data)
+                    backup_db_files.append(json_filename)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("DB 백업 실패 %s: %s", src_table, e)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("DB 백업 전체 실패 (무시): %s", e)
+
+        metadata = {
+            "domain": domain,
+            "ws_name": ws_name,
+            "timestamp": datetime.now().isoformat(),
+            "dict_counts": dict_counts_backup,
+            "backup_files": backup_db_files,
+            "files": backup_files,
+            "site_id": site_id,
+        }
+        try:
+            with open(backup_path / "metadata.json", "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("metadata.json 기록 실패: %s", e)
+
+    # 2. 역방향 파일 복사
+    copied_files: list[str] = []
+    for item in ["data", "txt_resrc"]:
+        src = ws_path / item
+        if src.exists():
+            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+            copied_files.append(item)
+    ws_syn = ws_path / "synonym.UTF-8"
+    if ws_syn.exists():
+        shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
+        copied_files.append("synonym.UTF-8")
+
+    # 3. DB 역방향 복사
+    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    try:
+        from models.dictionary import ws_reverse_copy_dict_data
+        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
+
+    # 4. snapshot_after 기록
+    snapshot_after = None
+    try:
+        from services import snapshot_service
+        snapshot_after = snapshot_service.take_snapshot(ws_name, domain, "after", db)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("snapshot_after 실패 (무시): %s", e)
+
+    # 5. phase → finished
+    phase_forward(ws_name, "finished")
+
+    finished_at = datetime.now().isoformat(sep=" ", timespec="seconds")
+    상태 = _read_state()
+    상태[ws_name]["finished_at"] = finished_at
+    if site_id is not None:
+        상태[ws_name]["site_id"] = site_id
+    if backup_path is not None:
+        상태[ws_name]["last_backup_folder"] = backup_path.name
+    _write_state(상태)
+
+    return {
+        "name": ws_name,
+        "phase": "finished",
+        "backup_path": str(backup_path) if backup_path else None,
+        "backup_folder": backup_path.name if backup_path else None,
+        "copied_files": copied_files,
+        "db_copy_counts": db_copy_counts,
+        "snapshot_after": snapshot_after,
+        "skip_backup": skip_backup,
+        "site_id": site_id,
+        "finished_at": finished_at,
+    }
+
+
+def get_participants_stats(ws_name: str, db) -> list[dict]:
+    """kw_{ws} 테이블에서 assignee 별 R/W count 수집.
+
+    - R count: flag LIKE '%R'  (읽기 전용)
+    - W count: flag NOT LIKE '%R' OR flag IS NULL  (등록/수정)
+    - users 테이블에서 name 조회 (없으면 user_id 를 그대로 사용)
+    """
+    from sqlalchemy import text as _sql_text
+
+    safe_ws = "".join(c if c.isalnum() or c == "_" else "_" for c in ws_name)
+    kw_table = f"kw_{safe_ws}"
+
+    # 테이블 존재 여부 확인
+    exists = db.execute(
+        _sql_text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
+        {"t": kw_table},
+    ).fetchone()
+    if not exists:
+        return []
+
+    try:
+        rows = db.execute(
+            _sql_text(
+                f"SELECT assignee AS user_id, "
+                f"SUM(CASE WHEN flag LIKE '%R' THEN 1 ELSE 0 END) AS r_count, "
+                f"SUM(CASE WHEN (flag NOT LIKE '%R' OR flag IS NULL) THEN 1 ELSE 0 END) AS w_count "
+                f"FROM {kw_table} "
+                f"WHERE assignee IS NOT NULL AND assignee != '' "
+                f"GROUP BY assignee "
+                f"ORDER BY assignee"
+            )
+        ).mappings().all()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("get_participants_stats 쿼리 실패: %s", e)
+        return []
+
+    result: list[dict] = []
+    for row in rows:
+        uid = row["user_id"]
+        name = uid
+        try:
+            u = db.execute(
+                _sql_text("SELECT name FROM users WHERE user_id=:uid"),
+                {"uid": uid},
+            ).fetchone()
+            if u and u[0]:
+                name = u[0]
+        except Exception:
+            pass
+        result.append({
+            "user_id": uid,
+            "name": name,
+            "r_count": int(row["r_count"] or 0),
+            "w_count": int(row["w_count"] or 0),
+        })
+    return result
 
 
 def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False) -> dict:

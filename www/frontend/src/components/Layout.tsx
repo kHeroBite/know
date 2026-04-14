@@ -5,7 +5,7 @@ import {
   LogoutOutlined, ApiOutlined, AppstoreOutlined, FilterOutlined,
   TeamOutlined, EditOutlined, TagsOutlined, RocketOutlined, BulbOutlined,
   SettingOutlined, BarChartOutlined, HistoryOutlined, UserOutlined, QuestionCircleOutlined,
-  CheckCircleOutlined, DashboardOutlined,
+  CheckCircleOutlined, DashboardOutlined, GlobalOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -133,6 +133,7 @@ export default function Layout() {
       children: [
         { key: '/dashboard', label: '대시보드', icon: <DashboardOutlined /> },
         { key: '/domain-manage', label: '도메인 관리', icon: <SettingOutlined /> },
+        { key: '/site-manage', label: '사이트 관리', icon: <GlobalOutlined /> },
         { key: '/statistics', label: '통계', icon: <BarChartOutlined /> },
         { key: '/llm-settings', label: 'AI 설정', icon: <ApiOutlined /> },
         ...(user?.auth === 'A' ? [{ key: '/accounts', label: '계정 관리', icon: <UserOutlined /> }] : []),

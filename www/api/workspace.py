@@ -45,6 +45,9 @@ from services.workspace_service import (
     read_hotkey_settings,
     save_hotkey_settings_service,
     complete_workspace,
+    prepare_complete,
+    finalize_complete,
+    get_participants_stats,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -523,7 +526,11 @@ def complete_workspace_api(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(db_session),
 ) -> Dict[str, Any]:
-    """워크스페이스 완료 처리 — 도메인 백업 + WS→도메인 복사 + phase 'complete' 전이."""
+    """[DEPRECATED] 구 1단계 완료 API.
+
+    신규 프론트엔드는 prepare-complete → finalize-complete 2단계 플로우를 사용할 것.
+    호환성 유지를 위해 유지하되 내부적으로 prepare + finalize 를 순차 호출한다.
+    """
     from services.workspace_service import _read_state
     domain = body.get("domain", "")
     skip_backup = bool(body.get("skip_backup", False))
@@ -534,12 +541,107 @@ def complete_workspace_api(
     if ws상태 is None:
         raise HTTPException(status_code=404, detail="워크스페이스 없음")
     current_phase = ws상태.get("phase", "preprocess")
-    if current_phase == "complete":
-        raise HTTPException(status_code=409, detail="이미 완료된 워크스페이스입니다")
+    if current_phase in ("complete", "finished"):
+        raise HTTPException(status_code=409, detail="이미 완료/종결된 워크스페이스입니다")
     if current_phase != "verify":
         raise HTTPException(
             status_code=409,
             detail=f"완료 처리는 사전 검증(verify) 단계 이후에만 가능합니다 (현재: {current_phase})",
         )
-    result = complete_workspace(name, domain, db, skip_backup=skip_backup)
+    prepare_complete(name, domain, db)
+    result = finalize_complete(name, domain, db, skip_backup=skip_backup)
     return {"status": "ok", **result}
+
+
+class PrepareCompleteRequest(BaseModel):
+    domain: str
+
+
+class FinalizeCompleteRequest(BaseModel):
+    domain: str
+    skip_backup: bool = False
+    backup_folder: Optional[str] = None
+    site_id: Optional[int] = None
+
+
+@라우터.post("/{name}/prepare-complete")
+def prepare_complete_api(
+    name: str,
+    body: PrepareCompleteRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
+) -> Dict[str, Any]:
+    """완료 1단계 — verify → complete 전이 + snapshot_before 확정. 백업/복사 없음."""
+    if not body.domain:
+        raise HTTPException(status_code=400, detail="domain 필수")
+    result = prepare_complete(name, body.domain, db)
+    return {"status": "ok", **result}
+
+
+@라우터.post("/{name}/finalize-complete")
+def finalize_complete_api(
+    name: str,
+    body: FinalizeCompleteRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
+) -> Dict[str, Any]:
+    """완료 2단계 — 백업 + 역방향 복사 + snapshot_after + complete → finished."""
+    if not body.domain:
+        raise HTTPException(status_code=400, detail="domain 필수")
+    result = finalize_complete(
+        name,
+        body.domain,
+        db,
+        skip_backup=body.skip_backup,
+        backup_folder=body.backup_folder,
+        site_id=body.site_id,
+    )
+    return {"status": "ok", **result}
+
+
+@라우터.get("/{name}/completion-dashboard")
+def completion_dashboard_api(
+    name: str,
+    domain: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
+) -> Dict[str, Any]:
+    """완료 페이지 대시보드 데이터 — 사전 카운트 snapshot(before/after) + 시간 정보 + 참여자 R/W 통계."""
+    from services.workspace_service import _read_state
+    from services import snapshot_service
+
+    상태 = _read_state()
+    ws상태 = 상태.get(name)
+    if ws상태 is None:
+        raise HTTPException(status_code=404, detail="워크스페이스 없음")
+
+    before, after = snapshot_service.get_snapshots_pair(name, db)
+    participants = get_participants_stats(name, db)
+
+    connected_at = ws상태.get("connected_at") or ws상태.get("created_at")
+    prepared_at = ws상태.get("prepared_at")
+    finished_at = ws상태.get("finished_at")
+    phase = ws상태.get("phase", "preprocess")
+
+    return {
+        "workspace": name,
+        "domain": domain,
+        "phase": phase,
+        "connected_at": connected_at,
+        "prepared_at": prepared_at,
+        "finished_at": finished_at,
+        "snapshot_before": before,
+        "snapshot_after": after,
+        "participants": participants,
+    }
+
+
+@라우터.get("/{name}/participants")
+def participants_api(
+    name: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(db_session),
+) -> Dict[str, Any]:
+    """kw_{ws} 기반 참여자별 R/W 통계."""
+    participants = get_participants_stats(name, db)
+    return {"workspace": name, "participants": participants}
