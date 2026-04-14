@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
+import { formatWorkspace } from '../utils/displayFormat'
 import { listSites, type Site } from '../api/site'
 import { backupAPI, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
@@ -76,7 +77,7 @@ function defaultBackupFolder(domain: string, siteName: string | null): string {
 
 export default function WorkComplete() {
   const navigate = useNavigate()
-  const { selectedWorkspace, selectedDomain, phase } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedDomainLabel, phase } = useWorkspaceStore()
 
   const [loading, setLoading] = useState(true)
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
@@ -316,7 +317,7 @@ export default function WorkComplete() {
     <div style={{ padding: 24 }}>
       <Title level={3}>
         <CheckCircleOutlined style={{ marginRight: 8 }} />
-        작업 완료 대시보드 — {selectedWorkspace} / {selectedDomain}
+        작업 완료 대시보드 — {formatWorkspace(selectedWorkspace, selectedDomain, selectedDomainLabel)}
       </Title>
 
       {isFinished && (

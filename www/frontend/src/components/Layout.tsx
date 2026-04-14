@@ -13,6 +13,7 @@ import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import { workspaceAPI } from '../api/workspace'
 import { isMenuEnabled } from '../App'
 import { useNotification } from '../hooks/useNotification'
+import { formatWorkspace } from '../utils/displayFormat'
 
 
 const { Sider, Content } = AntLayout
@@ -185,9 +186,7 @@ export default function Layout() {
           </div>
           <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, letterSpacing: '1px' }}>
             {selectedWorkspace
-              ? selectedDomain
-                ? `${selectedWorkspace}:${selectedDomain}${selectedDomainLabel ? `(${selectedDomainLabel})` : ''}`
-                : selectedWorkspace
+              ? formatWorkspace(selectedWorkspace, selectedDomain, selectedDomainLabel) || selectedWorkspace
               : '미선택'}
           </div>
         </div>

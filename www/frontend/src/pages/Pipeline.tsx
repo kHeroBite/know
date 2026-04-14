@@ -10,6 +10,7 @@ import {
 import { usePipelineStore } from '../stores/pipelineStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { 파이프라인API } from '../api/pipeline'
+import { formatDomain } from '../utils/displayFormat'
 
 const { Title, Text } = Typography
 
@@ -39,7 +40,7 @@ export default function Pipeline() {
   const 로그박스Ref = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
-  const { selectedDomain } = useWorkspaceStore()
+  const { selectedDomain, selectedDomainLabel } = useWorkspaceStore()
 
   const {
     currentPipelineId, status, stages, logs,
@@ -152,7 +153,7 @@ export default function Pipeline() {
       <Card title="파이프라인 시작">
         <Form form={form} layout="inline" onFinish={파이프라인시작}>
           <Form.Item label="도메인">
-            <Text strong>{selectedDomain || <Text type="secondary">워크스페이스 미선택</Text>}</Text>
+            <Text strong>{selectedDomain ? formatDomain(selectedDomain, selectedDomainLabel) : <Text type="secondary">워크스페이스 미선택</Text>}</Text>
           </Form.Item>
           <Form.Item name="file_path" rules={[{ required: true, message: '파일 경로 입력' }]} style={{ flex: 1 }}>
             <Input placeholder="/path/to/input.csv" style={{ width: 400 }} />

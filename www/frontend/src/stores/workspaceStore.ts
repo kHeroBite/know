@@ -28,7 +28,7 @@ interface WorkspaceState {
   loadWorkspaceStatus: () => Promise<void>
   lastCompleteResult: any | null
   completeWorkspace: (wsName: string, domain: string, skipBackup?: boolean) => Promise<any>
-  prepareComplete: (wsName: string) => Promise<any>
+  prepareComplete: (wsName: string, domain: string) => Promise<any>
   finalizeComplete: (wsName: string, opts: { backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) => Promise<any>
 }
 
@@ -95,6 +95,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             } catch {
               // 상태 조회 실패 시 기본값 유지
             }
+            // 도메인 label 보정 (전역 도메인 목록에서 한글명 조회)
+            try {
+              const domainsRes = await workspaceAPI.도메인목록()
+              const found = (domainsRes.data || []).find((d: any) => d.id === data.domain)
+              if (found && found.name) {
+                set({ selectedDomainLabel: found.name })
+              }
+            } catch {
+              // 도메인 목록 실패 시 label 없이 유지
+            }
           }
         } catch {
           // 서버 설정 없으면 무시
@@ -130,8 +140,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         await get().loadWorkspaceStatus()
         return res.data
       },
-      prepareComplete: async (wsName: string) => {
-        const res = await workspaceAPI.prepareComplete(wsName)
+      prepareComplete: async (wsName: string, domain: string) => {
+        const res = await workspaceAPI.prepareComplete(wsName, domain)
         await get().loadWorkspaceStatus()
         return res.data
       },

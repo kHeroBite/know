@@ -129,9 +129,9 @@ export const workspaceAPI = {
     클라이언트.post(`/workspaces/${encodeURIComponent(ws)}/complete`, { domain, skip_backup }),
 
   // 2단계 완료 프로세스 (Batch 2)
-  prepareComplete: (ws: string) =>
+  prepareComplete: (ws: string, domain: string) =>
     클라이언트.post<{ phase: string; snapshot_before: Record<string, number>; prepared_at: string }>(
-      `/workspaces/${encodeURIComponent(ws)}/prepare-complete`, {}
+      `/workspaces/${encodeURIComponent(ws)}/prepare-complete`, { domain }
     ),
 
   finalizeComplete: (ws: string, opts: { backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) =>

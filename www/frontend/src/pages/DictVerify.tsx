@@ -25,7 +25,7 @@ export default function DictVerify() {
       return
     }
     try {
-      await useWorkspaceStore.getState().prepareComplete(selectedWorkspace)
+      await useWorkspaceStore.getState().prepareComplete(selectedWorkspace, selectedDomain)
       message.success('완료 대시보드로 이동합니다. 내용 확인 후 최종 완료 버튼을 눌러주세요.')
       navigate('/work-complete')
     } catch (e: any) {
@@ -243,7 +243,7 @@ export default function DictVerify() {
             message.error(err.response?.data?.detail || 'phase 전이 실패')
           }
         }}
-        showNext={!!selectedWorkspace && !!selectedDomain}
+        showNext={!!selectedWorkspace && !!selectedDomain && (!!완료검증 || !!미완료검증)}
         nextLabel="다음단계로 (완료)"
         onNext={handleComplete}
       />
