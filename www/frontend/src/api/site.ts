@@ -2,6 +2,7 @@ import 클라이언트 from './client'
 
 export interface Site {
   id: number
+  site_code: string
   name: string
   domain_code: string
   description?: string | null
@@ -10,6 +11,7 @@ export interface Site {
 }
 
 export interface SiteInput {
+  site_code: string
   name: string
   domain_code: string
   description?: string | null

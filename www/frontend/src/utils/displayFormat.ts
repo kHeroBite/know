@@ -14,6 +14,14 @@ export function formatDomain(
   return label ? `${label}(${id})` : id
 }
 
+export function formatSite(
+  code: string | null | undefined,
+  name?: string | null
+): string {
+  if (!code) return ''
+  return name ? `${name}(${code})` : code
+}
+
 export function formatWorkspace(
   ws: string | null | undefined,
   domainId: string | null | undefined,

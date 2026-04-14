@@ -57,6 +57,7 @@ export default function SiteManage() {
   const 수정모달열기 = (record: Site) => {
     set편집대상(record)
     form.setFieldsValue({
+      site_code: record.site_code,
       name: record.name,
       domain_code: record.domain_code,
       description: record.description ?? '',
@@ -105,6 +106,7 @@ export default function SiteManage() {
 
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
+    { title: '사이트 ID', dataIndex: 'site_code', key: 'site_code', width: 160, ellipsis: true },
     { title: '사이트명', dataIndex: 'name', key: 'name', ellipsis: true },
     {
       title: '도메인',
@@ -182,6 +184,16 @@ export default function SiteManage() {
         destroyOnClose
       >
         <Form form={form} layout="vertical" preserve={false}>
+          <Form.Item
+            name="site_code"
+            label="사이트 ID (영문)"
+            rules={[
+              { required: true, message: '사이트 ID를 입력하세요' },
+              { pattern: /^[A-Za-z0-9_-]+$/, message: '영문, 숫자, _, - 만 허용됩니다' },
+            ]}
+          >
+            <Input placeholder="예: MAIN_SITE" />
+          </Form.Item>
           <Form.Item
             name="name"
             label="사이트명"

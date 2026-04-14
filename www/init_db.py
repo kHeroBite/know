@@ -197,6 +197,7 @@ def create_tables():
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS sites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_code TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL UNIQUE,
                 domain_code TEXT NOT NULL,
                 description TEXT,

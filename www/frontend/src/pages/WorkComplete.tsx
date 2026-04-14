@@ -10,7 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI } from '../api/workspace'
-import { formatWorkspace } from '../utils/displayFormat'
+import { formatWorkspace, formatSite } from '../utils/displayFormat'
 import { listSites, type Site } from '../api/site'
 import { backupAPI, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
@@ -83,7 +83,7 @@ export default function WorkComplete() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [sites, setSites] = useState<Site[]>([])
-  const [siteId, setSiteId] = useState<number | null>(null)
+  const [siteCode, setSiteCode] = useState<string | null>(null)
   const [doBackup, setDoBackup] = useState(true)
   const [backupFolder, setBackupFolder] = useState('')
   const [folderTouched, setFolderTouched] = useState(false)
@@ -147,10 +147,10 @@ export default function WorkComplete() {
 
   useEffect(() => {
     if (!folderTouched && selectedDomain) {
-      const siteName = siteId ? sites.find(s => s.id === siteId)?.name || null : null
-      setBackupFolder(defaultBackupFolder(selectedDomain, siteName))
+      const found = siteCode ? sites.find(s => s.site_code === siteCode) : null
+      setBackupFolder(defaultBackupFolder(selectedDomain, found?.name || null))
     }
-  }, [siteId, sites, selectedDomain, folderTouched])
+  }, [siteCode, sites, selectedDomain, folderTouched])
 
   const isFinished = phase === 'finished'
   const isComplete = phase === 'complete'
@@ -165,7 +165,7 @@ export default function WorkComplete() {
           {doBackup
             ? <p>백업 폴더: <code>{backupFolder}</code></p>
             : <p>⚠️ 백업 없이 바로 적용됩니다.</p>}
-          {siteId && <p>사이트: {sites.find(s => s.id === siteId)?.name}</p>}
+          {siteCode && <p>사이트: {formatSite(siteCode, sites.find(s => s.site_code === siteCode)?.name)}</p>}
         </div>
       ),
       okText: '완료 처리',
@@ -177,7 +177,7 @@ export default function WorkComplete() {
           await useWorkspaceStore.getState().finalizeComplete(selectedWorkspace, {
             backup_folder: doBackup ? backupFolder : undefined,
             skip_backup: !doBackup,
-            site_id: siteId,
+            site_id: siteCode ? sites.find(s => s.site_code === siteCode)?.id ?? null : null,
           })
           message.success('워크스페이스가 완료 처리되었습니다.')
           await loadAll()
@@ -436,9 +436,9 @@ export default function WorkComplete() {
                   style={{ width: '100%' }}
                   placeholder="사이트를 선택하세요"
                   allowClear
-                  value={siteId ?? undefined}
-                  onChange={v => setSiteId(v ?? null)}
-                  options={sites.map(s => ({ value: s.id, label: `${s.name} (${s.domain_code})` }))}
+                  value={siteCode ?? undefined}
+                  onChange={v => setSiteCode(v ?? null)}
+                  options={sites.map(s => ({ value: s.site_code, label: formatSite(s.site_code, s.name) }))}
                 />
               </Col>
             </Row>

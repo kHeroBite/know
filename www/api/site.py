@@ -18,6 +18,7 @@ from services.site_service import (
 
 class 사이트응답(BaseModel):
     id: int
+    site_code: str
     name: str
     domain_code: str
     description: Optional[str] = None
@@ -26,12 +27,14 @@ class 사이트응답(BaseModel):
 
 
 class create_site(BaseModel):
+    site_code: str
     name: str
     domain_code: str
     description: Optional[str] = None
 
 
 class update_site(BaseModel):
+    site_code: Optional[str] = None
     name: Optional[str] = None
     domain_code: Optional[str] = None
     description: Optional[str] = None
@@ -70,6 +73,7 @@ def add_site(
     """사이트 등록 (admin 권한 필요)."""
     _require_admin(current)
     결과 = svc_create_site(
+        site_code=요청.site_code,
         name=요청.name,
         domain_code=요청.domain_code,
         description=요청.description,
@@ -89,6 +93,7 @@ def modify_site(
     _require_admin(current)
     결과 = svc_update_site(
         site_id=site_id,
+        site_code=요청.site_code,
         name=요청.name,
         domain_code=요청.domain_code,
         description=요청.description,
