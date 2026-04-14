@@ -52,12 +52,16 @@ export default function Assignment() {
 
   const 통계조회 = useCallback(async () => {
     if (!selectedWorkspace || !selectedDomain) return
+    console.log('[REPROCESS_DEBUG] 통계조회 시작: isReprocessMode=', isReprocessMode, 'workspace=', selectedWorkspace, 'domain=', selectedDomain)
     try {
       const { data } = await assignmentApi.통계(selectedWorkspace, selectedDomain)
       const reprocessMode = data.reprocess_count > 0
+      console.log('[REPROCESS_DEBUG] 1차 통계 수신:', data, '→ reprocessMode=', reprocessMode)
       setIsReprocessMode(reprocessMode)
+      console.log('[REPROCESS_DEBUG] setIsReprocessMode 호출 →', reprocessMode)
       if (reprocessMode) {
         const { data: rData } = await assignmentApi.통계(selectedWorkspace, selectedDomain, 'reprocess')
+        console.log('[REPROCESS_DEBUG] 2차 통계(reprocess) 수신:', rData)
         setStats(rData)
       } else {
         setStats(data)
@@ -69,9 +73,11 @@ export default function Assignment() {
 
   const 목록조회 = useCallback(async (p = page) => {
     if (!selectedWorkspace || !selectedDomain) return
+    console.log('[REPROCESS_DEBUG] 목록조회 시작: isReprocessMode=', isReprocessMode, 'page=', p, 'filter=', filter)
     setLoading(true)
     try {
       const { data } = await assignmentApi.목록(selectedWorkspace, selectedDomain, filter, p, PAGE_SIZE, undefined, isReprocessMode ? 'reprocess' : undefined)
+      console.log('[REPROCESS_DEBUG] 목록조회 결과: total=', data.total, 'items=', data.items?.length)
       setItems(data.items || [])
       setTotal(data.total || 0)
     } catch {
@@ -83,12 +89,14 @@ export default function Assignment() {
   }, [selectedWorkspace, selectedDomain, filter, page, isReprocessMode])
 
   useEffect(() => {
+    console.log('[REPROCESS_DEBUG] useEffect[location.key] 발동: isReprocessMode=', isReprocessMode, 'location.key=', location.key)
     통계조회()
     setPage(1)
     setSelectedItem(null)
   }, [selectedWorkspace, selectedDomain, location.key])
 
   useEffect(() => {
+    console.log('[REPROCESS_DEBUG] useEffect[목록조회 의존성] 발동: isReprocessMode=', isReprocessMode, 'filter=', filter, 'page=', page)
     목록조회(page)
   }, [selectedWorkspace, selectedDomain, filter, page, location.key, isReprocessMode])
 

@@ -265,6 +265,7 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
               page: int = 1, size: int = 50, assigned_to: Optional[str] = None,
               mode: str = '') -> dict:
     """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to)."""
+    logger.info(f"[REPROCESS_DEBUG] list_keywords 진입: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}")
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
 
@@ -303,11 +304,13 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
               "status": r[4], "assigned_to": r[5], "assigned_at": r[6], "completed_at": r[7],
               "flag": r[8] or "", "full_analysis": r[9] or ""} for r in rows]
 
+    logger.info(f"[REPROCESS_DEBUG] list_keywords 반환: where='{where}', total={total}, items={len(items)}, page={page}")
     return {"items": items, "total": total, "page": page, "size": size, "worked_count": worked_count}
 
 
 def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
     """상태별 건수."""
+    logger.info(f"[REPROCESS_DEBUG] get_stats 진입: workspace={workspace}, domain={domain}, mode='{mode}'")
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
 
@@ -327,6 +330,7 @@ def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
         SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag='reprocess'
     """), {"dom": domain}).scalar() or 0
     result["reprocess_count"] = reprocess_count
+    logger.info(f"[REPROCESS_DEBUG] get_stats 반환: mode='{mode}', flag_cond='{flag_cond}', total={result['total']}, pending={result['pending']}, assigned={result['assigned']}, completed={result['completed']}, reprocess_count={result['reprocess_count']}")
     return result
 
 

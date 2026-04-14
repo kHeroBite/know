@@ -1,5 +1,6 @@
 import os
 import shutil
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from services.work_history_service import delete_all_history_service
 from services.workspace_service import phase_forward, get_phase, set_user_phase, get_user_phase
 from services import dictionary_service
 
+logger = logging.getLogger(__name__)
 라우터 = APIRouter()
 
 @라우터.get("/status")
@@ -40,6 +42,7 @@ def list_tasks(workspace: str = Query(...), domain: str = Query(...),
          assigned_to: Optional[str] = Query(None),
          mode: str = Query(default=''),
          db: Session = Depends(db_session), _: dict = Depends(get_current_user)):
+    logger.info(f"[REPROCESS_DEBUG] API GET /list: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}")
     return assignment_service.list_keywords(db, workspace, domain, filter, page, size, assigned_to=assigned_to, mode=mode)
 
 @라우터.get("/last-read")
@@ -66,6 +69,7 @@ def get_keyword_page_api(
 def get_stats(workspace: str = Query(...), domain: str = Query(...),
          mode: str = Query(default=''),
          db: Session = Depends(db_session), _: dict = Depends(get_current_user)):
+    logger.info(f"[REPROCESS_DEBUG] API GET /stats: workspace={workspace}, domain={domain}, mode='{mode}'")
     return assignment_service.get_stats(db, workspace, domain, mode=mode)
 
 @라우터.post("/assign")
