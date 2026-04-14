@@ -80,11 +80,11 @@ export default function DictVerify() {
 
   // --- 재처리 체크박스 상태 (2그룹) ---
   // 그룹1: 작업 상태
-  const [selCompleted, setSelCompleted] = useState(false)
+  const [selCompleted, setSelCompleted] = useState(true)   // 작업완료 기본 체크
   const [selPending, setSelPending] = useState(false)
   // 그룹2: 분류 타입
-  const [selMissing, setSelMissing] = useState(false)
-  const [selUkall, setSelUkall] = useState(false)
+  const [selMissing, setSelMissing] = useState(true)       // 누락 기본 체크
+  const [selUkall, setSelUkall] = useState(true)           // 미등록 기본 체크
   const [reprocessLoading, setReprocessLoading] = useState(false)
 
   const 전체검증 = useCallback(async () => {
@@ -98,8 +98,8 @@ export default function DictVerify() {
       set진행률(100)
       set완료검증(res.data.completed)
       set미완료검증(res.data.pending)
-      setSelCompleted(false); setSelPending(false)
-      setSelMissing(false); setSelUkall(false)
+      setSelCompleted(true); setSelPending(false)
+      setSelMissing(true); setSelUkall(true)
       const cm = res.data.completed.missing.length
       const cu = res.data.completed.ukall.length
       const pm = res.data.pending.missing.length
@@ -158,8 +158,8 @@ export default function DictVerify() {
       await 사전검증API.재처리(selectedWorkspace, currentDomain, keywords)
       await useWorkspaceStore.getState().loadWorkspaceStatus()
       set완료검증(null); set미완료검증(null)
-      setSelCompleted(false); setSelPending(false)
-      setSelMissing(false); setSelUkall(false)
+      setSelCompleted(true); setSelPending(false)
+      setSelMissing(true); setSelUkall(true)
       message.success(`${keywords.length}개 키워드 재처리 완료. 할당 페이지로 이동합니다.`)
       navigate('/assignment')
     } catch (e: any) {

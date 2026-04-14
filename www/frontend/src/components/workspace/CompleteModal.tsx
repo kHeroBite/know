@@ -29,6 +29,13 @@ export default function CompleteModal({
           block
           type="primary"
           loading={loading}
+          onClick={() => onComplete('by_history')}
+        >
+          작업이력 기준 처리
+        </Button>
+        <Button
+          block
+          loading={loading}
           onClick={() => onComplete('all_complete')}
         >
           전체 완료 처리
@@ -39,13 +46,6 @@ export default function CompleteModal({
           onClick={() => onComplete('all_incomplete')}
         >
           전체 미완료 처리
-        </Button>
-        <Button
-          block
-          loading={loading}
-          onClick={() => onComplete('by_history')}
-        >
-          작업이력 기준 처리
         </Button>
         <Button block onClick={onCancel}>
           취소

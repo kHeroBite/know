@@ -149,13 +149,8 @@ export default function BuildHistory() {
       // 상태 복원 (항상)
       if (d.id) set최근빌드ID(d.id)
       if (d.status) set최근빌드상태(d.status)
-      // running 중이면 로그 복원 + 폴링 자동 복원
-      // completed/idle 상태에서는 로그 표시 안 함 (복귀 시 로그 잔류 방지)
+      // running 중이면 폴링만 복원 (로그는 복원 안 함 — 진입 시 항상 빈 로그로 시작)
       if (d.status === 'running') {
-        if (d.log_text) {
-          const lines = d.log_text.split('\n').filter((l: string) => l.trim())
-          set빌드로그(lines)
-        }
         set빌드중(true)
         if (!pollRef.current) {
           pollRef.current = setInterval(() => 빌드로그조회Ref.current?.(), 2000)
