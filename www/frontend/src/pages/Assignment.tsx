@@ -38,6 +38,7 @@ export default function Assignment() {
   const location = useLocation()
   const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
   const [stats, setStats] = useState<AssignmentStats>({ total: 0, pending: 0, assigned: 0, completed: 0, reprocess_count: 0 })
+  const [isReprocessMode, setIsReprocessMode] = useState(false)
   const [filter, setFilter] = useState<string>('pending')
   const [items, setItems] = useState<KeywordItem[]>([])
   const [total, setTotal] = useState(0)
@@ -53,7 +54,14 @@ export default function Assignment() {
     if (!selectedWorkspace || !selectedDomain) return
     try {
       const { data } = await assignmentApi.통계(selectedWorkspace, selectedDomain)
-      setStats(data)
+      const reprocessMode = data.reprocess_count > 0
+      setIsReprocessMode(reprocessMode)
+      if (reprocessMode) {
+        const { data: rData } = await assignmentApi.통계(selectedWorkspace, selectedDomain, 'reprocess')
+        setStats(rData)
+      } else {
+        setStats(data)
+      }
     } catch {
       // 통계 조회 실패 무시
     }
@@ -63,7 +71,7 @@ export default function Assignment() {
     if (!selectedWorkspace || !selectedDomain) return
     setLoading(true)
     try {
-      const { data } = await assignmentApi.목록(selectedWorkspace, selectedDomain, filter, p, PAGE_SIZE)
+      const { data } = await assignmentApi.목록(selectedWorkspace, selectedDomain, filter, p, PAGE_SIZE, undefined, isReprocessMode ? 'reprocess' : undefined)
       setItems(data.items || [])
       setTotal(data.total || 0)
     } catch {
@@ -72,7 +80,7 @@ export default function Assignment() {
     } finally {
       setLoading(false)
     }
-  }, [selectedWorkspace, selectedDomain, filter, page])
+  }, [selectedWorkspace, selectedDomain, filter, page, isReprocessMode])
 
   useEffect(() => {
     통계조회()
@@ -82,7 +90,7 @@ export default function Assignment() {
 
   useEffect(() => {
     목록조회(page)
-  }, [selectedWorkspace, selectedDomain, filter, page, location.key])
+  }, [selectedWorkspace, selectedDomain, filter, page, location.key, isReprocessMode])
 
   const 할당실행 = async (mode?: string) => {
     if (!selectedWorkspace || !selectedDomain) return
@@ -199,7 +207,7 @@ export default function Assignment() {
         }}
       />
       {/* 상단: 통계 바 */}
-      <Card size="small">
+      <Card size="small" title={isReprocessMode ? <Tag color="orange">재처리 모드</Tag> : undefined}>
         <Row gutter={16} align="middle">
           <Col>
             <Statistic title="전체" value={stats.total} />

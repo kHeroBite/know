@@ -262,7 +262,8 @@ def freeze_service(db: Session, workspace: str, domain: str) -> dict:
 
 
 def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pending",
-              page: int = 1, size: int = 50, assigned_to: Optional[str] = None) -> dict:
+              page: int = 1, size: int = 50, assigned_to: Optional[str] = None,
+              mode: str = '') -> dict:
     """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to)."""
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
@@ -277,6 +278,9 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     elif filter == "completed":
         where += " AND status='completed'"
     # filter == "all" → 조건 없음
+
+    if mode == 'reprocess':
+        where += " AND flag='reprocess'"
 
     if assigned_to:
         where += " AND assigned_to=:uid"
@@ -302,12 +306,18 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     return {"items": items, "total": total, "page": page, "size": size, "worked_count": worked_count}
 
 
-def get_stats(db: Session, workspace: str, domain: str) -> dict:
+def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
     """상태별 건수."""
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
+
+    if mode == 'reprocess':
+        flag_cond = " AND flag='reprocess'"
+    else:
+        flag_cond = ""
+
     rows = db.execute(text(f"""
-        SELECT status, COUNT(*) FROM {tbl} WHERE domain=:dom GROUP BY status
+        SELECT status, COUNT(*) FROM {tbl} WHERE domain=:dom{flag_cond} GROUP BY status
     """), {"dom": domain}).fetchall()
     result = {"total": 0, "pending": 0, "assigned": 0, "completed": 0}
     for status_val, cnt in rows:

@@ -24,10 +24,10 @@ export interface AssignmentStats {
 export const assignmentApi = {
   프리징: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/freeze', null, { params: { workspace, domain } }),
-  목록: (workspace: string, domain: string, filter: string, page: number, size: number, assigned_to?: string) =>
-    클라이언트.get('/assignments/list', { params: { workspace, domain, filter, page, size, ...(assigned_to ? { assigned_to } : {}) } }),
-  통계: (workspace: string, domain: string) =>
-    클라이언트.get<AssignmentStats>('/assignments/stats', { params: { workspace, domain } }),
+  목록: (workspace: string, domain: string, filter: string, page: number, size: number, assigned_to?: string, mode?: string) =>
+    클라이언트.get('/assignments/list', { params: { workspace, domain, filter, page, size, ...(assigned_to ? { assigned_to } : {}), ...(mode ? { mode } : {}) } }),
+  통계: (workspace: string, domain: string, mode?: string) =>
+    클라이언트.get<AssignmentStats>('/assignments/stats', { params: { workspace, domain, ...(mode ? { mode } : {}) } }),
   할당: (workspace: string, domain: string, from_line: number, to_line: number, mode?: string) =>
     클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line, ...(mode ? { mode } : {}) } }),
   완료: (workspace: string, domain: string) =>
