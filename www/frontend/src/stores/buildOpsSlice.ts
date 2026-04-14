@@ -51,6 +51,9 @@ export function createBuildOpsSlice(
         return
       }
 
+      // 일회성 플래그 — 어떤 경로로 onDone이 호출되든 단 1회만 실행
+      let doneFired = false
+
       get()._startPolling(
         taskId,
         async () => {
@@ -68,6 +71,8 @@ export function createBuildOpsSlice(
         },
         5000,      // 5초 간격
         () => {
+          if (doneFired) return
+          doneFired = true
           callbacks?.onDone?.()
         },
         (msg) => {

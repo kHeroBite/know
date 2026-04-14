@@ -75,8 +75,9 @@ export default function KnowledgeWork() {
   const [analysisRightTab, setAnalysisRightTab] = useState<'morpheme' | 'ai'>('morpheme')
   const [fullTokenIdx, setFullTokenIdx] = useState(-1)
 
-  // 사전 빌드 — globalTaskStore
-  const { executeBuild, isBlocked } = useGlobalTaskStore()
+  // 사전 빌드 — globalTaskStore (selector로 분리: store 전체 구독 방지)
+  const isBlocked = useGlobalTaskStore(s => s.isBlocked)
+  const executeBuild = useGlobalTaskStore(s => s.executeBuild)
 
   // 핫키
   const [hotkeys, setHotkeys] = useState<Record<string, string>>(기본핫키맵)
@@ -505,7 +506,7 @@ export default function KnowledgeWork() {
     if (!selectedDomain || isBlocked) return
     executeBuild(selectedDomain, selectedWorkspace, {
       onDone: () => {
-        message.success('사전 빌드 완료 — 분석결과를 갱신합니다.')
+        message.success({ content: '사전 빌드 완료 — 분석결과를 갱신합니다.', key: 'build-done' })
         키워드새로고침()
       },
       onError: (msg) => {

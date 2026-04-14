@@ -38,7 +38,7 @@ interface GlobalTaskBase {
   // 저수준 메서드 (_prefix: 슬라이스에서만 직접 호출)
   _startTask: (task: Omit<GlobalTask, 'updatedAt'>) => boolean
   _updateProgress: (id: string, percent: number) => void
-  _finishTask: (id: string, status: 'done' | 'error' | 'cancelled' | 'timeout') => void
+  _finishTask: (id: string, status: 'done' | 'error' | 'cancelled' | 'timeout') => boolean
   _clearTask: (id: string) => void
   _startPolling: (
     id: string,
@@ -106,9 +106,9 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
 
   _startTask: (task) => {
     const current = get().currentTask
-    // 전이 가드: running 중이면 중복 시작 거부
-    if (current && current.status === 'running') {
-      console.warn(`[globalTaskStore] 전이 거부: running → running (taskId: ${task.id}, current: ${current.id})`)
+    // 전이 가드: 진행 중(running) 또는 완료 직후 2초 지연(done) 상태면 중복 시작 거부
+    if (current && (current.status === 'running' || current.status === 'done')) {
+      console.warn(`[globalTaskStore] 전이 거부: ${current.status} → running (taskId: ${task.id}, current: ${current.id})`)
       return false
     }
     const newTask: GlobalTask = { ...task, updatedAt: Date.now() }
@@ -128,10 +128,10 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
 
   _finishTask: (id, status) => {
     const cur = get().currentTask
-    if (!cur || cur.id !== id) return
+    if (!cur || cur.id !== id) return false
     if (cur.status !== 'running') {
       console.warn(`[globalTaskStore] 전이 거부: ${cur.status} → ${status} (taskId: ${id})`)
-      return
+      return false
     }
     get()._stopPolling(id)
     get()._completedIds.add(id)
@@ -147,6 +147,7 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
         get()._completedIds.delete(id)
       }, 300000)
     }, 2000)
+    return true
   },
 
   _clearTask: (id) => {
@@ -181,8 +182,8 @@ export const useGlobalTaskStore = create<GlobalTaskStore>((set, get) => ({
         }
         get()._updateProgress(id, result.percent)
         if (result.done) {
-          get()._finishTask(id, 'done')
-          onDone?.()
+          const ok = get()._finishTask(id, 'done')
+          if (ok) onDone?.()
         }
       } catch {
         // 네트워크 에러 — 즉시 중단하지 않고 다음 폴링에서 재시도
