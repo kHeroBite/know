@@ -278,6 +278,11 @@ def reprocess_keywords(db, workspace: str, domain: str, keywords: List[str]) -> 
     placeholders = ",".join([f":kw{i}" for i in range(len(keywords))])
     params = {f"kw{i}": kw for i, kw in enumerate(keywords)}
     params["dom"] = domain
+    # 기존 재처리 flag 전체 초기화 (새 재처리 세션 시작 시 누적 방지)
+    db.execute(text(
+        f"UPDATE {tbl} SET flag='' WHERE domain=:dom AND flag='reprocess'"
+    ), {"dom": domain})
+    # 새 재처리 대상 태깅
     db.execute(text(
         f"UPDATE {tbl} SET status='pending', assigned_to=NULL, "
         f"assigned_at=NULL, completed_at=NULL, flag='reprocess' "

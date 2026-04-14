@@ -324,7 +324,7 @@ def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
         result[status_val] = cnt
         result["total"] += cnt
     reprocess_count = db.execute(text(f"""
-        SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag='reprocess' AND status='pending'
+        SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag='reprocess' AND status != 'completed'
     """), {"dom": domain}).scalar() or 0
     result["reprocess_count"] = reprocess_count
     return result
