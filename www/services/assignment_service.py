@@ -283,7 +283,7 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
 
     # reprocess 모드 추가 조건 (AND 조합)
     if mode == 'reprocess':
-        where += " AND flag='reprocess'"
+        where += " AND flag LIKE 'reprocess%'"
 
     if assigned_to:
         where += " AND assigned_to=:uid"
@@ -317,7 +317,7 @@ def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
     ensure_kw_table(db, workspace)
 
     if mode == 'reprocess':
-        flag_cond = " AND flag='reprocess'"
+        flag_cond = " AND flag LIKE 'reprocess%'"
     else:
         flag_cond = ""
 
@@ -329,17 +329,18 @@ def get_stats(db: Session, workspace: str, domain: str, mode: str = '') -> dict:
         result[status_val] = cnt
         result["total"] += cnt
     reprocess_count = db.execute(text(f"""
-        SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag='reprocess'
+        SELECT COUNT(*) FROM {tbl} WHERE domain=:dom AND flag LIKE 'reprocess%'
     """), {"dom": domain}).scalar() or 0
     result["reprocess_count"] = reprocess_count
     logger.info(f"[REPROCESS_DEBUG] get_stats 반환: mode='{mode}', flag_cond='{flag_cond}', total={result['total']}, pending={result['pending']}, assigned={result['assigned']}, completed={result['completed']}, reprocess_count={result['reprocess_count']}")
     return result
 
 
-def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str, mode: str = '') -> dict:
-    """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 pending 키워드를 assign.
+def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_pos: int, user_id: str, mode: str = '', filter: str = 'pending') -> dict:
+    """미complete list_tasks 내 순번(from_pos~to_pos) 기준으로 키워드를 assign.
 
-    mode='reprocess'이면 flag='reprocess' AND status='pending' 인 키워드만 대상.
+    mode='reprocess'이면 flag LIKE 'reprocess%' 인 키워드만 대상.
+    filter='pending'|'completed'|'all' 로 status 필터링.
     mode=''이면 기존 동작(status='pending' 전체).
     """
     tbl = _kw_table(workspace)
@@ -347,24 +348,35 @@ def get_assignment(db: Session, workspace: str, domain: str, from_pos: int, to_p
     now = datetime.now().isoformat()
     offset = max(0, from_pos - 1)
     limit = to_pos - from_pos + 1
-    # 해당 탭(전체/미완료/완료) 순번 기준으로 대상 ID 조회 — status 무관
+    # 해당 탭(전체/미완료/완료) 순번 기준으로 대상 ID 조회
     if mode == 'reprocess':
-        where_clause = "domain=:dom AND flag='reprocess'"
+        where_clause = "domain=:dom AND flag LIKE 'reprocess%'"
     else:
         where_clause = "domain=:dom"
+
+    # filter 조건 적용
+    if filter == 'pending':
+        where_clause += " AND status='pending'"
+    elif filter == 'completed':
+        where_clause += " AND status='completed'"
+    # filter == 'all' → status 조건 없음
+
     ids = db.execute(text(f"""
         SELECT id FROM {tbl}
         WHERE {where_clause}
         ORDER BY line_num ASC LIMIT :lim OFFSET :off
     """), {"dom": domain, "lim": limit, "off": offset}).fetchall()
     if not ids:
-        raise HTTPException(400, detail="assign 가능한 미complete 키워드가 없습니다")
+        raise HTTPException(400, detail="assign 가능한 키워드가 없습니다")
     id_list = [r[0] for r in ids]
     placeholders = ",".join(f":id{i}" for i in range(len(id_list)))
     params = {"uid": user_id, "now": now}
     params.update({f"id{i}": v for i, v in enumerate(id_list)})
+    # 할당 시 reprocess 마커 보존, 작업상태(_R/_W) 초기화
     db.execute(text(f"""
-        UPDATE {tbl} SET status='assigned', assigned_to=:uid, assigned_at=:now
+        UPDATE {tbl} SET status='assigned', assigned_to=:uid, assigned_at=:now,
+            completed_at=NULL,
+            flag=CASE WHEN flag LIKE 'reprocess%' THEN 'reprocess' ELSE '' END
         WHERE id IN ({placeholders})
     """), params)
     db.commit()
@@ -387,14 +399,29 @@ def update_flag_service(db: Session, keyword_id: int, flag: str, user_id: str) -
 
 
 def update_flag_service_ws(db: Session, workspace: str, keyword_id: int, flag: str, user_id: str) -> dict:
-    """키워드 flag 업데이트 (workspace 명시 버전)."""
+    """키워드 flag 업데이트 (workspace 명시 버전). reprocess 마커 보존."""
     tbl = _kw_table(workspace)
+    # 기존 flag 조회하여 reprocess 마커 보존
+    current = db.execute(
+        text(f"SELECT flag FROM {tbl} WHERE id=:id"),
+        {"id": keyword_id}
+    ).scalar() or ''
+    if current.startswith('reprocess'):
+        # reprocess 마커 보존 + 작업상태 접미사 결합
+        if flag in ('R', 'W'):
+            final_flag = f'reprocess_{flag}'
+        elif flag == '':
+            final_flag = 'reprocess'
+        else:
+            final_flag = current
+    else:
+        final_flag = flag
     db.execute(
         text(f"UPDATE {tbl} SET flag=:flag WHERE id=:id AND assigned_to=:uid"),
-        {"flag": flag, "id": keyword_id, "uid": user_id},
+        {"flag": final_flag, "id": keyword_id, "uid": user_id},
     )
     db.commit()
-    return {"id": keyword_id, "flag": flag}
+    return {"id": keyword_id, "flag": final_flag}
 
 
 def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to: str, size: int = 100) -> dict:
@@ -403,10 +430,10 @@ def get_last_read_position(db: Session, workspace: str, domain: str, assigned_to
     ensure_kw_table(db, workspace)
     params = {"dom": domain, "uid": assigned_to}
 
-    # 마지막 R/W 키워드 조회 (line_num DESC)
+    # 마지막 R/W 키워드 조회 (line_num DESC) — reprocess 변형 포함
     row = db.execute(text(f"""
         SELECT id, line_num FROM {tbl}
-        WHERE domain=:dom AND assigned_to=:uid AND flag IN ('R','W')
+        WHERE domain=:dom AND assigned_to=:uid AND flag IN ('R','W','reprocess_R','reprocess_W')
         ORDER BY line_num DESC LIMIT 1
     """), params).fetchone()
 
@@ -468,7 +495,7 @@ def process_all_complete(db: Session, workspace: str, domain: str, user_id: str)
     now = datetime.now().isoformat()
     result = db.execute(text(f"""
         UPDATE {tbl} SET status='completed',
-            flag=CASE WHEN flag='reprocess' THEN 'reprocess' ELSE 'W' END,
+            flag=CASE WHEN flag LIKE 'reprocess%' THEN 'reprocess_W' ELSE 'W' END,
             completed_at=:now, assigned_to=NULL
         WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
     """), {"now": now, "dom": domain, "uid": user_id})
@@ -482,7 +509,7 @@ def process_all_incomplete(db: Session, workspace: str, domain: str, user_id: st
     ensure_kw_table(db, workspace)
     result = db.execute(text(f"""
         UPDATE {tbl} SET status='pending',
-            flag=CASE WHEN flag='reprocess' THEN 'reprocess' ELSE '' END,
+            flag=CASE WHEN flag LIKE 'reprocess%' THEN 'reprocess' ELSE '' END,
             assigned_to=NULL, assigned_at=NULL, completed_at=NULL
         WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
     """), {"dom": domain, "uid": user_id})
@@ -495,10 +522,12 @@ def complete_by_history(db: Session, workspace: str, domain: str, user_id: str) 
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
     now = datetime.now().isoformat()
-    # 작업complete(W) / 검토complete(R) 키워드 → completed
+    # 작업complete(W/reprocess_W) / 검토complete(R/reprocess_R) 키워드 → completed
     db.execute(text(f"""
-        UPDATE {tbl} SET status='completed', completed_at=:now, assigned_to=NULL
-        WHERE domain=:dom AND assigned_to=:uid AND status='assigned' AND flag IN ('W','R')
+        UPDATE {tbl} SET status='completed', completed_at=:now, assigned_to=NULL,
+            flag=CASE WHEN flag LIKE 'reprocess%' THEN 'reprocess_W' ELSE 'W' END
+        WHERE domain=:dom AND assigned_to=:uid AND status='assigned'
+            AND (flag IN ('W','R') OR flag LIKE 'reprocess_%')
     """), {"now": now, "dom": domain, "uid": user_id})
     # 미작업 키워드 → pending 복귀
     result = db.execute(text(f"""

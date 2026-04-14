@@ -76,8 +76,9 @@ def get_stats(workspace: str = Query(...), domain: str = Query(...),
 def assign(workspace: str = Query(...), domain: str = Query(...),
          from_line: int = Query(...), to_line: int = Query(...),
          mode: str = Query(default=''),
+         filter: str = Query(default='pending'),
          db: Session = Depends(db_session), current: dict = Depends(get_current_user)):
-    result = assignment_service.get_assignment(db, workspace, domain, from_line, to_line, current["user_id"], mode=mode)
+    result = assignment_service.get_assignment(db, workspace, domain, from_line, to_line, current["user_id"], mode=mode, filter=filter)
     # 사이드이펙트: assign 성공 시 myPhase → working
     set_user_phase(db, workspace, domain, current["user_id"], "working")
     return result

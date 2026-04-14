@@ -107,7 +107,7 @@ export default function Assignment() {
       return
     }
     try {
-      const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine, mode)
+      const { data } = await assignmentApi.할당(selectedWorkspace, selectedDomain, fromLine, toLine, mode, filter)
       message.success(data.message || (mode === 'reprocess' ? '재처리 할당 완료' : `${fromLine}~${toLine} 할당 완료`))
       await useWorkspaceStore.getState().loadWorkspaceStatus()
       navigate('/knowledge-work')

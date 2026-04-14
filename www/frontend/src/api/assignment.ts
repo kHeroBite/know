@@ -32,8 +32,8 @@ export const assignmentApi = {
     console.log('[REPROCESS_DEBUG] 통계 API 호출:', { workspace, domain, mode })
     return 클라이언트.get<AssignmentStats>('/assignments/stats', { params: { workspace, domain, ...(mode ? { mode } : {}) } })
   },
-  할당: (workspace: string, domain: string, from_line: number, to_line: number, mode?: string) =>
-    클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line, ...(mode ? { mode } : {}) } }),
+  할당: (workspace: string, domain: string, from_line: number, to_line: number, mode?: string, filter?: string) =>
+    클라이언트.post('/assignments/assign', null, { params: { workspace, domain, from_line, to_line, ...(mode ? { mode } : {}), ...(filter ? { filter } : {}) } }),
   완료: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/complete', null, { params: { workspace, domain } }),
   초기화: (workspace: string, domain: string) =>

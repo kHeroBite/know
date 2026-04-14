@@ -32,6 +32,16 @@ import {
 const { Text } = Typography
 const PAGE_SIZE = 100
 
+// reprocess prefix를 제거한 실제 flag 값 반환 ('reprocess_R' → 'R', 'reprocess_W' → 'W', 'reprocess' → '', 'R' → 'R')
+const getWorkFlag = (flag?: string): string => {
+  if (!flag) return ''
+  if (flag.startsWith('reprocess')) {
+    const suffix = flag.slice('reprocess'.length).replace(/^_/, '')
+    return suffix
+  }
+  return flag
+}
+
 // ─── 메인 페이지 ─────────────────────────────────────────────────
 
 const 기본추천프롬프트 = `[필수] 반드시 한국어로 응답하라. 영어 설명/사고과정 절대 금지.
@@ -203,13 +213,13 @@ export default function KnowledgeWork() {
         ? allItems.find((i: KeywordItem) => i.id === targetKeywordId)
         : null
       if (!target) {
-        const lastWorked = [...allItems].reverse().find((i: KeywordItem) => i.flag === 'W' || i.flag === 'R')
+        const lastWorked = [...allItems].reverse().find((i: KeywordItem) => getWorkFlag(i.flag) === 'W' || getWorkFlag(i.flag) === 'R')
         target = lastWorked || allItems[0]
       }
       if (target) {
         setSelected(target)
         setIsCenterFocused(true)
-        if (!target.flag) {
+        if (!getWorkFlag(target.flag)) {
           assignmentApi.updateFlag(target.id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === target!.id ? { ...i, flag: 'R' } : i))
         }
@@ -612,7 +622,7 @@ export default function KnowledgeWork() {
       setSelected(filteredItems[newIdx])
       saveLastSelected(filteredItems[newIdx].id)
       // Alt+↑: 첫 줄 첫 워드 (기본 동작 — ref 설정 안 함)
-      if (!filteredItems[newIdx].flag) {
+      if (!getWorkFlag(filteredItems[newIdx].flag)) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
       }
@@ -626,7 +636,7 @@ export default function KnowledgeWork() {
       const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
       setSelected(filteredItems[newIdx])
       saveLastSelected(filteredItems[newIdx].id)
-      if (!filteredItems[newIdx].flag) {
+      if (!getWorkFlag(filteredItems[newIdx].flag)) {
         assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
         setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
       }
@@ -795,7 +805,7 @@ export default function KnowledgeWork() {
         if (curIdx > 0) {
           setSelected(filteredItems[curIdx - 1])
           saveLastSelected(filteredItems[curIdx - 1].id)
-          if (!filteredItems[curIdx - 1].flag) {
+          if (!getWorkFlag(filteredItems[curIdx - 1].flag)) {
             assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
           }
@@ -812,7 +822,7 @@ export default function KnowledgeWork() {
         selectLastLineFirstRef.current = true
         setSelected(filteredItems[newIdx])
         saveLastSelected(filteredItems[newIdx].id)
-        if (!filteredItems[newIdx].flag) {
+        if (!getWorkFlag(filteredItems[newIdx].flag)) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
@@ -832,7 +842,7 @@ export default function KnowledgeWork() {
         if (curIdx < filteredItems.length - 1) {
           setSelected(filteredItems[curIdx + 1])
           saveLastSelected(filteredItems[curIdx + 1].id)
-          if (!filteredItems[curIdx + 1].flag) {
+          if (!getWorkFlag(filteredItems[curIdx + 1].flag)) {
             assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
             setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
           }
@@ -847,7 +857,7 @@ export default function KnowledgeWork() {
         const newIdx = curIdx < filteredItems.length - 1 ? curIdx + 1 : filteredItems.length - 1
         setSelected(filteredItems[newIdx])
         saveLastSelected(filteredItems[newIdx].id)
-        if (!filteredItems[newIdx].flag) {
+        if (!getWorkFlag(filteredItems[newIdx].flag)) {
           assignmentApi.updateFlag(filteredItems[newIdx].id, 'R', selectedWorkspace ?? '').catch(() => {})
           setItems(prev => prev.map(i => i.id === filteredItems[newIdx].id ? { ...i, flag: 'R' } : i))
         }
@@ -875,7 +885,7 @@ export default function KnowledgeWork() {
             selectLastTokenRef.current = true
             setSelected(filteredItems[curIdx - 1])
             saveLastSelected(filteredItems[curIdx - 1].id)
-            if (!filteredItems[curIdx - 1].flag) {
+            if (!getWorkFlag(filteredItems[curIdx - 1].flag)) {
               assignmentApi.updateFlag(filteredItems[curIdx - 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx - 1].id ? { ...i, flag: 'R' } : i))
             }
@@ -893,7 +903,7 @@ export default function KnowledgeWork() {
           if (curIdx >= 0 && curIdx < filteredItems.length - 1) {
             setSelected(filteredItems[curIdx + 1])
             saveLastSelected(filteredItems[curIdx + 1].id)
-            if (!filteredItems[curIdx + 1].flag) {
+            if (!getWorkFlag(filteredItems[curIdx + 1].flag)) {
               assignmentApi.updateFlag(filteredItems[curIdx + 1].id, 'R', selectedWorkspace ?? '').catch(() => {})
               setItems(prev => prev.map(i => i.id === filteredItems[curIdx + 1].id ? { ...i, flag: 'R' } : i))
             }
@@ -1241,14 +1251,14 @@ export default function KnowledgeWork() {
                   onClick={(e) => {
                     e.stopPropagation(); setSelected(record); setIsCenterFocused(true)
                     saveLastSelected(record.id)
-                    if (!record.flag) {
+                    if (!getWorkFlag(record.flag)) {
                       assignmentApi.updateFlag(record.id, 'R', selectedWorkspace ?? '').catch(() => {})
                       setItems(prev => prev.map(i => i.id === record.id ? { ...i, flag: 'R' } : i))
                     }
                   }}
                   style={{
                     padding: '6px 12px', cursor: 'pointer',
-                    background: record.flag === 'W' ? '#FCE4EC' : record.flag === 'R' ? '#FFF9C4' : 'white',
+                    background: getWorkFlag(record.flag) === 'W' ? '#FCE4EC' : getWorkFlag(record.flag) === 'R' ? '#FFF9C4' : 'white',
                     boxShadow: selected?.id === record.id ? 'inset 0 0 0 1px #000' : undefined,
                     borderBottom: selected?.id === record.id ? undefined : '1px solid #f0f0f0',
                     fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
