@@ -4,6 +4,17 @@
 
 ## 교훈 항목
 
+### L-deploy-build-verify (2026-04-15) — 프론트 배포 후 빌드 타임스탬프 검증 필수
+
+**문제**: odev가 "배포 완료" 보고했지만 실제 dist/ 빌드가 이전 파일 그대로 → 사용자에게 변경 미반영.
+**원인**: rsync 업로드 후 npm run build가 실패/미실행, 또는 빌드 완료 전에 완료 보고.
+**재발방지**: odev/otest 모두 배포 후 반드시 dist/index.html 타임스탬프 검증:
+  1. rsync 소스 업로드
+  2. npm run build 실행
+  3. `stat dist/index.html | grep Modify` 로 소스 수정 시각보다 최신인지 확인
+  4. 미반영 시 빌드 재실행 (최대 2회)
+**적용**: oinfra_know SKILL.md "프론트_변경_시_필수_순서" 이미 명시, 하지만 팀에이전트가 무시 → otest에서 물리 검증 강화 필요.
+
 ### L-progress-label-helper (2026-04-15) — 프로그레스바/카드 표시 레이블은 헬퍼 함수로 추출
 
 **패턴**: 전역 프로그레스바 label과 카드 표시 텍스트가 같은 조합 로직(사이트명+도메인명)을 공유할 때, `buildProgressLabel` / `buildCardLabel` 헬퍼 함수로 추출해 일원화.
