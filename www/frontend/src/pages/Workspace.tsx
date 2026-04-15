@@ -65,8 +65,8 @@ function buildProgressLabel(wsName: string, domain: string | null, siteCode: str
       : null
   const domainInfo = domain ? domains.find(d => d.id?.toLowerCase() === domain.toLowerCase()) : null
   const domainLabel = domainInfo?.name || domain || ''
-  if (site && domain) {
-    return `${wsName}:${site.name}/${domainLabel} ${action}`
+  if (site) {
+    return `${wsName}:${site.name}(${site.site_code || ''}) ${action}`
   }
   return `${wsName} ${action}`
 }
