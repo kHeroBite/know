@@ -161,6 +161,20 @@ def run_build(
             except Exception as e:
                 logger.warning("DB 기반 재분석 실패 (빌드 결과 유지): %s", e)
 
+        # 빌드 완료 후 snapshot_after 기록 (완료 대시보드 before/after 비교용)
+        if workspace:
+            try:
+                from services import snapshot_service
+                from core.database import SessionLocal
+                _snap_db = SessionLocal()
+                try:
+                    snapshot_service.take_snapshot(workspace, domain, "after", _snap_db)
+                    logger.info("snapshot_after 기록 완료: workspace=%s, domain=%s", workspace, domain)
+                finally:
+                    _snap_db.close()
+            except Exception as e:
+                logger.warning("snapshot_after 기록 실패 (무시): %s", e)
+
         return {
             "output_path": data_tar,
             "entry_count": entry_count,
