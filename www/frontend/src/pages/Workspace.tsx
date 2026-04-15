@@ -73,6 +73,10 @@ function buildCardLabel(ws: 워크스페이스항목, sites: Site[], domains: {i
   if (site && ws.domain) {
     return `${site.name}(${ws.site_code?.toUpperCase() || ''})/${domainLabel}(${ws.domain})`
   }
+  // site 없어도 도메인 한글명 표시
+  if (ws.domain && domainInfo?.name) {
+    return `${domainLabel}(${ws.domain})`
+  }
   return ws.domain || ''
 }
 

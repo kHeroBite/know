@@ -4,16 +4,16 @@
 
 ## 교훈 항목
 
-### L-deploy-build-verify (2026-04-15) — 프론트 배포 후 빌드 타임스탬프 검증 필수
+### L-deploy-build-restart (2026-04-15) — 프론트 배포 3단계 필수 (업로드→빌드→재시작)
 
-**문제**: odev가 "배포 완료" 보고했지만 실제 dist/ 빌드가 이전 파일 그대로 → 사용자에게 변경 미반영.
-**원인**: rsync 업로드 후 npm run build가 실패/미실행, 또는 빌드 완료 전에 완료 보고.
-**재발방지**: odev/otest 모두 배포 후 반드시 dist/index.html 타임스탬프 검증:
-  1. rsync 소스 업로드
-  2. npm run build 실행
-  3. `stat dist/index.html | grep Modify` 로 소스 수정 시각보다 최신인지 확인
-  4. 미반영 시 빌드 재실행 (최대 2회)
-**적용**: oinfra_know SKILL.md "프론트_변경_시_필수_순서" 이미 명시, 하지만 팀에이전트가 무시 → otest에서 물리 검증 강화 필요.
+**문제**: 프론트 소스 수정 후 "배포 완료" 보고했지만 실제 서비스 미반영 반복 발생.
+**원인 1**: rsync 업로드 후 npm run build 미실행 또는 실패.
+**원인 2**: 빌드 완료 후 uvicorn 재시작 누락 — 정적 파일 캐시로 이전 버전 서빙.
+**필수 3단계 (하나라도 누락 시 미반영)**:
+  1. `rsync` 소스 업로드 (프론트 + 백엔드)
+  2. `npm run build` 서버 빌드 + `stat dist/index.html` 타임스탬프 검증
+  3. `shutdown.sh && startup.sh` uvicorn 재시작 + 헬스체크 확인
+**적용**: odev 완료 보고 시 3단계 모두 수행했는지 명시 필수. otest에서 헬스체크 + 빌드 타임스탬프 물리 검증.
 
 ### L-progress-label-helper (2026-04-15) — 프로그레스바/카드 표시 레이블은 헬퍼 함수로 추출
 
