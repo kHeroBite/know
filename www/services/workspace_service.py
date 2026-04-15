@@ -283,7 +283,15 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
 
 def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None) -> dict[str, Any]:
     """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana) → 성공:USED / 실패:FAILED."""
-    domain = domain.lower()  # 대소문자 정규화
+    # 대소문자 무시 매칭 — 실제 DOMAIN_DIR 폴더명으로 교체
+    actual_domains = os.listdir(DOMAIN_DIR) if os.path.isdir(DOMAIN_DIR) else []
+    matched = next((d for d in actual_domains if d.lower() == domain.lower()), None)
+    if matched is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"도메인을 찾을 수 없습니다: {domain}",
+        )
+    domain = matched  # 실제 폴더명으로 교체
     상태 = _read_state()
     ws상태 = 상태.get(ws_name, {"status": "IDLE", "domain": None})
     if ws상태.get("status") in ("USED", "CONNECTING"):

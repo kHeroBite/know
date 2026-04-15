@@ -182,12 +182,16 @@ def restore_backup(domain: str, backup_name: str, skip_backup: bool, db) -> dict
         auto = _backup_current_state(domain, db)
         auto_backup_path = auto.get("backup_path")
 
-    domain_path = Path(DOMAIN_DIR) / domain
-    if not domain_path.is_dir():
+    # 대소문자 무시 매칭 — 실제 DOMAIN_DIR 폴더명으로 교체
+    actual_domains = os.listdir(DOMAIN_DIR) if os.path.isdir(DOMAIN_DIR) else []
+    matched_domain = next((d for d in actual_domains if d.lower() == domain.lower()), None)
+    if matched_domain is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"도메인을 찾을 수 없습니다: {domain}",
         )
+    domain = matched_domain
+    domain_path = Path(DOMAIN_DIR) / domain
 
     # 파일 복원 (덮어쓰기)
     restored_files: list[str] = []

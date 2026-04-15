@@ -67,8 +67,8 @@ def get_site(site_id: int, db: Session) -> dict:
 def _check_domain_exists(db: Session, domain_code: str) -> None:
     """domain_code가 domains._SITE에 존재하는지 검증."""
     row = db.execute(
-        text("SELECT _SITE FROM domains WHERE _SITE = :code"),
-        {"code": domain_code.upper()},
+        text("SELECT _SITE FROM domains WHERE UPPER(_SITE) = UPPER(:code)"),
+        {"code": domain_code},
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail=f"도메인을 찾을 수 없음: {domain_code}")
@@ -120,7 +120,7 @@ def create_site(
         raise HTTPException(status_code=400, detail="사이트명은 필수입니다")
     site_code = site_code.strip()
     name = name.strip()
-    domain_code = domain_code.upper()
+    domain_code = domain_code.strip()
     _check_site_code_unique(db, site_code)
     _check_name_unique(db, name)
     _check_domain_exists(db, domain_code)
@@ -162,7 +162,7 @@ def update_site(
         if new_name != existing["name"]:
             _check_name_unique(db, new_name, exclude_id=site_id)
     if domain_code is not None and domain_code.strip():
-        new_domain = domain_code.upper()
+        new_domain = domain_code.strip()
         if new_domain != existing["domain_code"]:
             _check_domain_exists(db, new_domain)
     if description is not None:
