@@ -281,8 +281,15 @@ export default function WorkComplete() {
   const goBackToVerify = async () => {
     if (!selectedWorkspace) return
     try {
-      await useWorkspaceStore.getState().revertPhase('verify')
-      navigate('/dict-verify')
+      // 현재 phase에 따라 적절한 이전 단계로 되돌리기
+      const currentPhase = phase || snapshot?.phase || 'complete'
+      const phaseOrder = ['preprocess', 'work', 'build', 'verify', 'complete', 'finished']
+      const idx = phaseOrder.indexOf(currentPhase)
+      const prevPhase = idx > 0 ? phaseOrder[idx - 1] : 'verify'
+      await useWorkspaceStore.getState().revertPhase(prevPhase as any)
+      // 이전 단계에 해당하는 페이지로 이동
+      const pageMap: Record<string, string> = { build: '/build-history', verify: '/dict-verify', work: '/workroom' }
+      navigate(pageMap[prevPhase] || '/dict-verify')
     } catch (e: any) {
       message.error('되돌리기 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     }
