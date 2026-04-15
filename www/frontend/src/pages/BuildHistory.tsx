@@ -62,7 +62,7 @@ function 파일다운로드(buildId: number, filename: string) {
 }
 
 export default function BuildHistory() {
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, phase: wsPhase } = useWorkspaceStore()
   const navigate = useNavigate()
   const currentDomain = selectedDomain || ''
 
@@ -354,7 +354,7 @@ export default function BuildHistory() {
             },
           })
         }}
-        showNext={(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중}
+        showNext={(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중 && 현재이력.some(h => h.status === 'completed' || h.status === 'success')}
         nextLabel="다음단계로 (사전검증)"
         onNext={async () => {
           if (!selectedWorkspace) { message.warning('워크스페이스가 선택되지 않았습니다'); return }
