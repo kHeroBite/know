@@ -195,7 +195,7 @@ export default function WorkComplete() {
           {siteCode && <p>사이트: {siteCode.toUpperCase()}</p>}
         </div>
       ),
-      okText: '완료 처리',
+      okText: '모든 작업 완료',
       cancelText: '취소',
       okButtonProps: { danger: !doBackup },
       onOk: async () => {
@@ -492,7 +492,7 @@ export default function WorkComplete() {
                 onClick={handleFinalize}
                 disabled={doBackup && !backupSuffix.trim()}
               >
-                완료 처리
+                모든 작업 완료
               </Button>
             }
           />
