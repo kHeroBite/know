@@ -182,7 +182,7 @@ export default function WorkComplete() {
 
   const handleFinalize = () => {
     if (!selectedWorkspace) return
-    const fixedPrefix = `${selectedDomain}_${siteCode ? siteCode.toUpperCase() : 'site'}_`
+    const fixedPrefix = `${selectedDomain}_${siteCode ? siteCode.toUpperCase() : selectedDomain}_`
     const fullBackupFolder = fixedPrefix + backupSuffix
     Modal.confirm({
       title: '정말 완료 처리하시겠습니까?',
@@ -453,24 +453,18 @@ export default function WorkComplete() {
                 </Checkbox>
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  백업 폴더명
-                  {siteCode && <Tag color="blue" style={{ marginLeft: 8 }}>사이트: {siteCode.toUpperCase()}</Tag>}
-                </Text>
-                <Space.Compact style={{ width: '100%', marginTop: 4 }}>
-                  <Input
-                    value={`${selectedDomain}_${siteCode ? siteCode.toUpperCase() : '(사이트코드 로딩중)'}_`}
-                    disabled
-                    style={{ width: 'auto', flex: '0 0 auto', background: '#f5f5f5', color: '#666' }}
-                  />
+                <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
+                <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontFamily: 'monospace', fontSize: 14 }}>
+                  <Text strong>{selectedDomain}_{siteCode ? siteCode.toUpperCase() : selectedDomain}_</Text>
                   <Input
                     value={backupSuffix}
                     disabled={!doBackup}
                     onChange={e => setBackupSuffix(e.target.value)}
                     placeholder="YYYYMMDD_HHMMSS"
-                    style={{ flex: 1 }}
+                    size="small"
+                    style={{ width: 180, marginLeft: 0, border: 'none', borderBottom: '1px solid #d9d9d9', background: 'transparent', fontFamily: 'monospace', fontSize: 14 }}
                   />
-                </Space.Compact>
+                </div>
               </div>
             </Space>
           </Card>
