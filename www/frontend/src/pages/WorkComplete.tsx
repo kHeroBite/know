@@ -389,59 +389,63 @@ export default function WorkComplete() {
           </Card>
         </Col>
 
-        <Col xs={24} lg={10}>
-          <Card
-            size="small"
-            title={<><ClockCircleOutlined /> 시간</>}
-            style={{ marginBottom: 16 }}
-          >
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="접속/시작">{formatDateTime(snapshot?.created_at)}</Descriptions.Item>
-              <Descriptions.Item label="완료 준비(prepared)">{formatDateTime(snapshot?.prepared_at)}</Descriptions.Item>
-              <Descriptions.Item label="완료(finished)">{formatDateTime(snapshot?.finished_at)}</Descriptions.Item>
-              <Descriptions.Item label="경과 시간">
-                {formatDuration(snapshot?.created_at, snapshot?.finished_at)}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-        </Col>
+        {isFinished && (
+          <Col xs={24} lg={10}>
+            <Card
+              size="small"
+              title={<><ClockCircleOutlined /> 시간</>}
+              style={{ marginBottom: 16 }}
+            >
+              <Descriptions column={1} size="small">
+                <Descriptions.Item label="접속/시작">{formatDateTime(snapshot?.created_at)}</Descriptions.Item>
+                <Descriptions.Item label="완료 준비(prepared)">{formatDateTime(snapshot?.prepared_at)}</Descriptions.Item>
+                <Descriptions.Item label="완료(finished)">{formatDateTime(snapshot?.finished_at)}</Descriptions.Item>
+                <Descriptions.Item label="경과 시간">
+                  {formatDuration(snapshot?.created_at, snapshot?.finished_at)}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+        )}
       </Row>
 
-      <Card
-        size="small"
-        title={<><TeamOutlined /> 참여자 통계 ({participants.length}명)</>}
-        style={{ marginBottom: 16 }}
-      >
-        {participants.length === 0 ? (
-          <Text type="secondary">참여자 정보가 없습니다.</Text>
-        ) : (
-          <>
-            <Row gutter={16} style={{ marginBottom: 12 }}>
-              <Col span={6}><Statistic title="총 참여자" value={participants.length} /></Col>
-              <Col span={6}>
-                <Statistic
-                  title="총 등록/수정 (W)"
-                  value={participants.reduce((s, p) => s + (p.w_count || 0), 0)}
-                  valueStyle={{ color: '#1677ff' }}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="총 읽기전용 (R)"
-                  value={participants.reduce((s, p) => s + (p.r_count || 0), 0)}
-                />
-              </Col>
-            </Row>
-            <Table
-              rowKey="user_id"
-              dataSource={participants}
-              columns={participantColumns}
-              size="small"
-              pagination={false}
-            />
-          </>
-        )}
-      </Card>
+      {isFinished && (
+        <Card
+          size="small"
+          title={<><TeamOutlined /> 참여자 통계 ({participants.length}명)</>}
+          style={{ marginBottom: 16 }}
+        >
+          {participants.length === 0 ? (
+            <Text type="secondary">참여자 정보가 없습니다.</Text>
+          ) : (
+            <>
+              <Row gutter={16} style={{ marginBottom: 12 }}>
+                <Col span={6}><Statistic title="총 참여자" value={participants.length} /></Col>
+                <Col span={6}>
+                  <Statistic
+                    title="총 등록/수정 (W)"
+                    value={participants.reduce((s, p) => s + (p.w_count || 0), 0)}
+                    valueStyle={{ color: '#1677ff' }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="총 읽기전용 (R)"
+                    value={participants.reduce((s, p) => s + (p.r_count || 0), 0)}
+                  />
+                </Col>
+              </Row>
+              <Table
+                rowKey="user_id"
+                dataSource={participants}
+                columns={participantColumns}
+                size="small"
+                pagination={false}
+              />
+            </>
+          )}
+        </Card>
+      )}
 
       {isComplete && (
         <>
