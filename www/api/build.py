@@ -128,11 +128,21 @@ def get_all_build_history_service(
             "FROM build_history ORDER BY id DESC LIMIT 50"
         ).fetchall()
         items = [dict(r) for r in rows]
+        # 사이트 목록 캐시 (site_code 역매핑용)
+        _site_map = {}
+        try:
+            for s in conn.execute("SELECT site_code, domain_code FROM sites").fetchall():
+                _site_map[s[1].lower() if s[1] else ''] = s[0]
+        except Exception:
+            pass
         for it in items:
             it["row_count"] = it.pop("entry_count", 0) or 0
             uid = it.get("started_by") or ""
             name = accts.get(uid, "")
             it["started_by_display"] = f"{name}({uid})" if name else uid
+            # site_code가 비어있으면 domain_code로 역매핑
+            if not it.get("site_code") and it.get("domain"):
+                it["site_code"] = _site_map.get(it["domain"].lower(), None)
         agg = {}
         for it in items:
             d = it.get("domain", "unknown")

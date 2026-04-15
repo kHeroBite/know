@@ -125,8 +125,8 @@ class BuildService:
                 # site_code가 없으면 사이트 목록에서 domain_code로 역매핑
                 if not ws_site_code and ws_info.get("domain"):
                     try:
-                        from services.workspace_service import list_sites_service
-                        for site in list_sites_service():
+                        from services.site_service import list_sites
+                        for site in list_sites(db):
                             if site.get("domain_code", "").lower() == ws_info["domain"].lower():
                                 ws_site_code = site.get("site_code")
                                 break
