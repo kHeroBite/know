@@ -161,7 +161,7 @@ export default function Layout() {
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider className="app-sider" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, height: '100vh', zIndex: 100 }}>
+      <Sider width={250} className="app-sider" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, height: '100vh', zIndex: 100 }}>
         <div className="app-sider-title">
           {/* 학사모 로고 아이콘 */}
           <svg
@@ -252,7 +252,7 @@ export default function Layout() {
         </div>
       </Sider>
       <AntLayout>
-        <Content style={{ margin: 0, marginLeft: 200, marginTop: 0, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh', boxSizing: 'border-box' }}>
+        <Content style={{ margin: 0, marginLeft: 250, marginTop: 0, padding: '0 16px 16px', overflowX: 'hidden', overflowY: 'auto', height: '100vh', boxSizing: 'border-box' }}>
           {location.pathname !== '/' && !isMenuEnabled(location.pathname, { wsSelected, phase, myPhase })
             ? <Navigate to="/" replace />
             : <Outlet />
