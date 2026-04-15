@@ -41,10 +41,10 @@ interface Participant {
 }
 
 const DICT_KEYS: { key: string; label: string }[] = [
-  { key: 'UDIC', label: 'UDIC (사용자사전)' },
-  { key: 'CNDIC', label: 'CNDIC (복합명사)' },
-  { key: 'THESAURUS', label: 'THESAURUS (동의어)' },
-  { key: 'CATEGORY', label: 'CATEGORY (카테고리)' },
+  { key: 'udic_count', label: 'UDIC (사용자사전)' },
+  { key: 'cndic_count', label: 'CNDIC (복합명사)' },
+  { key: 'thesaurus_count', label: 'THESAURUS (동의어)' },
+  { key: 'category_count', label: 'CATEGORY (카테고리)' },
 ]
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -115,9 +115,18 @@ export default function WorkComplete() {
       ])
       if (snapRes.data) setSnapshot(snapRes.data)
       setParticipants(partRes.data?.participants || [])
-      // 현재 워크스페이스의 site_code 추출
+      // 현재 워크스페이스의 site_code 추출 (없으면 사이트 목록에서 domain_code 역매핑)
       const wsInfo = (wsList.data || []).find((w: any) => w.name === selectedWorkspace)
-      setSiteCode(wsInfo?.site_code || null)
+      let sc = wsInfo?.site_code || null
+      if (!sc && selectedDomain) {
+        try {
+          const { listSites } = await import('../api/site')
+          const sites = await listSites()
+          const matched = sites.find((s: any) => s.domain_code?.toLowerCase() === selectedDomain.toLowerCase())
+          if (matched) sc = matched.site_code
+        } catch {}
+      }
+      setSiteCode(sc)
 
       // finished 뷰 — 해당 워크스페이스에 연결된 최신 백업 조회
       if (phase === 'finished' && selectedDomain) {
@@ -186,7 +195,7 @@ export default function WorkComplete() {
 
   const handleFinalize = () => {
     if (!selectedWorkspace) return
-    const fixedPrefix = `${selectedDomain}_${siteCode ? siteCode.toUpperCase() : selectedDomain}_`
+    const fixedPrefix = `${selectedDomain}_${siteCode || selectedDomain}_`
     const fullBackupFolder = fixedPrefix + backupSuffix
     Modal.confirm({
       title: '정말 완료 처리하시겠습니까?',
@@ -463,7 +472,7 @@ export default function WorkComplete() {
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
                 <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontFamily: 'monospace', fontSize: 14 }}>
-                  <Text strong>{selectedDomain}_{siteCode ? siteCode.toUpperCase() : selectedDomain}_</Text>
+                  <Text strong>{selectedDomain}_{siteCode || selectedDomain}_</Text>
                   <Input
                     value={backupSuffix}
                     disabled={!doBackup}
