@@ -332,10 +332,13 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         _save_domain_jiana_version(domain, jiana_version)
 
     기존색상 = ws상태.get("color")
-    # 즉시 CONNECTING 상태로 기록 (jiana_version, site_code 포함)
+    from datetime import datetime as _dt
+    _connected_at = _dt.now().isoformat()
+    # 즉시 CONNECTING 상태로 기록 (jiana_version, site_code, connected_at 포함)
     상태[ws_name] = {
         "status": "CONNECTING", "domain": domain, "connected_by": connected_by,
         "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code,
+        "connected_at": _connected_at,
     }
     _write_state(상태)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
@@ -345,7 +348,7 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
         daemon=True,
     ).start()
-    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code}
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code, "connected_at": _connected_at}
 
 
 def _cleanup_workspace(ws경로: str) -> None:
@@ -1294,7 +1297,7 @@ def session_event_service(workspace: str, domain: str, user_id: str, event: str,
 
 
 def participant_stats_service(workspace: str, domain: str) -> list[dict]:
-    """user_session_log 기반 참여자 체류시간 집계."""
+    """user_session_log 기반 참여자 체류시간 집계 + kw/dict 건수/시간 산출."""
     from core.database import 엔진
     from sqlalchemy import text as _sql_text
     from datetime import datetime as _dt
@@ -1306,6 +1309,38 @@ def participant_stats_service(workspace: str, domain: str) -> list[dict]:
             WHERE workspace = :ws AND domain = :dom
             ORDER BY user_id, created_at ASC
         """), {"ws": workspace, "dom": domain}).mappings().all()
+
+        # kw_{ws} 테이블에서 키워드 건수 조회
+        kw_table = f"kw_{workspace}"
+        try:
+            kw_count = conn.execute(_sql_text(
+                f"SELECT COUNT(*) FROM {kw_table}"
+            )).scalar() or 0
+        except Exception:
+            kw_count = 0
+
+        # work_history에서 dict 작업 건수 조회 (action_type='add', undone=0)
+        try:
+            dict_count = conn.execute(_sql_text("""
+                SELECT COUNT(*) FROM work_history
+                WHERE workspace = :ws AND action_type = 'add' AND undone = 0
+            """), {"ws": workspace}).scalar() or 0
+        except Exception:
+            dict_count = 0
+
+    # connected_at 기반 경과 시간 계산
+    _state = _read_state()
+    _ws_state = _state.get(workspace, {})
+    connected_at_str = _ws_state.get("connected_at") or _ws_state.get("created_at")
+    elapsed_hours = 0.0
+    if connected_at_str:
+        try:
+            elapsed_hours = (_dt.now() - _dt.fromisoformat(connected_at_str)).total_seconds() / 3600
+        except Exception:
+            elapsed_hours = 0.0
+
+    kw_per_hour = round(kw_count / elapsed_hours, 2) if elapsed_hours > 0 else 0.0
+    dict_per_hour = round(dict_count / elapsed_hours, 2) if elapsed_hours > 0 else 0.0
 
     # 사용자별 집계
     from collections import defaultdict
@@ -1353,7 +1388,11 @@ def participant_stats_service(workspace: str, domain: str) -> list[dict]:
             "first_login": first_login,
             "last_activity": last_activity,
             "total_minutes": total_minutes,
-            "items_per_hour": 0.0,  # work_history 기반 계산은 별도 조회 필요
+            "items_per_hour": kw_per_hour,
+            "kw_count": kw_count,
+            "kw_per_hour": kw_per_hour,
+            "dict_count": dict_count,
+            "dict_per_hour": dict_per_hour,
         })
 
     result.sort(key=lambda x: x["total_minutes"], reverse=True)

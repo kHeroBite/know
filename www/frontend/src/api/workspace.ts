@@ -28,6 +28,16 @@ export interface ParticipantStat {
   last_activity: string | null
   total_minutes: number
   items_per_hour: number
+  kw_count: number
+  kw_per_hour: number
+  dict_count: number
+  dict_per_hour: number
+}
+
+export interface SystemSetting {
+  key: string
+  value: string
+  updated_at: string | null
 }
 
 export const workspaceAPI = {
@@ -214,4 +224,15 @@ export const workspaceAPI = {
       `/workspaces/${encodeURIComponent(workspace)}/participant-stats`,
       { params: { domain } }
     ),
+
+  // 워크스페이스 해제 (release)
+  releaseWorkspace: (ws: string) =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(ws)}/release`),
+
+  // 시스템 설정
+  getSystemSettings: () =>
+    클라이언트.get<SystemSetting[]>('/system-settings'),
+
+  updateSystemSettings: (key: string, value: string) =>
+    클라이언트.put('/system-settings', { key, value }),
 }

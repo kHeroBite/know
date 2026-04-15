@@ -269,7 +269,7 @@ www/
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
-│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify/complete) + user_work_phase (idle/working/done) + complete_workspace(도메인백업+WS→도메인복사)
+│   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify/complete) + user_work_phase (idle/working/done) + complete_workspace(도메인백업+WS→도메인복사) + link_domain() connected_at 기록 + participant_stats kw/dict 건수·시간당 실계산
 │   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증, reprocess_keywords — phase_backward 2회 순차 호출)
 │   ├── work_history_service.py # 작업이력 CRUD + undo/rollback (SQLite work_history 테이블)
 │   ├── llm_settings_service.py # LLM 설정 CRUD + 연결 테스트 (4종: openai/claude/gemini/local)
@@ -280,7 +280,7 @@ www/
 │   ├── auth.py, domain.py, category.py, statistics.py
 │   ├── dictionary.py          # 사전 CRUD API + 유사어 추천: GET/POST /api/dictionary/recommend
 │   ├── phase1.py              # 데이터전처리 엔드포인트 (/preprocess/*)
-│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함) + POST /{name}/complete (작업완료 처리)
+│   ├── workspace.py           # 워크스페이스 엔드포인트 + 핫키 API + 도메인목록({id,name}[]) + 도메인추가(display_name 포함) + POST /{name}/complete (작업완료 처리) + GET/PUT /api/system-settings (admin only)
 │   ├── work_history.py        # 작업이력 API (GET/POST /api/work-history, POST /api/work-history/undo/{id})
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, GET /api/assignments/assign?mode=normal|reprocess, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status, POST /api/dict-verify/reprocess)
@@ -303,10 +303,10 @@ www/
     ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정/작업완료 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
     │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시, 캐시 제거됨)
-    │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트)
+    │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트 + 시스템 설정 섹션: 자동 로그아웃 분 설정 admin only)
     │   ├── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리 + 통합 phase 전이 버튼)
     │   ├── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)
-    │   └── WorkComplete.tsx   # 작업완료 페이지 (신규 — 정책 #6: 도메인 백업 + WS→도메인 복사 실행)
+    │   └── WorkComplete.tsx   # 작업완료 페이지 (정책 #6: 도메인 백업 + WS→도메인 복사 실행 + 사이트/도메인 전용 타이틀 표시 + finalize 후 자동 연결해제)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (LLM탭+Wikipedia탭 2탭 구조 — Google/Perplexity 제거)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
@@ -318,7 +318,7 @@ www/
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
     ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag, 키워드페이지조회, AssignmentStats.reprocess_count)
     ├── src/api/phase1.ts      # 데이터전처리 API 클라이언트
-    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API)
+    ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API + ParticipantStat kw_count/dict_count/dict_per_hour + getSystemSettings/updateSystemSettings)
     ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
     ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
     ├── src/stores/authStore.ts # JWT 상태 관리
@@ -455,3 +455,13 @@ www/
 - `api/assignment.py`: `GET /assignments/keyword-page` 엔드포인트 추가 (keyword_id 기반 페이지 번호 조회)
 - `api/assignment.ts`: `키워드페이지조회(workspace, domain, userId, keywordId)` API 메서드 추가
 - `pages/KnowledgeWork.tsx`: `목록초기화()` 수정 — 신규 API로 startPage 계산 + target 마지막 항목 pre-fetch
+
+### Phase 8: 작업완료 페이지 개선 + 자동 로그아웃 설정 (2026-04-16)
+- `services/workspace_service.py`: `link_domain()` connected_at 기록 + `participant_stats_service()` kw_count/dict_count/dict_per_hour 실계산
+- `init_db.py`: `system_settings` 테이블 신규 + `auto_logout_minutes=30` 기본값
+- `api/workspace.py`: `GET /api/system-settings` + `PUT /api/system-settings` (admin only)
+- `main.py`: system-settings 라우터 등록
+- `pages/WorkComplete.tsx`: 사이트/도메인 전용 타이틀 + finalize 후 자동 연결해제
+- `hooks/useHeartbeat.ts`: idle 감지(마우스/키보드) + system_settings 기반 자동 로그아웃
+- `pages/LLMSettings.tsx`: 시스템 설정 섹션 추가 (자동 로그아웃 분 설정, admin only)
+- `api/workspace.ts`: ParticipantStat 타입 확장(kw_count/dict_count/dict_per_hour) + getSystemSettings/updateSystemSettings

@@ -194,10 +194,35 @@ CREATE INDEX IF NOT EXISTS idx_kw_{workspace}_status ON kw_{workspace}(status);
 
 ---
 
+---
+
+### system_settings 테이블 (2026-04-16 신규)
+
+```sql
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+-- 기본값
+INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_logout_minutes', '30');
+```
+
+**목적**: 전역 시스템 설정 저장 (key-value 구조로 향후 설정 확장 가능)  
+**현재 키**: `auto_logout_minutes` — idle 상태 자동 로그아웃 대기 분 (기본값 30분)  
+**주요 API**:
+- 조회: `GET /api/system-settings` → `{"auto_logout_minutes": "30"}`
+- 수정: `PUT /api/system-settings` (admin only) → `{"settings": {...}}`  
+**참고**: workspace_domains.connected_at 컬럼 — link_domain() 호출 시 시작 시각 기록
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-16 | system_settings 테이블 신규 생성 (key-value 전역 설정 + auto_logout_minutes 기본값) | init_db.py |
+| 2026-04-16 | workspace_domains.connected_at 컬럼 기록 추가 — link_domain() 호출 시 시작 시각 기록 | workspace_service.py |
 | 2026-04-14 | kw_{workspace}.flag 값 확장: 'reprocess' 마커 추가 (재처리 대상 키워드 식별) | dict_verify_service.py, assignment_service.py |
 | 2026-04-10 | MySQL 사전 마이그레이션 4종 정합성 수정: CATEGORY 타입 추가 + Java 원본 스키마 기반 컬럼 방어적 SELECT (UDIC/CNDIC: _WORD만, THESAURUS: _HEAD_WORD+_TAIL_WORD만) + _DISPLAY_CATEGORY String(128)→String(1024) | dictionary_service.py, models/dictionary.py |
 | 2026-04-09 | `trg_phase1_runs_delete` 트리거 추가 (phase1_runs 삭제 시 phase1_logs 자동 연쇄 삭제) + `idx_wh_ws_dom`(work_history), `idx_bh_domain`(build_history) 복합 인덱스 추가 | init_db.py |

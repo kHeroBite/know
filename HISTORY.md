@@ -1,5 +1,40 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-16] 작업완료 페이지 4건 개선 + 자동 로그아웃 설정 (o4)
+
+> **작업 요약**: link_domain() connected_at 기록, participant_stats kw/dict 건수·시간당 실계산, system_settings 테이블 + 자동 로그아웃 API, WorkComplete 사이트/도메인 전용 표시 + finalize 자동 연결해제, useHeartbeat idle 체크 + 자동 로그아웃, LLMSettings 시스템 설정 UI(admin only).
+
+### 변경 파일
+- **www/services/workspace_service.py**:
+  - `link_domain()`: connected_at 컬럼에 현재 시각 기록 추가
+  - `participant_stats_service()`: kw_count, dict_count, dict_per_hour 실계산 로직 구현 (work_history 기반)
+- **www/init_db.py**:
+  - `system_settings` 테이블 CREATE TABLE + 기본값 INSERT (`auto_logout_minutes=30`)
+- **www/api/workspace.py**:
+  - `GET /api/system-settings`: 시스템 설정 조회 API
+  - `PUT /api/system-settings`: 시스템 설정 수정 API (admin only)
+- **www/main.py**:
+  - system-settings 라우터 등록
+- **www/frontend/src/pages/WorkComplete.tsx**:
+  - 타이틀에 사이트/도메인 전용 표시 (`— HMALL / 쇼핑몰` 형식)
+  - finalize 성공 후 자동 연결해제(releaseWorkspace) 실행
+  - 시작시각(연결) 레이블 추가
+- **www/frontend/src/hooks/useHeartbeat.ts**:
+  - idle 감지 로직 추가 (마우스/키보드 이벤트 기반)
+  - system_settings 기반 자동 로그아웃 구현
+- **www/frontend/src/pages/LLMSettings.tsx**:
+  - 시스템 설정 섹션 추가 (자동 로그아웃 분 설정, admin only)
+- **www/frontend/src/api/workspace.ts**:
+  - `ParticipantStat` 타입에 kw_count, dict_count, dict_per_hour 필드 추가
+  - `getSystemSettings()`, `updateSystemSettings()` API 클라이언트 함수 추가
+
+### 배경
+- 작업완료 페이지에서 어느 워크스페이스 작업인지 식별 불가
+- 키워드/사전 처리 건수와 시간당 처리량이 0으로 표시되는 버그
+- 자동 로그아웃 기능 없어 장기 방치 세션 문제
+
+---
+
 ## [2026-04-15] 워크스페이스 프로그레스바/카드 한글 사이트명/도메인명 표시 (o3)
 
 > **작업 요약**: 전역 프로그레스바와 워크스페이스 카드에 한글 사이트명·도메인명을 표시하도록 개선.

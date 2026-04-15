@@ -725,3 +725,43 @@ def participant_stats_api(
     """user_session_log 기반 참여자 체류시간 집계."""
     stats = participant_stats_service(name, domain)
     return {"workspace": name, "participants": stats}
+
+
+# ─── 시스템 설정 API ───
+
+시스템설정라우터 = APIRouter(prefix="/system-settings", tags=["시스템설정"])
+
+
+class 시스템설정요청(BaseModel):
+    settings: Dict[str, str]
+
+
+@시스템설정라우터.get("")
+def get_system_settings(
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """시스템 전역 설정 조회."""
+    rows = db.execute(text("SELECT key, value FROM system_settings")).mappings().all()
+    return {row["key"]: row["value"] for row in rows}
+
+
+@시스템설정라우터.put("")
+def update_system_settings(
+    요청: 시스템설정요청,
+    db: Session = Depends(db_session),
+    current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """시스템 전역 설정 변경 (관리자 전용)."""
+    if current.get("auth") != "A":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자(A) 권한 필요")
+    from datetime import datetime as _dt
+    now = _dt.now().isoformat()
+    for key, value in 요청.settings.items():
+        db.execute(
+            text("INSERT INTO system_settings (key, value, updated_at) VALUES (:k, :v, :ts) ON CONFLICT(key) DO UPDATE SET value=:v, updated_at=:ts"),
+            {"k": key, "v": value, "ts": now},
+        )
+    db.commit()
+    rows = db.execute(text("SELECT key, value FROM system_settings")).mappings().all()
+    return {row["key"]: row["value"] for row in rows}

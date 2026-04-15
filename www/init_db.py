@@ -280,8 +280,18 @@ def create_tables():
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_session_log_ws ON user_session_log(workspace, domain, user_id)"))
 
+        # 14. system_settings (시스템 전역 설정)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TEXT
+            )
+        """))
+        conn.execute(text("INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES ('auto_logout_minutes', '30', datetime('now','localtime'))"))
+
         conn.commit()
-    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log, user_last_selected 테이블 생성")
+    print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log, user_last_selected, system_settings 테이블 생성")
 
     # user_last_selected 마이그레이션 (기존 DB에 테이블 없을 경우)
     with 엔진.connect() as db:

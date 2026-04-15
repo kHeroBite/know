@@ -4,6 +4,15 @@
 
 ## 교훈 항목
 
+### L-059: TeamCreate 후 config.json 타이밍 이슈 — spawn 전 파일 존재 확인 필수 (2026-04-16)
+
+**현상**: TeamCreate 직후 Agent spawn 시도 시 "config.json 부재" 차단(ERR-6) 발생. ERR-5에서 언더스코어 팀명으로 팀 미존재 오류 → 재시도(ERR-6)에서 하이픈 팀명으로 정정했으나 이때 config.json이 아직 생성되지 않은 상태.
+**원인**: TeamCreate 완료 응답과 실제 config.json 파일 생성 사이에 타이밍 갭 존재. 또한 팀명 생성 시 언더스코어(`_`)와 하이픈(`-`) 혼용으로 첫 시도 실패.
+**재발방지**: TeamCreate 후 즉시 spawn하지 말고 `cat $HOME/.claude/teams/{팀명}/config.json` 존재 확인 후 spawn. 팀명 생성 시 conv_id 언더스코어를 하이픈으로 정규화하여 일관성 유지.
+**Level**: 1 (hook이 정상 차단한 1회성 타이밍 이슈)
+
+---
+
 ### L-deploy-build-restart (2026-04-15) — 프론트 배포 3단계 필수 (업로드→빌드→재시작)
 
 **문제**: 프론트 소스 수정 후 "배포 완료" 보고했지만 실제 서비스 미반영 반복 발생.
@@ -725,3 +734,13 @@ elif os.path.isdir(path):
 **원인**: L-056(2026-04-14)에서 동일 교훈이 기록됐음에도 재발. `oinfra_know` SKILL.md에도 명시되어 있으나 LLM이 무시.
 **재발방지**: 프론트 파일 수정 → 즉시 rsync(프론트_소스_배포) → 서버빌드 → 타임스탬프 확인. 이 순서 외에는 절대 "완료" 선언 불가. oinfra_know SKILL.md에 ❌❌❌ 경고 추가 완료(2026-04-15).
 **Level**: 3 (2회 반복 — hook 차단 필요)
+
+---
+
+## [2026-04-16] 작업완료 페이지 4건 개선 + 자동 로그아웃 설정
+
+> **작업 요약**: connected_at 기록, participant_stats kw/dict 건수·시간당 실계산, system_settings 테이블+API, WorkComplete 사이트/도메인 표시+자동해제, useHeartbeat 자동 로그아웃, LLMSettings 시스템 설정 UI.
+> **교훈 결과**: 1건 (L-059, Level 1 — docs 기록) + HOOK_BLOCK_OK 6건 (방어 체계 정상 작동)
+
+**MEMORY.md 점검 결과**: Level 1 항목 1건 — L-059는 1회성 타이밍 이슈로 MEMORY.md 반영 없음. hook 정상 차단 6건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
+

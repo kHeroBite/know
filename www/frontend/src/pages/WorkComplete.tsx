@@ -10,7 +10,6 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
-import { formatWorkspace } from '../utils/displayFormat'
 
 import { backupAPI, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
@@ -221,7 +220,8 @@ export default function WorkComplete() {
             site_id: null,
           })
           message.success('워크스페이스가 완료 처리되었습니다.')
-          await loadAll()
+          try { await workspaceAPI.releaseWorkspace(selectedWorkspace) } catch {}
+          navigate('/workspace')
         } catch (e: any) {
           message.error('완료 처리 실패: ' + (e?.response?.data?.detail || e?.message || ''))
         } finally {
@@ -364,7 +364,7 @@ export default function WorkComplete() {
   return (
     <div>
       <PageHeader
-        title={`작업 완료 대시보드 — ${formatWorkspace(selectedWorkspace, selectedDomain, selectedDomainLabel)}`}
+        title={`작업 완료 대시보드 — ${siteCode ? siteCode.toUpperCase() : ''} / ${selectedDomainLabel || selectedDomain || ''}`}
         showPrev={isComplete}
         prevLabel="이전단계로"
         onPrev={goBackToVerify}
@@ -446,12 +446,8 @@ export default function WorkComplete() {
               style={{ marginBottom: 16 }}
             >
               <Descriptions column={1} size="small">
-                <Descriptions.Item label="접속/시작">{formatDateTime(snapshot?.connected_at || snapshot?.created_at)}</Descriptions.Item>
-                <Descriptions.Item label="완료 준비(prepared)">{formatDateTime(snapshot?.prepared_at)}</Descriptions.Item>
+                <Descriptions.Item label="시작시각(연결)">{formatDateTime(snapshot?.connected_at)}</Descriptions.Item>
                 <Descriptions.Item label="완료(finished)">{formatDateTime(snapshot?.finished_at)}</Descriptions.Item>
-                <Descriptions.Item label="경과 시간">
-                  {formatDuration(snapshot?.connected_at || snapshot?.created_at, snapshot?.finished_at)}
-                </Descriptions.Item>
               </Descriptions>
             </Card>
           </Col>
@@ -696,8 +692,20 @@ export default function WorkComplete() {
                 render: (m: number) => m > 0 ? `${m}분` : '-',
               },
               {
-                title: '건/h', dataIndex: 'items_per_hour', key: 'items_per_hour',
-                render: (v: number) => v > 0 ? `${v.toFixed(1)}건/h` : '-',
+                title: '키워드건수', dataIndex: 'kw_count', key: 'kw_count', align: 'right' as const,
+                render: (v: number) => v > 0 ? v.toLocaleString() : '-',
+              },
+              {
+                title: '키워드건/h', dataIndex: 'kw_per_hour', key: 'kw_per_hour', align: 'right' as const,
+                render: (v: number) => v > 0 ? `${v.toFixed(1)}/h` : '-',
+              },
+              {
+                title: '사전등록건수', dataIndex: 'dict_count', key: 'dict_count', align: 'right' as const,
+                render: (v: number) => v > 0 ? v.toLocaleString() : '-',
+              },
+              {
+                title: '사전건/h', dataIndex: 'dict_per_hour', key: 'dict_per_hour', align: 'right' as const,
+                render: (v: number) => v > 0 ? `${v.toFixed(1)}/h` : '-',
               },
             ]}
             rowKey="user_id"

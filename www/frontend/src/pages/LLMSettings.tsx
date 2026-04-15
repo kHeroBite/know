@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import PageHeader from '../components/PageHeader'
-import { Card, Input, Button, Select, Switch, message, Spin, Typography, Space, Tag, Row, Col } from 'antd'
+import { Card, Input, Button, Select, Switch, message, Spin, Typography, Space, Tag, Row, Col, InputNumber, Divider } from 'antd'
 import { CheckCircleOutlined, CloseCircleOutlined, ApiOutlined, ReloadOutlined } from '@ant-design/icons'
 import { llmAPI, type LLM설정 } from '../api/llm'
+import { workspaceAPI } from '../api/workspace'
+import { useAuthStore } from '../stores/authStore'
 
 const { Text, Title } = Typography
 
@@ -26,11 +28,18 @@ interface 프로바이더상태 {
 }
 
 export default function LLMSettings() {
+  const user = useAuthStore(s => s.user)
+  const isAdmin = user?.auth === 'A'
+
   const [로딩중, set로딩중] = useState(true)
   const [저장중, set저장중] = useState<string | null>(null)
   const [활성변경중, set활성변경중] = useState<string | null>(null)
   const [상태맵, set상태맵] = useState<Record<string, 프로바이더상태>>({})
   const [원본키맵, set원본키맵] = useState<Record<string, string>>({})
+
+  // 시스템 설정
+  const [자동로그아웃분, set자동로그아웃분] = useState<number | null>(null)
+  const [시스템설정저장중, set시스템설정저장중] = useState(false)
 
   const 설정로드 = async () => {
     set로딩중(true)
@@ -62,6 +71,16 @@ export default function LLMSettings() {
   }
 
   useEffect(() => { 설정로드() }, [])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    workspaceAPI.getSystemSettings()
+      .then(res => {
+        const setting = res.data.find(s => s.key === 'auto_logout_minutes')
+        if (setting) set자동로그아웃분(parseInt(setting.value, 10) || null)
+      })
+      .catch(() => {})
+  }, [isAdmin])
 
   const 상태업데이트 = (provider: string, patch: Partial<프로바이더상태>) => {
     set상태맵(prev => ({ ...prev, [provider]: { ...prev[provider], ...patch } }))
@@ -275,6 +294,18 @@ export default function LLMSettings() {
     )
   }
 
+  const 시스템설정저장 = async () => {
+    set시스템설정저장중(true)
+    try {
+      await workspaceAPI.updateSystemSettings('auto_logout_minutes', String(자동로그아웃분 ?? 0))
+      message.success('시스템 설정 저장 완료')
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '저장 실패')
+    } finally {
+      set시스템설정저장중(false)
+    }
+  }
+
   const 활성수 = Object.values(상태맵).filter(s => s.is_active).length
 
   return (
@@ -298,6 +329,39 @@ export default function LLMSettings() {
       <Row gutter={[16, 16]}>
         {['openai', 'claude', 'gemini'].map(provider => 카드렌더링(provider))}
       </Row>
+
+      {isAdmin && (
+        <>
+          <Divider />
+          <Title level={5} style={{ marginBottom: 12, color: '#6b7280' }}>시스템 설정</Title>
+          <Card size="small" style={{ maxWidth: 400 }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text style={{ fontSize: 12 }}>자동 로그아웃 (분)</Text>
+                <div style={{ marginTop: 4 }}>
+                  <InputNumber
+                    min={0}
+                    max={1440}
+                    value={자동로그아웃분}
+                    onChange={v => set자동로그아웃분(v)}
+                    placeholder="0 = 비활성"
+                    style={{ width: 160 }}
+                  />
+                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>0 = 자동 로그아웃 비활성</Text>
+                </div>
+              </div>
+              <Button
+                type="primary"
+                size="small"
+                loading={시스템설정저장중}
+                onClick={시스템설정저장}
+              >
+                저장
+              </Button>
+            </Space>
+          </Card>
+        </>
+      )}
     </div>
   )
 }
