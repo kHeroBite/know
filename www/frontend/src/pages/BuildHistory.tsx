@@ -328,19 +328,7 @@ export default function BuildHistory() {
         return sec >= 60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`
       },
     },
-    {
-      title: '다운로드', key: 'download', width: 160,
-      render: (_: any, r: 빌드이력항목) => {
-        if (r.status !== 'completed' && r.status !== 'success') return '-'
-        const dl = (filename: string) => 파일다운로드(r.id, filename)
-        return (
-          <Space size={4}>
-            <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => dl('data.tar')}>data.tar</Button>
-            <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => dl('synonym.UTF-8')}>synonym</Button>
-          </Space>
-        )
-      },
-    },
+
   ]
 
   return (

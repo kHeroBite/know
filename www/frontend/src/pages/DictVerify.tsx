@@ -226,15 +226,15 @@ export default function DictVerify() {
     return (
       <Card size="small" title={title} style={{ flex: 1 }}>
         <Row gutter={8} style={{ marginBottom: 12 }}>
-          <Col span={6}><Statistic title="전체" value={result.total} /></Col>
-          <Col span={6}><Statistic title="통과" value={skipped.length} valueStyle={{ color: '#52c41a' }} prefix={<CheckOutlined />} /></Col>
-          <Col span={6}><Statistic title="누락" value={missing.length} valueStyle={{ color: '#cf1322' }} prefix={<CloseCircleOutlined />} /></Col>
-          <Col span={6}><Statistic title="미등록" value={ukall.length} valueStyle={{ color: '#faad14' }} prefix={<WarningOutlined />} /></Col>
+          <Col xs={12} sm={6}><Statistic title="전체" value={result.total} /></Col>
+          <Col xs={12} sm={6}><Statistic title="통과" value={skipped.length} valueStyle={{ color: '#52c41a' }} prefix={<CheckOutlined />} /></Col>
+          <Col xs={12} sm={6}><Statistic title="누락" value={missing.length} valueStyle={{ color: '#cf1322' }} prefix={<CloseCircleOutlined />} /></Col>
+          <Col xs={12} sm={6}><Statistic title="미등록" value={ukall.length} valueStyle={{ color: '#faad14' }} prefix={<WarningOutlined />} /></Col>
         </Row>
         <Tabs defaultActiveKey="missing" items={[
-          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missingColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
-          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukallColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
-          { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skippedColumns} size="small" pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'missing', label: `누락 (${missing.length})`, children: <Table rowKey="key" dataSource={missing} columns={missingColumns} size="small" scroll={{ x: 'max-content' }} pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'ukall', label: `미등록 (${ukall.length})`, children: <Table rowKey="key" dataSource={ukall} columns={ukallColumns} size="small" scroll={{ x: 'max-content' }} pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
+          { key: 'skipped', label: `통과 (${skipped.length})`, children: <Table rowKey="key" dataSource={skipped} columns={skippedColumns} size="small" scroll={{ x: 'max-content' }} pagination={{ pageSize: 15, showTotal: t => `${t}건` }} /> },
         ]} />
       </Card>
     )
@@ -351,8 +351,8 @@ export default function DictVerify() {
           </Card>
 
           <Row gutter={16}>
-            <Col span={12}>{renderPanel('작업 완료 키워드', 완료검증)}</Col>
-            <Col span={12}>{renderPanel('미작업 키워드', 미완료검증)}</Col>
+            <Col xs={24} xl={12}>{renderPanel('작업 완료 키워드', 완료검증)}</Col>
+            <Col xs={24} xl={12}>{renderPanel('미작업 키워드', 미완료검증)}</Col>
           </Row>
         </>
       )}
