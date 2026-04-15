@@ -744,3 +744,20 @@ elif os.path.isdir(path):
 
 **MEMORY.md 점검 결과**: Level 1 항목 1건 — L-059는 1회성 타이밍 이슈로 MEMORY.md 반영 없음. hook 정상 차단 6건(HOOK_BLOCK_OK). MEMORY.md 반영 없음.
 
+---
+
+## [2026-04-16] team-cleanup.sh 섹션 [1.6] 메인 pane kill 버그 수정
+
+**버그**: ofinish Step 1 중 `mcp__oio__bash_exec`로 `team-cleanup.sh --force` 실행 시 메인 Claude 에이전트 pane(%224)을 kill 대상으로 오판정.
+
+**근본 원인**: 섹션 [1.6]의 "자기 pane kill" 설계 결함:
+1. `MY_PANE=$(tmux display-message -p '#{pane_id}')` — oio bash_exec 서브프로세스는 별도 tmux pane 없이 메인 pane의 자식으로 실행 → 메인 pane(%224) 반환
+2. 섹션 [1.6]에서 `MY_PANE`을 bash fallback pane으로 판정 후 "자기 pane kill 예약" → 스크립트 종료 후 `tmux kill-pane -t %224` 실행
+3. `_kill_pane()` 함수의 1/2차 방어선(조상트리, PID비교)을 우회 — 직접 `tmux kill-pane` 호출
+
+**수정**: 섹션 [1.6]에서 자기 pane kill 로직 전면 제거. `PROTECTED_PANES` 기반 보호로 대체 (MY_PANE + 조상 프로세스 pane 목록 = oio bash_exec 환경에서도 메인 pane 포함).
+
+**파일**: `/mnt/c/DATA/Project/ai/.claude/scripts/team-cleanup.sh` 섹션 [1.6] + 스크립트 말미 SELF_PANE_KILL 블록 제거.
+
+**재발방지**: PROTECTED_PANES 체크가 섹션 [1.6] 최우선 방어선으로 작동. `_kill_pane()` 우회 경로 없음.
+
