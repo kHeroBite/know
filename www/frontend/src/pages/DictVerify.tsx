@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { workspaceAPI } from '../api/workspace'
 import {
   Card, Button, Table, Tag, Typography, Space, Input, Tabs, Progress,
   message, Statistic, Row, Col, Checkbox,
@@ -32,6 +33,16 @@ export default function DictVerify() {
       message.error('완료 준비 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     }
   }
+
+  // 페이지 진입/이탈 step-log
+  useEffect(() => {
+    if (!selectedWorkspace || !selectedDomain) return
+    workspaceAPI.logStep(selectedWorkspace, { phase: 'verify', action: 'enter', domain: selectedDomain })
+    return () => {
+      workspaceAPI.logStep(selectedWorkspace, { phase: 'verify', action: 'leave', domain: selectedDomain })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkspace, selectedDomain])
 
   // --- 형태소분석 테스트 ---
   const [분석키워드, set분석키워드] = useState('')
@@ -248,31 +259,33 @@ export default function DictVerify() {
         onNext={handleComplete}
       />
 
-      {/* 형태소분석 테스트 */}
-      <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트</>}>
-        <Space style={{ marginBottom: 12 }}>
-          <Input
-            placeholder="키워드 입력 (여러 개: 쉼표/줄바꿈 구분)"
-            value={분석키워드}
-            onChange={e => set분석키워드(e.target.value)}
-            onPressEnter={단일분석}
-            style={{ width: 360 }}
-            allowClear
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={단일분석} loading={분석중}>분석</Button>
-          <Button icon={<ExperimentOutlined />} onClick={일괄분석} loading={분석중}>일괄</Button>
-        </Space>
-        {분석결과목록.length > 0 && (
-          <Table
-            rowKey={(_, i) => `a-${i}`}
-            dataSource={분석결과목록}
-            columns={분석컬럼}
-            size="small"
-            pagination={false}
-            style={{ maxHeight: 300, overflow: 'auto' }}
-          />
-        )}
-      </Card>
+      {/* 형태소분석 테스트 — 숨김 처리 (기능 코드 보존) */}
+      {false && (
+        <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트</>}>
+          <Space style={{ marginBottom: 12 }}>
+            <Input
+              placeholder="키워드 입력 (여러 개: 쉼표/줄바꿈 구분)"
+              value={분석키워드}
+              onChange={e => set분석키워드(e.target.value)}
+              onPressEnter={단일분석}
+              style={{ width: 360 }}
+              allowClear
+            />
+            <Button type="primary" icon={<SearchOutlined />} onClick={단일분석} loading={분석중}>분석</Button>
+            <Button icon={<ExperimentOutlined />} onClick={일괄분석} loading={분석중}>일괄</Button>
+          </Space>
+          {분석결과목록.length > 0 && (
+            <Table
+              rowKey={(_, i) => `a-${i}`}
+              dataSource={분석결과목록}
+              columns={분석컬럼}
+              size="small"
+              pagination={false}
+              style={{ maxHeight: 300, overflow: 'auto' }}
+            />
+          )}
+        </Card>
+      )}
 
       {/* 사전 검증 실행 */}
       <Card

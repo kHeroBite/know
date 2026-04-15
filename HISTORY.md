@@ -1,5 +1,36 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-15] 워크스페이스 UI 6개 항목 개선 (o3)
+
+> **작업 요약**: 빌드이력 도메인+사이트 표시, 사전검증 형태소 섹션 숨김, 작업완료 페이지 대폭 개선(PageHeader 통일/강력경고/단계별 시간 리포트/참여자 통계), 백업폴더명 UI 개선.
+
+### 변경 파일 (12개)
+
+**DB/백엔드 (5개)**:
+- `www/models/pipeline.py`: `BuildHistory`에 `workspace_id`/`site_code` 컬럼 추가, `WorkspaceStepLog`/`UserSessionLog` 신규 모델
+- `www/init_db.py`: 신규 테이블 생성 로직 추가
+- `www/services/workspace_service.py`: step_log/session_log CRUD, `complete_workspace` 통합
+- `www/services/build_service.py`: 빌드 시 `workspace_id`/`site_code` 저장
+- `www/api/workspace.py`: `/step-log`, `/session-log`, `/heartbeat` 신규 엔드포인트
+- `www/api/build.py`: 빌드이력 조회에 도메인+사이트 정보 JOIN
+
+**프론트엔드 (6개)**:
+- `www/frontend/src/pages/BuildHistory.tsx`: 도메인+사이트 컬럼 표시
+- `www/frontend/src/pages/DictVerify.tsx`: 형태소분석 테스트 섹션 `{false && ...}` 숨김
+- `www/frontend/src/pages/WorkComplete.tsx`: PageHeader 통일 + 이전단계 버튼 헤더 이동 + 강력경고 Alert + 사전개수 + step_log 리포트 + session_log 통계
+- `www/frontend/src/api/workspace.ts`: step_log/session_log/heartbeat API 함수 추가
+- `www/frontend/src/hooks/useHeartbeat.ts` (신규): 30초 주기 heartbeat 훅
+- `www/frontend/src/components/Layout.tsx`: 백업폴더명 고정prefix + 날짜/시간 편집 input (사이트 드롭다운 제거)
+
+### 핵심 설계
+
+- **빌드이력 맥락 보존**: `build_history`에 `workspace_id`/`site_code` denormalized 컬럼 추가. 감사용 이력은 JOIN 없이도 맥락 확인 가능.
+- **step_log**: 워크플로우 단계 전환 시 INSERT/UPDATE → 완료 페이지에서 단계별 소요시간 리포트.
+- **heartbeat + session_log**: `useHeartbeat` 훅 30초 주기 UPSERT → 완료 시 실제 참여자 인원 집계 표시.
+- **백업폴더명**: 고정prefix(`{도메인ID}_{사이트ID}_`) + 날짜/시간 편집 input. 사용자 실수 방지.
+
+---
+
 ## [2026-04-14] 완료 단계 + 도메인 적용 + 백업 관리 시스템 (o4 Full)
 
 > **작업 요약**: Know 워크플로우 완료 단계 통합 구축. (1) 사전빌드 이력 영구 보존(DELETE 3곳 제거), (2) 완료 메뉴 워크플로우 게이트(Layout disabled + DictVerify 다음단계 버튼), (3) 도메인 적용 역방향 복사(WS→도메인), (4) 백업 관리 메뉴 신설(BAK_ 테이블 + metadata.json 패턴).

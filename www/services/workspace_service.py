@@ -121,6 +121,7 @@ def list_workspaces_service() -> list[dict[str, Any]]:
                 "domain": ws상태.get("domain"),
                 "connected_by": ws상태.get("connected_by"),
                 "color": ws상태.get("color"),
+                "site_code": ws상태.get("site_code"),
             })
     return 결과
 
@@ -281,7 +282,7 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
         COPY_CANCEL.pop(ws_name, None)
 
 
-def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None) -> dict[str, Any]:
+def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None, site_code: str | None = None) -> dict[str, Any]:
     """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana) → 성공:USED / 실패:FAILED."""
     # 대소문자 무시 매칭 — 실제 DOMAIN_DIR 폴더명으로 교체
     actual_domains = os.listdir(DOMAIN_DIR) if os.path.isdir(DOMAIN_DIR) else []
@@ -331,10 +332,10 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         _save_domain_jiana_version(domain, jiana_version)
 
     기존색상 = ws상태.get("color")
-    # 즉시 CONNECTING 상태로 기록 (jiana_version 포함)
+    # 즉시 CONNECTING 상태로 기록 (jiana_version, site_code 포함)
     상태[ws_name] = {
         "status": "CONNECTING", "domain": domain, "connected_by": connected_by,
-        "color": 기존색상, "jiana_version": jiana_version,
+        "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code,
     }
     _write_state(상태)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
@@ -344,7 +345,7 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
         daemon=True,
     ).start()
-    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version}
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code}
 
 
 def _cleanup_workspace(ws경로: str) -> None:
@@ -1205,6 +1206,157 @@ def get_participants_stats(ws_name: str, db) -> list[dict]:
             "r_count": int(row["r_count"] or 0),
             "w_count": int(row["w_count"] or 0),
         })
+    return result
+
+
+def step_log_service(workspace: str, domain: str, phase: str, action: str, user_id: str | None = None) -> dict:
+    """페이지 진입/이탈 단계 로그 기록."""
+    from core.database import 엔진
+    from sqlalchemy import text as _sql_text
+
+    with 엔진.connect() as conn:
+        conn.execute(_sql_text("""
+            INSERT INTO workspace_step_log (workspace, domain, phase, action, user_id)
+            VALUES (:ws, :dom, :phase, :action, :uid)
+        """), {"ws": workspace, "dom": domain, "phase": phase, "action": action, "uid": user_id})
+        conn.commit()
+    return {"ok": True}
+
+
+def step_report_service(workspace: str, domain: str) -> dict:
+    """workspace/domain 기준 단계별 체류시간 리포트."""
+    from core.database import 엔진
+    from sqlalchemy import text as _sql_text
+
+    with 엔진.connect() as conn:
+        rows = conn.execute(_sql_text("""
+            SELECT id, workspace, domain, phase, action, user_id, created_at
+            FROM workspace_step_log
+            WHERE workspace = :ws AND domain = :dom
+            ORDER BY created_at ASC
+        """), {"ws": workspace, "dom": domain}).mappings().all()
+
+    logs = [dict(r) for r in rows]
+
+    # phases 계산: enter/leave 쌍 매칭
+    from datetime import datetime as _dt
+
+    phases: dict[str, dict] = {}
+    # phase별 열린 enter 스택
+    open_enters: dict[str, list[str]] = {}
+
+    for row in logs:
+        ph = row["phase"]
+        action = row["action"]
+        ts = row["created_at"]
+
+        if ph not in phases:
+            phases[ph] = {
+                "first_enter": None,
+                "last_leave": None,
+                "total_seconds": 0,
+                "visit_count": 0,
+            }
+
+        if action == "enter":
+            if phases[ph]["first_enter"] is None:
+                phases[ph]["first_enter"] = ts
+            phases[ph]["visit_count"] += 1
+            open_enters.setdefault(ph, []).append(ts)
+        elif action == "leave":
+            phases[ph]["last_leave"] = ts
+            if open_enters.get(ph):
+                enter_ts = open_enters[ph].pop(0)
+                try:
+                    enter_dt = _dt.fromisoformat(enter_ts)
+                    leave_dt = _dt.fromisoformat(ts)
+                    diff = (leave_dt - enter_dt).total_seconds()
+                    if diff > 0:
+                        phases[ph]["total_seconds"] += int(diff)
+                except Exception:
+                    pass
+
+    return {"logs": logs, "phases": phases}
+
+
+def session_event_service(workspace: str, domain: str, user_id: str, event: str, menu: str | None = None) -> dict:
+    """세션 이벤트(login/logout/heartbeat) 기록."""
+    from core.database import 엔진
+    from sqlalchemy import text as _sql_text
+
+    with 엔진.connect() as conn:
+        conn.execute(_sql_text("""
+            INSERT INTO user_session_log (workspace, domain, user_id, event, menu)
+            VALUES (:ws, :dom, :uid, :event, :menu)
+        """), {"ws": workspace, "dom": domain, "uid": user_id, "event": event, "menu": menu})
+        conn.commit()
+    return {"ok": True}
+
+
+def participant_stats_service(workspace: str, domain: str) -> list[dict]:
+    """user_session_log 기반 참여자 체류시간 집계."""
+    from core.database import 엔진
+    from sqlalchemy import text as _sql_text
+    from datetime import datetime as _dt
+
+    with 엔진.connect() as conn:
+        rows = conn.execute(_sql_text("""
+            SELECT user_id, event, created_at
+            FROM user_session_log
+            WHERE workspace = :ws AND domain = :dom
+            ORDER BY user_id, created_at ASC
+        """), {"ws": workspace, "dom": domain}).mappings().all()
+
+    # 사용자별 집계
+    from collections import defaultdict
+    user_events: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        user_events[row["user_id"]].append({"event": row["event"], "created_at": row["created_at"]})
+
+    result: list[dict] = []
+    for uid, events in user_events.items():
+        first_login = None
+        last_activity = None
+        total_seconds = 0
+        pending_login: str | None = None
+
+        for ev in events:
+            ts = ev["created_at"]
+            if last_activity is None or ts > last_activity:
+                last_activity = ts
+            if ev["event"] == "login":
+                if first_login is None:
+                    first_login = ts
+                pending_login = ts
+            elif ev["event"] in ("logout", "force_exit"):
+                if pending_login:
+                    try:
+                        s = (_dt.fromisoformat(ts) - _dt.fromisoformat(pending_login)).total_seconds()
+                        if s > 0:
+                            total_seconds += int(s)
+                    except Exception:
+                        pass
+                    pending_login = None
+            elif ev["event"] == "heartbeat" and pending_login:
+                # heartbeat으로 체류시간 누적 (login→heartbeat 간격)
+                try:
+                    s = (_dt.fromisoformat(ts) - _dt.fromisoformat(pending_login)).total_seconds()
+                    if 0 < s <= 120:  # 120초 이하인 경우만 누적 (타임아웃 방지)
+                        total_seconds += int(s)
+                except Exception:
+                    pass
+                pending_login = ts  # 다음 heartbeat의 기준점을 최신 heartbeat으로 이동
+
+        total_minutes = total_seconds // 60
+        result.append({
+            "user_id": uid,
+            "first_login": first_login,
+            "last_activity": last_activity,
+            "total_minutes": total_minutes,
+            "items_per_hour": 0.0,  # work_history 기반 계산은 별도 조회 필요
+        })
+
+    result.sort(key=lambda x: x["total_minutes"], reverse=True)
     return result
 
 

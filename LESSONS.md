@@ -4,6 +4,31 @@
 
 ## 교훈 항목
 
+### L-step-log-heartbeat (2026-04-15) — step_log + heartbeat로 완료 페이지에 시간/참여자 통계 제공
+
+**패턴**: 워크스페이스 완료 후 "단계별 소요시간"과 "참여자 통계"를 한 화면에 제공하는 두 가지 신규 테이블 패턴.
+- `workspace_step_log`: (workspace_id, step_name, started_at, finished_at) — 워크플로우 전환 시점마다 INSERT/UPDATE. 완료 시 단계별 소요시간 리포트.
+- `user_session_log`: (workspace_id, user_id, last_seen_at) — 프론트 `useHeartbeat` 훅이 30초 주기로 UPSERT. 완료 시 참여 인원 집계.
+
+**재사용 권장**: 다단계 워크플로우에서 "진행 시간 추적"이 필요할 때 step_log 패턴, "동시 접속자 추적"이 필요할 때 heartbeat + session_log 패턴을 재사용하라.
+**Level**: 1
+
+### L-build-history-site-col (2026-04-15) — build_history에 workspace/site_code 컬럼 추가로 빌드 맥락 보존
+
+**문제**: 기존 `build_history`는 빌드 메타데이터만 있고, 어느 워크스페이스/사이트 빌드인지 표시 불가.
+**조치**: `workspace_id`, `site_code` 컬럼 추가 + 빌드이력 페이지에 도메인+사이트 표시.
+**원칙**: 이력/감사 테이블에는 생성 당시 맥락(어느 워크스페이스, 어느 사이트)을 컬럼으로 보존하라. JOIN으로 조회 가능한 경우라도 감사용 데이터는 denormalized 사본을 유지하는 것이 안전하다.
+**Level**: 1
+
+### L-backup-folder-naming (2026-04-15) — 백업폴더명 고정prefix + 날짜/시간 편집 패턴
+
+**패턴**: 백업 폴더명을 `{도메인ID}_{사이트ID}_{날짜시간}` 형태로 구성 시, 앞부분(prefix)은 시스템이 자동 생성하고 날짜/시간 부분만 사용자가 편집 input으로 수정.
+- 사이트 드롭다운 제거로 UI 단순화 (사이트는 워크스페이스에 이미 고정)
+- 사용자 실수(잘못된 prefix 입력) 방지
+
+**재사용 권장**: 백업/내보내기 파일명에 시스템 맥락(ID 등)을 prefix로 강제해야 할 때 동일 패턴 적용.
+**Level**: 1
+
 ### L-finished-phase (2026-04-14) — "되돌릴 수 없는 상태"는 별도 phase로 표현
 
 **문제**: 완료 단계(`complete`)와 영구 확정 상태(`finished`)를 같은 phase로 뭉치면, UI에서 "확정 전/후" 경계가 흐려져 사용자가 실수로 되돌릴 수 없는 동작을 트리거하기 쉽다.
@@ -673,3 +698,10 @@ elif os.path.isdir(path):
 **원인**: Ant Design의 `Table` 컴포넌트에서 `rowSelection.onChange` 콜백의 `selectedRowKeys` 파라미터 타입은 `React.Key[]`로 명시해야 함. 상태 변수 선언 시 타입 미지정으로 타입 불일치 발생.
 **재발방지**: Ant Design Table에서 체크박스 선택 상태를 관리할 때 `const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])` 형태로 명시. `rowSelection.onChange: (keys: React.Key[]) => void` 시그니처 준수.
 **Level**: 1
+
+### L-058: 프론트 소스 수정 후 rsync 없이 서버빌드 시도 → 반영 안 됨 (2026-04-15, 재발)
+
+**현상**: `Workspace.tsx` 수정 후 서버에 SSH 직접 `npm run build` 시도. 그러나 rsync 소스 업로드 없이 빌드하면 서버는 이전 소스로 빌드됨 → 변경 반영 안 됨.
+**원인**: L-056(2026-04-14)에서 동일 교훈이 기록됐음에도 재발. `oinfra_know` SKILL.md에도 명시되어 있으나 LLM이 무시.
+**재발방지**: 프론트 파일 수정 → 즉시 rsync(프론트_소스_배포) → 서버빌드 → 타임스탬프 확인. 이 순서 외에는 절대 "완료" 선언 불가. oinfra_know SKILL.md에 ❌❌❌ 경고 추가 완료(2026-04-15).
+**Level**: 3 (2회 반복 — hook 차단 필요)

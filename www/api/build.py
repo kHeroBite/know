@@ -122,15 +122,8 @@ def get_all_build_history_service(
                 accts[a[0]] = a[1]
         except Exception:
             pass
-        # 도메인→워크스페이스 매핑
-        dom_ws = {}
-        try:
-            for r in conn.execute("SELECT DISTINCT domain, workspace FROM keyword_assignments").fetchall():
-                dom_ws[r[0]] = r[1]
-        except Exception:
-            pass
         rows = conn.execute(
-            "SELECT id, domain, build_type, status, started_at, completed_at, "
+            "SELECT id, domain, workspace, site_code, build_type, status, started_at, completed_at, "
             "started_by, output_path, file_size, entry_count "
             "FROM build_history ORDER BY id DESC LIMIT 50"
         ).fetchall()
@@ -140,7 +133,6 @@ def get_all_build_history_service(
             uid = it.get("started_by") or ""
             name = accts.get(uid, "")
             it["started_by_display"] = f"{name}({uid})" if name else uid
-            it["workspace"] = dom_ws.get(it.get("domain", ""), "")
         agg = {}
         for it in items:
             d = it.get("domain", "unknown")

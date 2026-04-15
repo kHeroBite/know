@@ -718,7 +718,7 @@ export default function Workspace() {
         />
         <div style={{ marginTop: 8, fontSize: 13 }}>
           {선택도메인
-            ? <Text>도메인 : {formatDomain(선택도메인)}</Text>
+            ? <Text>도메인 : {formatDomain(선택도메인, 사이트목록.find(s => s.domain_code === 선택도메인)?.name)}</Text>
             : <Text type="secondary">사이트를 먼저 선택하세요</Text>
           }
         </div>

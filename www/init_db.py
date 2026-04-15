@@ -107,6 +107,22 @@ def create_tables():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_kw_status ON keyword_assignments(status)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_kw_unique ON keyword_assignments(workspace, domain, line_num)"))
 
+        # 마이그레이션: build_history.workspace 컬럼 추가 (없으면 추가)
+        try:
+            conn.execute(text("ALTER TABLE build_history ADD COLUMN workspace TEXT"))
+            conn.commit()
+            print("  [OK] build_history.workspace 컬럼 추가")
+        except Exception:
+            pass  # 이미 존재하면 무시
+
+        # 마이그레이션: build_history.site_code 컬럼 추가 (없으면 추가)
+        try:
+            conn.execute(text("ALTER TABLE build_history ADD COLUMN site_code TEXT"))
+            conn.commit()
+            print("  [OK] build_history.site_code 컬럼 추가")
+        except Exception:
+            pass  # 이미 존재하면 무시
+
         # 마이그레이션: flag 컬럼 추가 (없으면 추가)
         try:
             conn.execute(text("ALTER TABLE keyword_assignments ADD COLUMN flag TEXT DEFAULT ''"))
@@ -235,6 +251,34 @@ def create_tables():
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_share_ws ON share_tokens(workspace_name)"))
+
+        # 12. workspace_step_log (페이지 진입/이탈 단계별 로그)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS workspace_step_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                phase TEXT NOT NULL,
+                action TEXT NOT NULL,
+                user_id TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_step_log_ws ON workspace_step_log(workspace, domain)"))
+
+        # 13. user_session_log (세션 이벤트: 로그인/로그아웃/heartbeat)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_session_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                event TEXT NOT NULL,
+                menu TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_session_log_ws ON user_session_log(workspace, domain, user_id)"))
 
         conn.commit()
     print("  [OK] phase1_runs, phase1_logs, keyword_assignments, work_history, llm_usage_log, user_last_selected 테이블 생성")

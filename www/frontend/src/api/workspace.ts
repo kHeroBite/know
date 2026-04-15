@@ -1,5 +1,35 @@
 import 클라이언트 from './client'
 
+export interface StepLog {
+  id: number
+  workspace: string
+  domain: string
+  phase: string
+  action: string
+  user_id: string | null
+  created_at: string
+}
+
+export interface PhaseStats {
+  first_enter: string | null
+  last_leave: string | null
+  total_seconds: number
+  visit_count: number
+}
+
+export interface StepReportResponse {
+  logs: StepLog[]
+  phases: Record<string, PhaseStats>
+}
+
+export interface ParticipantStat {
+  user_id: string
+  first_login: string | null
+  last_activity: string | null
+  total_minutes: number
+  items_per_hour: number
+}
+
 export const workspaceAPI = {
   워크스페이스목록: () =>
     클라이언트.get('/workspaces'),
@@ -162,4 +192,23 @@ export const workspaceAPI = {
       finished_at: string | null
       created_at: string | null
     }>(`/workspaces/${encodeURIComponent(ws)}/snapshots`),
+
+  // 단계별 step-log
+  logStep: (workspace: string, data: { phase: string; action: string; user_id?: string; domain?: string }) =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/step-log`, data).catch(() => {}),
+
+  // 단계별 step-report
+  getStepReport: (workspace: string, domain: string) =>
+    클라이언트.get<StepReportResponse>(`/workspaces/${encodeURIComponent(workspace)}/step-report`, { params: { domain } }),
+
+  // 세션 이벤트
+  logSessionEvent: (workspace: string, data: { event: string; user_id: string; domain?: string; menu?: string }) =>
+    클라이언트.post(`/workspaces/${encodeURIComponent(workspace)}/session-event`, data).catch(() => {}),
+
+  // user_session_log 기반 참여자 통계
+  getParticipantStats: (workspace: string, domain: string) =>
+    클라이언트.get<{ workspace: string; participants: ParticipantStat[] }>(
+      `/workspaces/${encodeURIComponent(workspace)}/participant-stats`,
+      { params: { domain } }
+    ),
 }

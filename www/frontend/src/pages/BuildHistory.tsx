@@ -17,6 +17,8 @@ const { Title, Text } = Typography
 interface 빌드이력항목 {
   id: number
   domain: string
+  workspace?: string
+  site_code?: string
   status: string
   row_count: number
   prev_row_count: number | null
@@ -133,6 +135,16 @@ export default function BuildHistory() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 페이지 진입/이탈 step-log
+  useEffect(() => {
+    if (!selectedWorkspace || !selectedDomain) return
+    workspaceAPI.logStep(selectedWorkspace, { phase: 'build', action: 'enter', domain: selectedDomain })
+    return () => {
+      workspaceAPI.logStep(selectedWorkspace, { phase: 'build', action: 'leave', domain: selectedDomain })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkspace, selectedDomain])
 
   // 페이지 진입/새로고침/복귀 시 빌드 상태 복원 (pollRef, 빌드로그조회 선언 이후에 위치 — TDZ 방지)
   // mountKey를 의존성에 추가하여 같은 domain으로 복귀할 때도 재실행
@@ -279,6 +291,10 @@ export default function BuildHistory() {
     {
       title: '도메인', dataIndex: 'domain', key: 'domain', width: 110,
       render: (v: string) => <Tag color={getDomainColor(v)}>{v.toUpperCase()}</Tag>,
+    },
+    {
+      title: '사이트', dataIndex: 'site_code', key: 'site_code', width: 80,
+      render: (v: string | null) => v ? <Tag color="blue">{v.toUpperCase()}</Tag> : '-',
     },
     {
       title: '워크스페이스', dataIndex: 'workspace', key: 'workspace', width: 110,

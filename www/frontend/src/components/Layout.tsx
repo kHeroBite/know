@@ -13,6 +13,7 @@ import { useGlobalTaskStore } from '../stores/globalTaskStore'
 import { workspaceAPI } from '../api/workspace'
 import { isMenuEnabled } from '../App'
 import { useNotification } from '../hooks/useNotification'
+import { useHeartbeat } from '../hooks/useHeartbeat'
 import { formatWorkspace } from '../utils/displayFormat'
 
 
@@ -45,6 +46,9 @@ export default function Layout() {
 
   // 알림 WebSocket 훅
   useNotification(user?.user_id || null)
+
+  // 세션 heartbeat (30초 간격)
+  useHeartbeat(selectedWorkspace, user, selectedDomain)
 
   // ─── 핫키 표시 (REQ-17) ─────────────────────────────
   const 핫키기본값: Record<string, string> = {

@@ -114,8 +114,20 @@ class BuildService:
                 detail=f"도메인 '{domain}'에 이미 빌드 중입니다. (id={실행중.id})",
             )
 
+        # 워크스페이스 상태에서 site_code 읽기
+        ws_site_code = None
+        if workspace:
+            try:
+                from services.workspace_service import _read_state
+                ws_state = _read_state()
+                ws_site_code = ws_state.get(workspace, {}).get("site_code")
+            except Exception:
+                pass
+
         bh = BuildHistory(
             domain=domain,
+            workspace=workspace or None,
+            site_code=ws_site_code,
             build_type="full",
             status="running",
             started_at=datetime.now(),

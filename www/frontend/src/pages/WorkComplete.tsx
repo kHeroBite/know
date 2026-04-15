@@ -1,20 +1,21 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Card, Alert, Typography, Space, Row, Col, Statistic, Table, Tag,
-  Checkbox, Input, Select, Button, Modal, message, Descriptions, Spin, Form,
+  Checkbox, Input, Button, Modal, message, Descriptions, Spin, Form, Collapse,
 } from 'antd'
 import {
   CheckCircleOutlined, ClockCircleOutlined, TeamOutlined, DatabaseOutlined,
-  ShareAltOutlined, MailOutlined, CopyOutlined,
+  ShareAltOutlined, MailOutlined, CopyOutlined, ExclamationCircleFilled,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
-import { workspaceAPI } from '../api/workspace'
-import { formatWorkspace, formatSite } from '../utils/displayFormat'
-import { listSites, type Site } from '../api/site'
+import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
+import { formatWorkspace } from '../utils/displayFormat'
+
 import { backupAPI, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
 import ReportPanel from '../components/ReportPanel'
+import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 
@@ -67,13 +68,7 @@ function formatDuration(startIso: string | null | undefined, endIso: string | nu
   return `${s}초`
 }
 
-function defaultBackupFolder(domain: string, siteName: string | null): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const site = siteName ? siteName.replace(/\s+/g, '_') : 'site'
-  return `${domain}_${site}_${ts}`
-}
+
 
 export default function WorkComplete() {
   const navigate = useNavigate()
@@ -82,11 +77,10 @@ export default function WorkComplete() {
   const [loading, setLoading] = useState(true)
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
-  const [sites, setSites] = useState<Site[]>([])
+
   const [siteCode, setSiteCode] = useState<string | null>(null)
   const [doBackup, setDoBackup] = useState(true)
-  const [backupFolder, setBackupFolder] = useState('')
-  const [folderTouched, setFolderTouched] = useState(false)
+  const [backupSuffix, setBackupSuffix] = useState('')
   const [finalizing, setFinalizing] = useState(false)
 
   // finished 뷰 전용
@@ -99,6 +93,10 @@ export default function WorkComplete() {
   const [emailForm] = Form.useForm<{ to: string }>()
   const [emailSending, setEmailSending] = useState(false)
 
+  // 단계별 리포트 (isFinished 후 조회)
+  const [stepReport, setStepReport] = useState<StepReportResponse | null>(null)
+  const [participantStats, setParticipantStats] = useState<ParticipantStat[] | null>(null)
+
   const loadAll = useCallback(async () => {
     if (!selectedWorkspace) {
       setLoading(false)
@@ -106,14 +104,16 @@ export default function WorkComplete() {
     }
     setLoading(true)
     try {
-      const [snapRes, partRes, siteList] = await Promise.all([
+      const [snapRes, partRes, wsList] = await Promise.all([
         workspaceAPI.getWorkspaceSnapshots(selectedWorkspace).catch(() => ({ data: null as any })),
         workspaceAPI.getParticipantsStats(selectedWorkspace).catch(() => ({ data: { participants: [] } })),
-        listSites().catch(() => [] as Site[]),
+        workspaceAPI.워크스페이스목록().catch(() => ({ data: [] as any[] })),
       ])
       if (snapRes.data) setSnapshot(snapRes.data)
       setParticipants(partRes.data?.participants || [])
-      setSites(siteList)
+      // 현재 워크스페이스의 site_code 추출
+      const wsInfo = (wsList.data || []).find((w: any) => w.name === selectedWorkspace)
+      setSiteCode(wsInfo?.site_code || null)
 
       // finished 뷰 — 해당 워크스페이스에 연결된 최신 백업 조회
       if (phase === 'finished' && selectedDomain) {
@@ -145,27 +145,54 @@ export default function WorkComplete() {
     loadAll()
   }, [loadAll])
 
+  // 페이지 진입/이탈 step-log
   useEffect(() => {
-    if (!folderTouched && selectedDomain) {
-      const found = siteCode ? sites.find(s => s.site_code === siteCode) : null
-      setBackupFolder(defaultBackupFolder(selectedDomain, found?.name || null))
+    if (!selectedWorkspace || !selectedDomain) return
+    workspaceAPI.logStep(selectedWorkspace, { phase: 'complete', action: 'enter', domain: selectedDomain })
+    return () => {
+      workspaceAPI.logStep(selectedWorkspace, { phase: 'complete', action: 'leave', domain: selectedDomain })
     }
-  }, [siteCode, sites, selectedDomain, folderTouched])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkspace, selectedDomain])
+
+  // isFinished 시 step-report + 참여자 통계 조회
+  useEffect(() => {
+    if (phase !== 'finished' || !selectedWorkspace || !selectedDomain) return
+    workspaceAPI.getStepReport(selectedWorkspace, selectedDomain)
+      .then(res => setStepReport(res.data))
+      .catch(() => {})
+    workspaceAPI.getParticipantStats(selectedWorkspace, selectedDomain)
+      .then(res => setParticipantStats(res.data?.participants || []))
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selectedWorkspace, selectedDomain])
+
+  // 백업 suffix 초기값: YYYYMMDD_HHMMSS
+  useEffect(() => {
+    if (!backupSuffix) {
+      const now = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      setBackupSuffix(`${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const isFinished = phase === 'finished'
   const isComplete = phase === 'complete'
 
   const handleFinalize = () => {
     if (!selectedWorkspace) return
+    const fixedPrefix = `${selectedDomain}_${siteCode ? siteCode.toUpperCase() : 'site'}_`
+    const fullBackupFolder = fixedPrefix + backupSuffix
     Modal.confirm({
       title: '정말 완료 처리하시겠습니까?',
       content: (
         <div>
           <p>이 작업은 되돌릴 수 없습니다.</p>
           {doBackup
-            ? <p>백업 폴더: <code>{backupFolder}</code></p>
+            ? <p>백업 폴더: <code>{fullBackupFolder}</code></p>
             : <p>⚠️ 백업 없이 바로 적용됩니다.</p>}
-          {siteCode && <p>사이트: {formatSite(siteCode, sites.find(s => s.site_code === siteCode)?.name)}</p>}
+          {siteCode && <p>사이트: {siteCode.toUpperCase()}</p>}
         </div>
       ),
       okText: '완료 처리',
@@ -175,9 +202,9 @@ export default function WorkComplete() {
         setFinalizing(true)
         try {
           await useWorkspaceStore.getState().finalizeComplete(selectedWorkspace, {
-            backup_folder: doBackup ? backupFolder : undefined,
+            backup_folder: doBackup ? fullBackupFolder : undefined,
             skip_backup: !doBackup,
-            site_id: siteCode ? sites.find(s => s.site_code === siteCode)?.id ?? null : null,
+            site_id: null,
           })
           message.success('워크스페이스가 완료 처리되었습니다.')
           await loadAll()
@@ -314,11 +341,14 @@ export default function WorkComplete() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3}>
-        <CheckCircleOutlined style={{ marginRight: 8 }} />
-        작업 완료 대시보드 — {formatWorkspace(selectedWorkspace, selectedDomain, selectedDomainLabel)}
-      </Title>
+    <div>
+      <PageHeader
+        title={`작업 완료 대시보드 — ${formatWorkspace(selectedWorkspace, selectedDomain, selectedDomainLabel)}`}
+        showPrev={isComplete}
+        prevLabel="이전단계로"
+        onPrev={goBackToVerify}
+      />
+      <div style={{ padding: '0 24px 24px' }}>
 
       {isFinished && (
         <Alert
@@ -330,6 +360,15 @@ export default function WorkComplete() {
         />
       )}
 
+      <Alert
+        type="error"
+        showIcon
+        icon={<ExclamationCircleFilled style={{ color: '#ff4d4f' }} />}
+        message={<strong>⚠️ 완료 처리 후에는 절대 되돌릴 수 없습니다</strong>}
+        description="최종 완료 처리 시 모든 작업 이력이 확정되며, 어떠한 경우에도 이전 단계로 돌아갈 수 없습니다. 백업 폴더 경로, 사전 개수 등을 반드시 확인 후 완료 버튼을 누르세요."
+        style={{ marginBottom: 16, borderColor: '#ff4d4f' }}
+      />
+
       {isComplete && (
         <Alert
           type="info"
@@ -337,7 +376,6 @@ export default function WorkComplete() {
           description="필요하면 이전 단계(사전 검증)로 되돌아갈 수 있습니다."
           showIcon
           style={{ marginBottom: 16 }}
-          action={<Button size="small" onClick={goBackToVerify}>이전단계로</Button>}
         />
       )}
 
@@ -420,28 +458,26 @@ export default function WorkComplete() {
                 백업 생성 (권장)
               </Checkbox>
             </div>
-            <Row gutter={16}>
-              <Col xs={24} md={14}>
-                <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                백업 폴더명
+                {siteCode && <Tag color="blue" style={{ marginLeft: 8 }}>사이트: {siteCode.toUpperCase()}</Tag>}
+              </Text>
+              <Space.Compact style={{ width: '100%', marginTop: 4 }}>
                 <Input
-                  value={backupFolder}
+                  value={`${selectedDomain}_${siteCode ? siteCode.toUpperCase() : 'site'}_`}
+                  disabled
+                  style={{ width: 'auto', flex: '0 0 auto', background: '#f5f5f5', color: '#666' }}
+                />
+                <Input
+                  value={backupSuffix}
                   disabled={!doBackup}
-                  onChange={e => { setBackupFolder(e.target.value); setFolderTouched(true) }}
-                  placeholder={`${selectedDomain}_site_YYYYMMDD_HHMMSS`}
+                  onChange={e => setBackupSuffix(e.target.value)}
+                  placeholder="YYYYMMDD_HHMMSS"
+                  style={{ flex: 1 }}
                 />
-              </Col>
-              <Col xs={24} md={10}>
-                <Text type="secondary" style={{ fontSize: 12 }}>사이트 선택 (선택사항)</Text>
-                <Select
-                  style={{ width: '100%' }}
-                  placeholder="사이트를 선택하세요"
-                  allowClear
-                  value={siteCode ?? undefined}
-                  onChange={v => setSiteCode(v ?? null)}
-                  options={sites.map(s => ({ value: s.site_code, label: formatSite(s.site_code, s.name) }))}
-                />
-              </Col>
-            </Row>
+              </Space.Compact>
+            </div>
             <div style={{ textAlign: 'right' }}>
               <Button
                 type="primary"
@@ -449,7 +485,7 @@ export default function WorkComplete() {
                 size="large"
                 loading={finalizing}
                 onClick={handleFinalize}
-                disabled={doBackup && !backupFolder.trim()}
+                disabled={doBackup && !backupSuffix.trim()}
               >
                 완료 처리
               </Button>
@@ -576,6 +612,73 @@ export default function WorkComplete() {
           </Modal>
         </>
       )}
+
+      {isFinished && stepReport && Object.keys(stepReport.phases).length > 0 && (
+        <Card title="📊 단계별 작업 시간" style={{ marginTop: 16 }}>
+          <Table
+            size="small"
+            dataSource={Object.entries(stepReport.phases).map(([phase, stats]) => ({
+              phase, ...stats
+            }))}
+            columns={[
+              { title: '단계', dataIndex: 'phase', key: 'phase' },
+              { title: '최초 진입', dataIndex: 'first_enter', key: 'first_enter', render: (v: string | null) => v || '-' },
+              { title: '마지막 이탈', dataIndex: 'last_leave', key: 'last_leave', render: (v: string | null) => v || '-' },
+              {
+                title: '총 소요시간', dataIndex: 'total_seconds', key: 'total_seconds',
+                render: (s: number) => s > 0 ? `${Math.floor(s / 60)}분 ${s % 60}초` : '-',
+              },
+              { title: '방문 횟수', dataIndex: 'visit_count', key: 'visit_count' },
+            ]}
+            rowKey="phase"
+            pagination={false}
+          />
+          {stepReport.logs.length > 0 && (
+            <Collapse style={{ marginTop: 8 }}>
+              <Collapse.Panel header="전환 히스토리 상세" key="1">
+                <Table
+                  size="small"
+                  dataSource={stepReport.logs}
+                  columns={[
+                    { title: '시각', dataIndex: 'created_at', key: 'created_at', width: 160 },
+                    { title: '단계', dataIndex: 'phase', key: 'phase', width: 100 },
+                    { title: '액션', dataIndex: 'action', key: 'action', width: 80 },
+                    { title: '사용자', dataIndex: 'user_id', key: 'user_id' },
+                  ]}
+                  rowKey="id"
+                  pagination={{ pageSize: 20 }}
+                />
+              </Collapse.Panel>
+            </Collapse>
+          )}
+        </Card>
+      )}
+
+      {isFinished && participantStats && participantStats.length > 0 && (
+        <Card title="👥 참여자 세션 통계" style={{ marginTop: 16 }}>
+          <Table
+            size="small"
+            dataSource={participantStats}
+            columns={[
+              { title: '작업자', dataIndex: 'user_id', key: 'user_id' },
+              { title: '첫 로그인', dataIndex: 'first_login', key: 'first_login', render: (v: string | null) => v || '-' },
+              { title: '마지막 활동', dataIndex: 'last_activity', key: 'last_activity', render: (v: string | null) => v || '-' },
+              {
+                title: '총 체류시간', dataIndex: 'total_minutes', key: 'total_minutes',
+                render: (m: number) => m > 0 ? `${m}분` : '-',
+              },
+              {
+                title: '건/h', dataIndex: 'items_per_hour', key: 'items_per_hour',
+                render: (v: number) => v > 0 ? `${v.toFixed(1)}건/h` : '-',
+              },
+            ]}
+            rowKey="user_id"
+            pagination={false}
+          />
+        </Card>
+      )}
+
+      </div>
     </div>
   )
 }

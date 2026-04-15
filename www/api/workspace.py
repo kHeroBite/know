@@ -49,6 +49,10 @@ from services.workspace_service import (
     prepare_complete,
     finalize_complete,
     get_participants_stats,
+    step_log_service,
+    step_report_service,
+    session_event_service,
+    participant_stats_service,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -321,6 +325,7 @@ def link_domain_handler(
     아이디 = current.get("user_id", "")
     connected_by = f"{이름}({아이디})" if 이름 else 아이디
 
+    site_code = None
     if 요청.site_code:
         site = site_service.get_site_by_code(요청.site_code, db)
         if not site:
@@ -328,12 +333,13 @@ def link_domain_handler(
         if site.get("orphaned"):
             raise HTTPException(status_code=400, detail="연결 끊긴 사이트는 연결할 수 없습니다")
         domain = site["domain_code"]
+        site_code = 요청.site_code
     elif 요청.domain:
         domain = 요청.domain
     else:
         raise HTTPException(status_code=400, detail="site_code 또는 domain 중 하나는 필수입니다")
 
-    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version)
+    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code)
 
 
 @라우터.post("/{name}/cancel-connect")
@@ -661,3 +667,61 @@ def participants_api(
     """kw_{ws} 기반 참여자별 R/W 통계."""
     participants = get_participants_stats(name, db)
     return {"workspace": name, "participants": participants}
+
+
+class StepLogRequest(BaseModel):
+    phase: str
+    action: str
+    user_id: Optional[str] = None
+    domain: Optional[str] = None
+
+
+@라우터.post("/{name}/step-log", status_code=201)
+def step_log_api(
+    name: str,
+    body: StepLogRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """페이지 진입/이탈 단계 로그 기록."""
+    domain = body.domain or ""
+    user_id = body.user_id or current_user.get("user_id")
+    return step_log_service(name, domain, body.phase, body.action, user_id)
+
+
+@라우터.get("/{name}/step-report")
+def step_report_api(
+    name: str,
+    domain: str = "",
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """단계별 체류시간 리포트 조회."""
+    return step_report_service(name, domain)
+
+
+class SessionEventRequest(BaseModel):
+    event: str
+    user_id: str
+    domain: Optional[str] = None
+    menu: Optional[str] = None
+
+
+@라우터.post("/{name}/session-event", status_code=201)
+async def session_event_api(
+    name: str,
+    body: SessionEventRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """세션 이벤트(login/logout/heartbeat) 기록."""
+    domain = body.domain or ""
+    return session_event_service(name, domain, body.user_id, body.event, body.menu)
+
+
+@라우터.get("/{name}/participant-stats")
+def participant_stats_api(
+    name: str,
+    domain: str = "",
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """user_session_log 기반 참여자 체류시간 집계."""
+    stats = participant_stats_service(name, domain)
+    return {"workspace": name, "participants": stats}
