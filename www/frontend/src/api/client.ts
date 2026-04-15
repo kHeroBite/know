@@ -12,7 +12,7 @@ const HTTP_ERROR_MESSAGES: Record<number, string> = {
 
 const 클라이언트 = axios.create({
   baseURL: '/api',
-  timeout: 15000,
+  timeout: 60000,
 })
 
 클라이언트.interceptors.request.use(config => {
