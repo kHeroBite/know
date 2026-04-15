@@ -128,11 +128,22 @@ def get_all_build_history_service(
             "FROM build_history ORDER BY id DESC LIMIT 50"
         ).fetchall()
         items = [dict(r) for r in rows]
-        # 사이트 목록 캐시 (site_code 역매핑용)
-        _site_map = {}
+        # 사이트 목록 캐시 (site_code 역매핑 + 한글명)
+        _site_map = {}  # domain_code → site_code
+        _site_name_map = {}  # site_code → name
         try:
-            for s in conn.execute("SELECT site_code, domain_code FROM sites").fetchall():
+            for s in conn.execute("SELECT site_code, domain_code, name FROM sites").fetchall():
                 _site_map[s[1].lower() if s[1] else ''] = s[0]
+                _site_name_map[s[0].lower() if s[0] else ''] = s[2] or ''
+        except Exception:
+            pass
+        # 도메인 한글명 캐시
+        _domain_name_map = {}
+        try:
+            import json as _json
+            _meta_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "domain", ".meta.json")
+            if os.path.isfile(_meta_path):
+                _domain_name_map = _json.load(open(_meta_path, encoding='utf-8'))
         except Exception:
             pass
         for it in items:
@@ -143,6 +154,10 @@ def get_all_build_history_service(
             # site_code가 비어있으면 domain_code로 역매핑
             if not it.get("site_code") and it.get("domain"):
                 it["site_code"] = _site_map.get(it["domain"].lower(), None)
+            # 한글명 추가
+            it["domain_name"] = _domain_name_map.get(it.get("domain", ""), None)
+            sc = (it.get("site_code") or "").lower()
+            it["site_name"] = _site_name_map.get(sc, None)
         agg = {}
         for it in items:
             d = it.get("domain", "unknown")
@@ -153,8 +168,20 @@ def get_all_build_history_service(
                 agg[d]["success"] += 1
             elif it["status"] == "failed":
                 agg[d]["failed"] += 1
-        domain_stats = [{"domain": k, **v} for k, v in agg.items()]
-        return {"items": items, "domain_stats": domain_stats}
+        domain_stats = [{"domain": k, "domain_name": _domain_name_map.get(k, None), **v} for k, v in agg.items()]
+        # 사이트별 통계
+        site_agg = {}
+        for it in items:
+            sc = it.get("site_code") or "unknown"
+            if sc not in site_agg:
+                site_agg[sc] = {"total": 0, "success": 0, "failed": 0}
+            site_agg[sc]["total"] += 1
+            if it["status"] in ("success", "completed"):
+                site_agg[sc]["success"] += 1
+            elif it["status"] == "failed":
+                site_agg[sc]["failed"] += 1
+        site_stats = [{"site_code": k, "site_name": _site_name_map.get(k.lower(), None), **v} for k, v in site_agg.items()]
+        return {"items": items, "domain_stats": domain_stats, "site_stats": site_stats}
     finally:
         conn.close()
 

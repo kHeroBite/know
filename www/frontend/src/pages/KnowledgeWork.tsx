@@ -1175,7 +1175,7 @@ export default function KnowledgeWork() {
           <Button
             icon={<CheckCircleOutlined />}
             type="primary"
-            onClick={(e) => { e.stopPropagation(); setCompleteModalOpen(true) }}
+            onClick={(e) => { e.stopPropagation(); handleCompleteWithMode('by_history') }}
           >
             다음단계로
           </Button>

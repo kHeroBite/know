@@ -29,7 +29,7 @@ interface WorkspaceState {
   lastCompleteResult: any | null
   completeWorkspace: (wsName: string, domain: string, skipBackup?: boolean) => Promise<any>
   prepareComplete: (wsName: string, domain: string) => Promise<any>
-  finalizeComplete: (wsName: string, opts: { backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) => Promise<any>
+  finalizeComplete: (wsName: string, opts: { domain?: string; backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) => Promise<any>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(

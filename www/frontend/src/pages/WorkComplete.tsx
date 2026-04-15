@@ -215,6 +215,7 @@ export default function WorkComplete() {
         setFinalizing(true)
         try {
           await useWorkspaceStore.getState().finalizeComplete(selectedWorkspace, {
+            domain: selectedDomain || undefined,
             backup_folder: doBackup ? fullBackupFolder : undefined,
             skip_backup: !doBackup,
             site_id: null,
@@ -393,7 +394,7 @@ export default function WorkComplete() {
       )}
 
       <Row gutter={16}>
-        <Col xs={24} lg={14}>
+        <Col xs={24} lg={12}>
           <Card
             size="small"
             title={<><DatabaseOutlined /> 사전 개수 (Before / After)</>}
@@ -409,8 +410,36 @@ export default function WorkComplete() {
           </Card>
         </Col>
 
+        {isComplete && (
+          <Col xs={24} lg={12}>
+            <Card size="small" title="사이트 백업" style={{ marginBottom: 16 }}>
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <div>
+                  <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>
+                    백업 생성 (권장)
+                  </Checkbox>
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
+                  <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontFamily: 'monospace', fontSize: 14 }}>
+                    <Text strong>{selectedDomain}_{siteCode || selectedDomain}_</Text>
+                    <Input
+                      value={backupSuffix}
+                      disabled={!doBackup}
+                      onChange={e => setBackupSuffix(e.target.value)}
+                      placeholder="YYYYMMDD_HHMMSS"
+                      size="small"
+                      style={{ width: 180, marginLeft: 0, border: 'none', borderBottom: '1px solid #d9d9d9', background: 'transparent', fontFamily: 'monospace', fontSize: 14 }}
+                    />
+                  </div>
+                </div>
+              </Space>
+            </Card>
+          </Col>
+        )}
+
         {isFinished && (
-          <Col xs={24} lg={10}>
+          <Col xs={24} lg={12}>
             <Card
               size="small"
               title={<><ClockCircleOutlined /> 시간</>}
@@ -469,30 +498,6 @@ export default function WorkComplete() {
 
       {isComplete && (
         <>
-          <Card size="small" title="최종 완료 처리">
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <div>
-                <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>
-                  백업 생성 (권장)
-                </Checkbox>
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
-                <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontFamily: 'monospace', fontSize: 14 }}>
-                  <Text strong>{selectedDomain}_{siteCode || selectedDomain}_</Text>
-                  <Input
-                    value={backupSuffix}
-                    disabled={!doBackup}
-                    onChange={e => setBackupSuffix(e.target.value)}
-                    placeholder="YYYYMMDD_HHMMSS"
-                    size="small"
-                    style={{ width: 180, marginLeft: 0, border: 'none', borderBottom: '1px solid #d9d9d9', background: 'transparent', fontFamily: 'monospace', fontSize: 14 }}
-                  />
-                </div>
-              </div>
-            </Space>
-          </Card>
-
           <Alert
             type="error"
             showIcon

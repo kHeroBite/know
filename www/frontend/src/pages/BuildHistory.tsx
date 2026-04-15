@@ -78,6 +78,7 @@ export default function BuildHistory() {
   // 전체 이력
   const [전체이력, set전체이력] = useState<빌드이력항목[]>([])
   const [도메인통계목록, set도메인통계목록] = useState<도메인통계[]>([])
+  const [사이트통계목록, set사이트통계목록] = useState<any[]>([])
   const [이력로딩, set이력로딩] = useState(false)
 
   // 현재 도메인 이력 조회 + 최근 빌드 상태 복원
@@ -97,6 +98,7 @@ export default function BuildHistory() {
       const res: any = await 빌드API.전체이력()
       set전체이력(res.data?.items || [])
       set도메인통계목록(res.data?.domain_stats || [])
+      set사이트통계목록(res.data?.site_stats || [])
     } catch {
       message.error('빌드 이력 조회 실패')
     } finally {
@@ -289,12 +291,19 @@ export default function BuildHistory() {
   const 전체이력컬럼 = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 50 },
     {
-      title: '도메인', dataIndex: 'domain', key: 'domain', width: 110,
-      render: (v: string) => <Tag color={getDomainColor(v)}>{v.toUpperCase()}</Tag>,
+      title: '도메인', dataIndex: 'domain', key: 'domain', width: 140,
+      render: (_: string, r: any) => {
+        const label = r.domain_name ? `${r.domain_name}(${r.domain})` : r.domain
+        return <Tag color={getDomainColor(r.domain)}>{label}</Tag>
+      },
     },
     {
-      title: '사이트', dataIndex: 'site_code', key: 'site_code', width: 80,
-      render: (v: string | null) => v ? <Tag color="blue">{v.toUpperCase()}</Tag> : '-',
+      title: '사이트', dataIndex: 'site_code', key: 'site_code', width: 140,
+      render: (_: string | null, r: any) => {
+        if (!r.site_code) return '-'
+        const label = r.site_name ? `${r.site_name}(${r.site_code})` : r.site_code
+        return <Tag color="blue">{label}</Tag>
+      },
     },
     {
       title: '워크스페이스', dataIndex: 'workspace', key: 'workspace', width: 110,
@@ -436,21 +445,41 @@ export default function BuildHistory() {
         </Col>
       </Row>
 
-      {/* 도메인별 빌드 현황 차트 */}
-      {차트데이터.length > 0 && (
-        <Card size="small" title="도메인별 빌드 현황">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={차트데이터} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip />
-              <Bar dataKey="성공" stackId="a" fill="#52c41a" />
-              <Bar dataKey="실패" stackId="a" fill="#ff4d4f" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-      )}
+      {/* 도메인별 + 사이트별 빌드 현황 차트 */}
+      <Row gutter={16}>
+        {차트데이터.length > 0 && (
+          <Col xs={24} lg={12}>
+            <Card size="small" title="도메인별 빌드 현황">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={차트데이터} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip />
+                  <Bar dataKey="성공" stackId="a" fill="#52c41a" />
+                  <Bar dataKey="실패" stackId="a" fill="#ff4d4f" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+        )}
+        {사이트통계목록.length > 0 && (
+          <Col xs={24} lg={12}>
+            <Card size="small" title="사이트별 빌드 현황">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={사이트통계목록.map(s => ({ name: s.site_name ? `${s.site_name}(${s.site_code})` : s.site_code, 성공: s.success, 실패: s.failed, 전체: s.total }))} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={11} />
+                  <YAxis fontSize={12} />
+                  <Tooltip />
+                  <Bar dataKey="성공" stackId="a" fill="#1677ff" />
+                  <Bar dataKey="실패" stackId="a" fill="#ff4d4f" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </Col>
+        )}
+      </Row>
 
       {/* 전체 이력 테이블 */}
       <Card
