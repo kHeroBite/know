@@ -81,7 +81,7 @@ function buildCardLabel(ws: 워크스페이스항목, sites: Site[], domains: {i
   const domainInfo = ws.domain ? domains.find(d => d.id?.toLowerCase() === ws.domain?.toLowerCase()) : null
   const domainLabel = domainInfo?.name || ws.domain || ''
   if (site && ws.domain) {
-    return `${site.name}(${site.site_code?.toUpperCase() || ''})/${domainLabel}(${ws.domain})`
+    return `${site.name}(${site.site_code || ''})/${domainLabel}(${ws.domain})`
   }
   if (ws.domain && domainInfo?.name) {
     return `${domainLabel}(${ws.domain})`
