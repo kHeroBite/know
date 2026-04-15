@@ -22,11 +22,15 @@ const { Title, Text } = Typography
 interface Snapshot {
   workspace: string
   domain: string | null
-  before: Record<string, number> | null
-  after: Record<string, number> | null
+  phase: string
+  connected_at: string | null
   prepared_at: string | null
   finished_at: string | null
-  created_at: string | null
+  snapshot_before: Record<string, number> | null
+  snapshot_after: Record<string, number> | null
+  before?: Record<string, number> | null
+  after?: Record<string, number> | null
+  created_at?: string | null
 }
 
 interface Participant {
@@ -105,7 +109,7 @@ export default function WorkComplete() {
     setLoading(true)
     try {
       const [snapRes, partRes, wsList] = await Promise.all([
-        workspaceAPI.getWorkspaceSnapshots(selectedWorkspace).catch(() => ({ data: null as any })),
+        workspaceAPI.getWorkspaceSnapshots(selectedWorkspace, selectedDomain || undefined).catch(() => ({ data: null as any })),
         workspaceAPI.getParticipantsStats(selectedWorkspace).catch(() => ({ data: { participants: [] } })),
         workspaceAPI.워크스페이스목록().catch(() => ({ data: [] as any[] })),
       ])
@@ -276,8 +280,8 @@ export default function WorkComplete() {
   }
 
   const dictRows = useMemo(() => {
-    const before = snapshot?.before || {}
-    const after = snapshot?.after || {}
+    const before = snapshot?.snapshot_before || snapshot?.before || {}
+    const after = snapshot?.snapshot_after || snapshot?.after || {}
     return DICT_KEYS.map(({ key, label }) => {
       const b = before[key] ?? 0
       const a = after[key]
@@ -397,11 +401,11 @@ export default function WorkComplete() {
               style={{ marginBottom: 16 }}
             >
               <Descriptions column={1} size="small">
-                <Descriptions.Item label="접속/시작">{formatDateTime(snapshot?.created_at)}</Descriptions.Item>
+                <Descriptions.Item label="접속/시작">{formatDateTime(snapshot?.connected_at || snapshot?.created_at)}</Descriptions.Item>
                 <Descriptions.Item label="완료 준비(prepared)">{formatDateTime(snapshot?.prepared_at)}</Descriptions.Item>
                 <Descriptions.Item label="완료(finished)">{formatDateTime(snapshot?.finished_at)}</Descriptions.Item>
                 <Descriptions.Item label="경과 시간">
-                  {formatDuration(snapshot?.created_at, snapshot?.finished_at)}
+                  {formatDuration(snapshot?.connected_at || snapshot?.created_at, snapshot?.finished_at)}
                 </Descriptions.Item>
               </Descriptions>
             </Card>

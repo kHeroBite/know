@@ -182,16 +182,18 @@ export const workspaceAPI = {
       `/workspaces/${encodeURIComponent(ws)}/participants`
     ),
 
-  getWorkspaceSnapshots: (ws: string) =>
+  getWorkspaceSnapshots: (ws: string, domain?: string) =>
     클라이언트.get<{
       workspace: string
       domain: string | null
-      before: Record<string, number> | null
-      after: Record<string, number> | null
+      phase: string
+      connected_at: string | null
       prepared_at: string | null
       finished_at: string | null
-      created_at: string | null
-    }>(`/workspaces/${encodeURIComponent(ws)}/snapshots`),
+      snapshot_before: Record<string, number> | null
+      snapshot_after: Record<string, number> | null
+      participants: any[]
+    }>(`/workspaces/${encodeURIComponent(ws)}/completion-dashboard`, { params: { domain: domain || '' } }),
 
   // 단계별 step-log
   logStep: (workspace: string, data: { phase: string; action: string; user_id?: string; domain?: string }) =>
