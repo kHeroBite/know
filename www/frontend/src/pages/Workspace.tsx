@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { workspaceAPI } from '../api/workspace'
+import { formatDomain } from '../utils/displayFormat'
 import { listSites, type Site } from '../api/site'
 import { assignmentApi } from '../api/assignment'
 import { useAuthStore } from '../stores/authStore'
@@ -495,7 +496,7 @@ export default function Workspace() {
                         <Badge color={isSelected ? 'white' : 'blue'} text={<Text style={{ fontSize: 13, color: isSelected ? '#fff' : undefined }}>{ws.domain}</Text>} />
                       ) : (
                         <Text type="secondary" style={{ fontSize: 12, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
-                          연결된 도메인 없음
+                          연결된 사이트 없음
                         </Text>
                       )}
                     </div>
@@ -670,7 +671,7 @@ export default function Workspace() {
 
       {/* 사이트 연결 모달 */}
       <Modal
-        title={`사이트 연결 — ${연결팝업WS}`}
+        title={`사이트 연결 : ${연결팝업WS}`}
         open={!!연결팝업WS}
         onOk={연결확인핸들러}
         onCancel={() => {
@@ -715,6 +716,12 @@ export default function Workspace() {
           }}
           value={선택사이트}
         />
+        <div style={{ marginTop: 8, fontSize: 13 }}>
+          {선택도메인
+            ? <Text>도메인 : {formatDomain(선택도메인)}</Text>
+            : <Text type="secondary">사이트를 먼저 선택하세요</Text>
+          }
+        </div>
         <Select
           style={{ width: '100%', marginTop: 12 }}
           placeholder="jiana 버전 선택"

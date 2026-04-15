@@ -283,6 +283,7 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
 
 def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None) -> dict[str, Any]:
     """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana) → 성공:USED / 실패:FAILED."""
+    domain = domain.lower()  # 대소문자 정규화
     상태 = _read_state()
     ws상태 = 상태.get(ws_name, {"status": "IDLE", "domain": None})
     if ws상태.get("status") in ("USED", "CONNECTING"):
