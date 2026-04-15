@@ -57,7 +57,12 @@ interface 워크스페이스항목 {
 }
 
 function buildProgressLabel(wsName: string, domain: string | null, siteCode: string | null, sites: Site[], domains: {id: string, name: string | null}[], action: string): string {
-  const site = siteCode ? sites.find(s => s.site_code?.toLowerCase() === siteCode.toLowerCase()) : null
+  // site_code로 먼저 찾고, 없으면 domain_code로 역매핑
+  const site = siteCode
+    ? sites.find(s => s.site_code?.toLowerCase() === siteCode.toLowerCase())
+    : domain
+      ? sites.find(s => s.domain_code?.toLowerCase() === domain.toLowerCase())
+      : null
   const domainInfo = domain ? domains.find(d => d.id?.toLowerCase() === domain.toLowerCase()) : null
   const domainLabel = domainInfo?.name || domain || ''
   if (site && domain) {
@@ -67,13 +72,17 @@ function buildProgressLabel(wsName: string, domain: string | null, siteCode: str
 }
 
 function buildCardLabel(ws: 워크스페이스항목, sites: Site[], domains: {id: string, name: string | null}[]): string {
-  const site = ws.site_code ? sites.find(s => s.site_code?.toLowerCase() === ws.site_code?.toLowerCase()) : null
+  // site_code로 먼저 찾고, 없으면 domain_code로 역매핑
+  const site = ws.site_code
+    ? sites.find(s => s.site_code?.toLowerCase() === ws.site_code?.toLowerCase())
+    : ws.domain
+      ? sites.find(s => s.domain_code?.toLowerCase() === ws.domain?.toLowerCase())
+      : null
   const domainInfo = ws.domain ? domains.find(d => d.id?.toLowerCase() === ws.domain?.toLowerCase()) : null
   const domainLabel = domainInfo?.name || ws.domain || ''
   if (site && ws.domain) {
-    return `${site.name}(${ws.site_code?.toUpperCase() || ''})/${domainLabel}(${ws.domain})`
+    return `${site.name}(${site.site_code?.toUpperCase() || ''})/${domainLabel}(${ws.domain})`
   }
-  // site 없어도 도메인 한글명 표시
   if (ws.domain && domainInfo?.name) {
     return `${domainLabel}(${ws.domain})`
   }
