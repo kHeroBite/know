@@ -250,6 +250,13 @@ def freeze_service(db: Session, workspace: str, domain: str) -> dict:
     # 기존 데이터 삭제 (domain 기준)
     db.execute(text(f"DELETE FROM {tbl} WHERE domain=:dom"), {"dom": domain})
 
+    # 마지막 선택 키워드 기록 초기화 (재할당 시 이전 위치로 점프 방지)
+    try:
+        db.execute(text("DELETE FROM user_last_selected WHERE workspace=:ws AND domain=:dom"),
+                   {"ws": workspace, "dom": domain})
+    except Exception:
+        pass  # 테이블 미존재 시 무시
+
     # INSERT
     for i, kw in enumerate(keywords, 1):
         db.execute(text(f"""
