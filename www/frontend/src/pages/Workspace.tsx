@@ -51,8 +51,29 @@ interface 워크스페이스항목 {
   name: string
   status: 'IDLE' | 'USED' | 'CONNECTING' | 'FAILED'
   domain: string | null
+  site_code: string | null
   connected_by: string | null
   color: string | null
+}
+
+function buildProgressLabel(wsName: string, domain: string | null, siteCode: string | null, sites: Site[], domains: {id: string, name: string | null}[], action: string): string {
+  const site = siteCode ? sites.find(s => s.site_code?.toLowerCase() === siteCode.toLowerCase()) : null
+  const domainInfo = domain ? domains.find(d => d.id?.toLowerCase() === domain.toLowerCase()) : null
+  const domainLabel = domainInfo?.name || domain || ''
+  if (site && domain) {
+    return `${wsName}:${site.name}/${domainLabel} ${action}`
+  }
+  return `${wsName} ${action}`
+}
+
+function buildCardLabel(ws: 워크스페이스항목, sites: Site[], domains: {id: string, name: string | null}[]): string {
+  const site = ws.site_code ? sites.find(s => s.site_code?.toLowerCase() === ws.site_code?.toLowerCase()) : null
+  const domainInfo = ws.domain ? domains.find(d => d.id?.toLowerCase() === ws.domain?.toLowerCase()) : null
+  const domainLabel = domainInfo?.name || ws.domain || ''
+  if (site && ws.domain) {
+    return `${site.name}(${ws.site_code?.toUpperCase() || ''})/${domainLabel}(${ws.domain})`
+  }
+  return ws.domain || ''
 }
 
 export default function Workspace() {
@@ -199,7 +220,6 @@ export default function Workspace() {
 
     await executeConnect(wsName, domain, jianaVer, {
       onDone: async () => {
-        const elapsed = undefined  // 서버에서 elapsed 받으려면 별도 조회 필요
         message.success(`"${wsName}" 연결 완료`)
         set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
         await 목록조회()
@@ -213,10 +233,11 @@ export default function Workspace() {
         }
         await 목록조회()
       },
-    })
+    }, { label: buildProgressLabel(wsName, domain, siteCode, 사이트목록, 도메인목록, '연결 중') })
   }
 
   const 해제핸들러 = async (wsName: string) => {
+    const ws = 목록.find(w => w.name === wsName)
     await executeRelease(wsName, {
       onDone: async () => {
         if (selectedWorkspace === wsName) {
@@ -229,7 +250,7 @@ export default function Workspace() {
         message.error(err || '연결해제 실패')
         await 목록조회()
       },
-    })
+    }, { label: buildProgressLabel(wsName, ws?.domain ?? null, ws?.site_code ?? null, 사이트목록, 도메인목록, '연결 해제 중') })
   }
 
   const 선택해제핸들러 = () => {
@@ -262,7 +283,7 @@ export default function Workspace() {
         message.error(err || '초기화 실패')
         await 목록조회()
       },
-    })
+    }, { label: buildProgressLabel(wsName, domain, ws?.site_code ?? null, 사이트목록, 도메인목록, '초기화 중') })
   }
 
   const 취소핸들러 = async (wsName: string) => {
@@ -493,7 +514,7 @@ export default function Workspace() {
                   }}>
                     <div>
                       {ws.domain ? (
-                        <Badge color={isSelected ? 'white' : 'blue'} text={<Text style={{ fontSize: 13, color: isSelected ? '#fff' : undefined }}>{ws.domain}</Text>} />
+                        <Badge color={isSelected ? 'white' : 'blue'} text={<Text style={{ fontSize: 13, color: isSelected ? '#fff' : undefined }}>{buildCardLabel(ws, 사이트목록, 도메인목록)}</Text>} />
                       ) : (
                         <Text type="secondary" style={{ fontSize: 12, color: isSelected ? 'rgba(255,255,255,0.7)' : undefined }}>
                           연결된 사이트 없음

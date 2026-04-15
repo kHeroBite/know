@@ -18,13 +18,14 @@ export interface WorkspaceOpsSlice {
     domain: string,
     jianaVersion: string,
     callbacks?: TaskCallbacks,
+    options?: { label?: string },
   ) => Promise<void>
 
   /** 연결 진행 중 취소 */
   executeCancel: (wsName: string, callbacks?: TaskCallbacks) => Promise<void>
 
   /** 워크스페이스 연결 해제 (USED→IDLE) */
-  executeRelease: (wsName: string, callbacks?: TaskCallbacks) => Promise<void>
+  executeRelease: (wsName: string, callbacks?: TaskCallbacks, options?: { label?: string }) => Promise<void>
 
   /** 워크스페이스 재초기화 (해제 후 동일 도메인 재연결) */
   executeReinit: (
@@ -32,6 +33,7 @@ export interface WorkspaceOpsSlice {
     domain: string,
     jianaVersion: string | undefined,
     callbacks?: TaskCallbacks,
+    options?: { label?: string },
   ) => Promise<void>
 
   executeCreate: (wsName: string, color: string | null, callbacks?: {
@@ -48,12 +50,12 @@ export function createWorkspaceOpsSlice(
   get: GetState,
 ): WorkspaceOpsSlice {
   return {
-    executeConnect: async (wsName, domain, jianaVersion, callbacks) => {
+    executeConnect: async (wsName, domain, jianaVersion, callbacks, options) => {
       const taskId = `ws-connect-${wsName}-${Date.now()}`
       const started = get()._startTask({
         id: taskId,
         type: '워크스페이스 연결',
-        label: `${wsName} 연결 중`,
+        label: options?.label ?? `${wsName} 연결 중`,
         percent: 0,
         status: 'running',
       })
@@ -132,12 +134,12 @@ export function createWorkspaceOpsSlice(
       callbacks?.onCancel?.()
     },
 
-    executeRelease: async (wsName, callbacks) => {
+    executeRelease: async (wsName, callbacks, options) => {
       const taskId = `ws-release-${wsName}-${Date.now()}`
       const started = get()._startTask({
         id: taskId,
         type: '워크스페이스 연결해제',
-        label: `${wsName} 연결해제 중`,
+        label: options?.label ?? `${wsName} 연결해제 중`,
         percent: 50,
         status: 'running',
       })
@@ -225,12 +227,12 @@ export function createWorkspaceOpsSlice(
     }
   },
 
-    executeReinit: async (wsName, domain, jianaVersion, callbacks) => {
+    executeReinit: async (wsName, domain, jianaVersion, callbacks, options) => {
       const taskId = `ws-reinit-${wsName}-${Date.now()}`
       const started = get()._startTask({
         id: taskId,
         type: '워크스페이스 초기화',
-        label: `${wsName} 초기화 중`,
+        label: options?.label ?? `${wsName} 초기화 중`,
         percent: 0,
         status: 'running',
       })

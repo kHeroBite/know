@@ -1,5 +1,24 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-15] 워크스페이스 프로그레스바/카드 한글 사이트명/도메인명 표시 (o3)
+
+> **작업 요약**: 전역 프로그레스바와 워크스페이스 카드에 한글 사이트명·도메인명을 표시하도록 개선.
+> - 전역 프로그레스바: `A 초기화 중` → `A:현대홈쇼핑/쇼핑몰 초기화 중` 형태
+> - 워크스페이스 카드: `mall` → `현대홈쇼핑(hmall)/쇼핑몰(mall)` 형태
+
+### 변경 파일 (2개)
+
+- `www/frontend/src/stores/workspaceOpsSlice.ts`: `executeConnect` / `executeRelease` / `executeReinit` 호출 시 `buildProgressLabel()` 헬퍼를 통해 `label` 생성 (한글 사이트명 + 도메인명 포함)
+- `www/frontend/src/pages/Workspace.tsx`: `buildProgressLabel` / `buildCardLabel` 헬퍼 함수 신규 추출 + 카드 표시 로직에 `buildCardLabel()` 적용
+
+### 핵심 설계
+
+- **buildProgressLabel(wsName, domain, siteCode, sites, domains, action)**: `sites` 목록에서 `site_code` 매칭으로 한글 사이트명 조회, `domains` 목록에서 도메인 ID 매칭으로 한글 도메인명 조회 → `WS명:사이트명/도메인명 액션중` 형태로 조합.
+- **buildCardLabel(ws, sites, domains)**: 카드에 `사이트명(사이트코드)/도메인명(도메인ID)` 형태로 표시. site/domain 없으면 graceful fallback.
+- 기존 하드코딩 `label` → 함수 추출로 일원화. 프로그레스바·카드 모두 동일 로직 공유.
+
+---
+
 ## [2026-04-15] 워크스페이스 UI 6개 항목 개선 (o3)
 
 > **작업 요약**: 빌드이력 도메인+사이트 표시, 사전검증 형태소 섹션 숨김, 작업완료 페이지 대폭 개선(PageHeader 통일/강력경고/단계별 시간 리포트/참여자 통계), 백업폴더명 UI 개선.
