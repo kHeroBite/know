@@ -27,7 +27,7 @@ def list_sites(db: Session) -> list[dict]:
             "s.created_at, s.updated_at, "
             "CASE WHEN d._SITE IS NULL THEN 1 ELSE 0 END as orphaned "
             "FROM sites s "
-            "LEFT JOIN domains d ON s.domain_code = d._SITE "
+            "LEFT JOIN domains d ON UPPER(s.domain_code) = UPPER(d._SITE) "
             "ORDER BY s.id ASC"
         )
     ).mappings().all()
@@ -42,7 +42,7 @@ def get_site_by_code(site_code: str, db: Session) -> Optional[dict]:
             "s.created_at, s.updated_at, "
             "CASE WHEN d._SITE IS NULL THEN 1 ELSE 0 END as orphaned "
             "FROM sites s "
-            "LEFT JOIN domains d ON s.domain_code = d._SITE "
+            "LEFT JOIN domains d ON UPPER(s.domain_code) = UPPER(d._SITE) "
             "WHERE s.site_code = :code"
         ),
         {"code": site_code},
