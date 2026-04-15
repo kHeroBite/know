@@ -114,13 +114,24 @@ class BuildService:
                 detail=f"도메인 '{domain}'에 이미 빌드 중입니다. (id={실행중.id})",
             )
 
-        # 워크스페이스 상태에서 site_code 읽기
+        # 워크스페이스 상태에서 site_code 읽기 (없으면 사이트 목록에서 domain_code 역매핑)
         ws_site_code = None
         if workspace:
             try:
                 from services.workspace_service import _read_state
                 ws_state = _read_state()
-                ws_site_code = ws_state.get(workspace, {}).get("site_code")
+                ws_info = ws_state.get(workspace, {})
+                ws_site_code = ws_info.get("site_code")
+                # site_code가 없으면 사이트 목록에서 domain_code로 역매핑
+                if not ws_site_code and ws_info.get("domain"):
+                    try:
+                        from services.workspace_service import list_sites_service
+                        for site in list_sites_service():
+                            if site.get("domain_code", "").lower() == ws_info["domain"].lower():
+                                ws_site_code = site.get("site_code")
+                                break
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
