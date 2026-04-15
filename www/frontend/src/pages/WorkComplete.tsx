@@ -360,14 +360,7 @@ export default function WorkComplete() {
         />
       )}
 
-      <Alert
-        type="error"
-        showIcon
-        icon={<ExclamationCircleFilled style={{ color: '#ff4d4f' }} />}
-        message={<strong>⚠️ 완료 처리 후에는 절대 되돌릴 수 없습니다</strong>}
-        description="최종 완료 처리 시 모든 작업 이력이 확정되며, 어떠한 경우에도 이전 단계로 돌아갈 수 없습니다. 백업 폴더 경로, 사전 개수 등을 반드시 확인 후 완료 버튼을 누르세요."
-        style={{ marginBottom: 16, borderColor: '#ff4d4f' }}
-      />
+
 
       {isComplete && (
         <Alert
@@ -451,36 +444,48 @@ export default function WorkComplete() {
       </Card>
 
       {isComplete && (
-        <Card size="small" title="최종 완료 처리">
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <div>
-              <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>
-                백업 생성 (권장)
-              </Checkbox>
-            </div>
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                백업 폴더명
-                {siteCode && <Tag color="blue" style={{ marginLeft: 8 }}>사이트: {siteCode.toUpperCase()}</Tag>}
-              </Text>
-              <Space.Compact style={{ width: '100%', marginTop: 4 }}>
-                <Input
-                  value={`${selectedDomain}_${siteCode ? siteCode.toUpperCase() : 'site'}_`}
-                  disabled
-                  style={{ width: 'auto', flex: '0 0 auto', background: '#f5f5f5', color: '#666' }}
-                />
-                <Input
-                  value={backupSuffix}
-                  disabled={!doBackup}
-                  onChange={e => setBackupSuffix(e.target.value)}
-                  placeholder="YYYYMMDD_HHMMSS"
-                  style={{ flex: 1 }}
-                />
-              </Space.Compact>
-            </div>
-            <div style={{ textAlign: 'right' }}>
+        <>
+          <Card size="small" title="최종 완료 처리">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <div>
+                <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>
+                  백업 생성 (권장)
+                </Checkbox>
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  백업 폴더명
+                  {siteCode && <Tag color="blue" style={{ marginLeft: 8 }}>사이트: {siteCode.toUpperCase()}</Tag>}
+                </Text>
+                <Space.Compact style={{ width: '100%', marginTop: 4 }}>
+                  <Input
+                    value={`${selectedDomain}_${siteCode ? siteCode.toUpperCase() : '(사이트코드 로딩중)'}_`}
+                    disabled
+                    style={{ width: 'auto', flex: '0 0 auto', background: '#f5f5f5', color: '#666' }}
+                  />
+                  <Input
+                    value={backupSuffix}
+                    disabled={!doBackup}
+                    onChange={e => setBackupSuffix(e.target.value)}
+                    placeholder="YYYYMMDD_HHMMSS"
+                    style={{ flex: 1 }}
+                  />
+                </Space.Compact>
+              </div>
+            </Space>
+          </Card>
+
+          <Alert
+            type="error"
+            showIcon
+            icon={<ExclamationCircleFilled style={{ color: '#ff4d4f' }} />}
+            message={<strong>⚠️ 완료 처리 후에는 절대 되돌릴 수 없습니다</strong>}
+            description="최종 완료 처리 시 모든 작업 이력이 확정되며, 어떠한 경우에도 이전 단계로 돌아갈 수 없습니다. 백업 폴더 경로, 사전 개수 등을 반드시 확인 후 완료 버튼을 누르세요."
+            style={{ marginTop: 16, borderColor: '#ff4d4f' }}
+            action={
               <Button
                 type="primary"
+                danger
                 icon={<CheckCircleOutlined />}
                 size="large"
                 loading={finalizing}
@@ -489,9 +494,9 @@ export default function WorkComplete() {
               >
                 완료 처리
               </Button>
-            </div>
-          </Space>
-        </Card>
+            }
+          />
+        </>
       )}
 
       {isFinished && (
