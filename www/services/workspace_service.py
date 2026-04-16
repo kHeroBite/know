@@ -267,6 +267,14 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
             if 복사complete == -1:
                 raise InterruptedError("사용자 취소")
 
+            # 도메인 {data,txt_resrc} → ws/jiana/{data,txt_resrc} overlay
+            # (도메인에 저장된 빌드 아티팩트를 jiana 엔진 경로에 반영)
+            for item in ["data", "txt_resrc"]:
+                src = os.path.join(ws경로, item)
+                if os.path.exists(src):
+                    dst = os.path.join(jiana대상, item)
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+
         # 사전 DB 복사 (도메인 → 워크스페이스)
         COPY_PROGRESS[ws_name]["message"] = "사전 DB 복사 중..."
         COPY_PROGRESS[ws_name]["percent"] = 95
@@ -1147,6 +1155,14 @@ def finalize_complete(
         shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
         copied_files.append("synonym.UTF-8")
 
+    # 2-1. workspace/jiana/{data,txt_resrc} → domain/{data,txt_resrc} overlay
+    # (사전빌드된 user.ks + *.dcd가 도메인에 반영되어야 재연결 시 사전 유지)
+    ws_jiana_path = ws_path / "jiana"
+    for item in ["data", "txt_resrc"]:
+        src = ws_jiana_path / item
+        if src.exists():
+            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+
     # 3. DB 역방향 복사
     db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     try:
@@ -1610,6 +1626,14 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
     if ws_syn.exists():
         shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
         copied_files.append("synonym.UTF-8")
+
+    # 6.2-1. workspace/jiana/{data,txt_resrc} → domain/{data,txt_resrc} overlay
+    # (사전빌드된 user.ks + *.dcd가 도메인에 반영되어야 재연결 시 사전 유지)
+    ws_jiana_path = ws_path / "jiana"
+    for item in ["data", "txt_resrc"]:
+        src = ws_jiana_path / item
+        if src.exists():
+            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
 
     # DB 역방향 복사
     db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
