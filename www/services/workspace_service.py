@@ -195,23 +195,32 @@ def _copy_folder(원본경로: str, 대상경로: str, ws_name: str, 복사compl
 
 
 def _copy_folder_skip_built(원본경로: str, 대상경로: str, ws_name: str, 복사complete: int, 전체파일수: int) -> int:
-    """jiana 복사 전용. data/ 디렉토리와 txt_resrc/udic/user.ks는 skip하여 빌드된 사전 보호."""
+    """jiana 복사 전용. 빌드된 경우에만 data/와 user.ks를 skip하여 사전 보호.
+    빌드 여부 판정: 대상 data/ 디렉토리에 .dcd 파일이 이미 존재하는지 확인."""
     cancel_event = COPY_CANCEL.get(ws_name)
+    # 대상 data/ 에 .dcd 파일 존재 여부로 빌드 완료 판정
+    대상_data경로 = os.path.join(대상경로, 'data')
+    빌드완료 = any(
+        f.endswith('.dcd')
+        for f in os.listdir(대상_data경로)
+        if os.path.isfile(os.path.join(대상_data경로, f))
+    ) if os.path.isdir(대상_data경로) else False
+
     for root, dirs, files in os.walk(원본경로):
         if cancel_event and cancel_event.is_set():
             return -1
         rel_root = os.path.relpath(root, 원본경로)
-        # data/ 디렉토리 전체 skip
-        if rel_root == 'data' or rel_root.startswith('data' + os.sep):
+        # 빌드 완료 시에만 data/ 디렉토리 skip
+        if 빌드완료 and (rel_root == 'data' or rel_root.startswith('data' + os.sep)):
             복사complete += len(files)
             COPY_PROGRESS[ws_name]["percent"] = int(복사complete / 전체파일수 * 100) if 전체파일수 > 0 else 0
             continue
         for file in files:
             if cancel_event and cancel_event.is_set():
                 return -1
-            # txt_resrc/udic/user.ks skip
             rel_file = os.path.join(rel_root, file) if rel_root != '.' else file
-            if rel_file == os.path.join('txt_resrc', 'udic', 'user.ks'):
+            # 빌드 완료 시에만 user.ks skip
+            if 빌드완료 and rel_file == os.path.join('txt_resrc', 'udic', 'user.ks'):
                 복사complete += 1
                 COPY_PROGRESS[ws_name]["percent"] = int(복사complete / 전체파일수 * 100) if 전체파일수 > 0 else 0
                 continue
