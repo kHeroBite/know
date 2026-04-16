@@ -72,6 +72,8 @@ export default function BuildHistory() {
   const [빌드중, set빌드중] = useState(false)
   const [최근빌드ID, set최근빌드ID] = useState<number | null>(null)
   const [최근빌드상태, set최근빌드상태] = useState<string>('')
+  // 이번 페이지 진입 후 빌드가 실제로 완료됐는지 추적 (복귀 시 이전 성공 상태 오표시 방지)
+  const [빌드완료여부, set빌드완료여부] = useState(false)
   const [현재이력, set현재이력] = useState<빌드이력항목[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
@@ -211,6 +213,7 @@ export default function BuildHistory() {
     set빌드중(false)
     set최근빌드ID(null)
     set최근빌드상태('')
+    set빌드완료여부(false)
     빌드API.상태조회(currentDomain).then((res: any) => {
       const d = res.data
       if (!d) return
@@ -255,6 +258,7 @@ export default function BuildHistory() {
         set빌드중(false)
         currentBuildIdRef.current = null
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+        if (d.status === 'completed' || d.status === 'success') set빌드완료여부(true)
       }
     } catch { /* 무시 */ }
   }, [currentDomain, 현재이력조회, 전체이력조회])
@@ -468,7 +472,7 @@ export default function BuildHistory() {
               : <div style={{ color: '#555' }}>빌드를 시작하면 실시간 로그가 여기에 표시됩니다.</div>
           }
         </div>
-        {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && 최근빌드ID && !빌드중 && (
+        {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && 최근빌드ID && !빌드중 && 빌드완료여부 && (
           <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
             <Button icon={<ReloadOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'synonym.UTF-8')}>synonym.UTF-8 다운로드</Button>
             <Button icon={<BuildOutlined />} onClick={() => 파일다운로드(최근빌드ID!, 'data.tar')}>data.tar 다운로드</Button>
@@ -478,7 +482,7 @@ export default function BuildHistory() {
       </Card>
 
       {/* 형태소분석 테스트 — 빌드 성공 후 표시 (빌드된 사전 대상) */}
-      {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중 && (
+      {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중 && 빌드완료여부 && (
         <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트 (빌드된 사전 기준)</>}>
           <Space style={{ marginBottom: 12 }}>
             <Input
