@@ -781,3 +781,13 @@ elif os.path.isdir(path):
 
 **Level**: 2 (환경적 요인으로 재발 가능성 있음)
 
+### L-317: bash_orphan_poller가 agents/ 미등록 bash pane을 감지하지 못함 (2026-04-16)
+
+**문제**: 팀에이전트 세션 compact 후 `claude --resume` 대기 상태로 남은 bash pane(%281)이 자동 정리되지 않음. team-cleanup.sh는 PROTECTED_PANES(oio bash_exec 조상)로 보호. bash_orphan_poller는 agents/ 등록 파일 기반 A방향 순회만 수행하여 미등록 pane은 스캔 범위 밖.
+
+**원인**: poller 설계가 A방향(agents/→pane)만 구현됨. `claude --resume` 대기 pane은 팀에이전트가 아니므로 agents/에 등록되지 않아 poller 감지 불가.
+
+**재발방지**: bash_orphan_poller.sh에 B방향 역방향 스캔 추가 — 현재 세션 전체 bash pane 중 `--agent-id` 없는 고아 bash를 직접 감지하여 kill. `/o1 "bash_orphan_poller B방향 스캔 추가"` 파이프라인으로 구현 예정.
+
+**Level**: 2 (세션 전환 시마다 재발 가능)
+
