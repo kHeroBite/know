@@ -132,12 +132,14 @@ export default function Phase1Pipeline() {
   useEffect(() => {
     const 이전실행로드 = async () => {
       try {
-        const { data } = await 클라이언트.get('/preprocess/latest-run')
+        const { data } = await 클라이언트.get('/preprocess/latest-run', {
+          params: { workspace: selectedWorkspace ?? '' }
+        })
         if (data.run_id) setRunId(data.run_id)
       } catch { /* ignore */ }
     }
     이전실행로드()
-  }, [])
+  }, [selectedWorkspace])
 
   const 실행핸들러 = async (params: {
     category: string

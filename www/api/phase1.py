@@ -131,13 +131,27 @@ async def get_execution_log(run_id: str):
 async def get_recent_execution(workspace: str = Query("")):
     """워크스페이스의 가장 최근 run_phase1_service 정보 조회"""
     from core.database import 세션팩토리
+    from services.workspace_service import _read_state
     from sqlalchemy import text
     db = 세션팩토리()
     try:
-        row = db.execute(text(
-            "SELECT run_id, status, domain, category, start_step, end_step "
-            "FROM phase1_runs ORDER BY id DESC LIMIT 1"
-        )).fetchone()
+        # workspace의 현재 domain으로 필터링 (다른 workspace/domain 로그 혼입 방지)
+        domain = None
+        if workspace:
+            상태 = _read_state()
+            domain = 상태.get(workspace, {}).get("domain")
+
+        if domain:
+            row = db.execute(text(
+                "SELECT run_id, status, domain, category, start_step, end_step "
+                "FROM phase1_runs WHERE domain=:dom ORDER BY id DESC LIMIT 1"
+            ), {"dom": domain}).fetchone()
+        else:
+            row = db.execute(text(
+                "SELECT run_id, status, domain, category, start_step, end_step "
+                "FROM phase1_runs ORDER BY id DESC LIMIT 1"
+            )).fetchone()
+
         if row:
             return {"run_id": row[0], "status": row[1], "domain": row[2],
                     "category": row[3], "start_step": row[4], "end_step": row[5]}
