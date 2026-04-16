@@ -194,6 +194,35 @@ def _copy_folder(원본경로: str, 대상경로: str, ws_name: str, 복사compl
     return 복사complete
 
 
+def _copy_folder_skip_built(원본경로: str, 대상경로: str, ws_name: str, 복사complete: int, 전체파일수: int) -> int:
+    """jiana 복사 전용. data/ 디렉토리와 txt_resrc/udic/user.ks는 skip하여 빌드된 사전 보호."""
+    cancel_event = COPY_CANCEL.get(ws_name)
+    for root, dirs, files in os.walk(원본경로):
+        if cancel_event and cancel_event.is_set():
+            return -1
+        rel_root = os.path.relpath(root, 원본경로)
+        # data/ 디렉토리 전체 skip
+        if rel_root == 'data' or rel_root.startswith('data' + os.sep):
+            복사complete += len(files)
+            COPY_PROGRESS[ws_name]["percent"] = int(복사complete / 전체파일수 * 100) if 전체파일수 > 0 else 0
+            continue
+        for file in files:
+            if cancel_event and cancel_event.is_set():
+                return -1
+            # txt_resrc/udic/user.ks skip
+            rel_file = os.path.join(rel_root, file) if rel_root != '.' else file
+            if rel_file == os.path.join('txt_resrc', 'udic', 'user.ks'):
+                복사complete += 1
+                COPY_PROGRESS[ws_name]["percent"] = int(복사complete / 전체파일수 * 100) if 전체파일수 > 0 else 0
+                continue
+            dst_dir = os.path.join(대상경로, rel_root) if rel_root != '.' else 대상경로
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.copy2(os.path.join(root, file), os.path.join(dst_dir, file))
+            복사complete += 1
+            COPY_PROGRESS[ws_name]["percent"] = int(복사complete / 전체파일수 * 100) if 전체파일수 > 0 else 0
+    return 복사complete
+
+
 def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, jiana원본경로: str | None = None) -> None:
     """백그라운드 스레드에서 도메인+jiana 파일 순회 복사 + 진행률 업데이트."""
     import time
@@ -225,7 +254,7 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
             COPY_PROGRESS[ws_name]["message"] = "jiana 복사 중..."
             jiana대상 = os.path.join(ws경로, "jiana")
             os.makedirs(jiana대상, exist_ok=True)
-            복사complete = _copy_folder(jiana원본경로, jiana대상, ws_name, 복사complete, 전체파일수)
+            복사complete = _copy_folder_skip_built(jiana원본경로, jiana대상, ws_name, 복사complete, 전체파일수)
             if 복사complete == -1:
                 raise InterruptedError("사용자 취소")
 
