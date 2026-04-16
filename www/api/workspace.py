@@ -52,6 +52,7 @@ from services.workspace_service import (
     step_log_service,
     step_report_service,
     session_event_service,
+    global_session_event_service,
     participant_stats_service,
 )
 
@@ -765,3 +766,22 @@ def update_system_settings(
     db.commit()
     rows = db.execute(text("SELECT key, value FROM system_settings")).mappings().all()
     return {row["key"]: row["value"] for row in rows}
+
+
+# ─── 전역 세션 이벤트 API (워크스페이스 없이 발생하는 login/logout) ───
+
+세션이벤트라우터 = APIRouter(prefix="/session-event", tags=["세션이벤트"])
+
+
+class GlobalSessionEventRequest(BaseModel):
+    event: str   # "login" | "logout"
+    user_id: str
+
+
+@세션이벤트라우터.post("", status_code=201)
+async def global_session_event_api(
+    body: GlobalSessionEventRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """전역 세션 이벤트(login/logout) 기록. login 시 이전 댕글링 세션 자동 정리."""
+    return global_session_event_service(body.user_id, body.event)

@@ -1,49 +1,53 @@
 import { useEffect, useRef } from 'react'
-import { workspaceAPI } from '../api/workspace'
 
 export function useHeartbeat(
   workspace: string | null,
   userInfo: { user_id: string } | null,
   domain: string | null,
-  interval = 30000
+  interval = 10000
 ) {
-  const lastActivityRef = useRef<number>(Date.now())
+  // 마지막 heartbeat 시각 (초기값 = 마운트 시각)
+  const lastHeartbeatRef = useRef<number>(Date.now())
   const autoLogoutMinutesRef = useRef<number | null>(null)
 
-  // 자동 로그아웃 설정값 로드
+  // 자동 로그아웃 체크 — 마지막 heartbeat 기준, 항상 동작
   useEffect(() => {
-    workspaceAPI.getSystemSettings()
-      .then(res => {
-        const setting = res.data.find(s => s.key === 'auto_logout_minutes')
-        if (setting && setting.value) {
-          const minutes = parseInt(setting.value, 10)
-          if (!isNaN(minutes) && minutes > 0) {
-            autoLogoutMinutesRef.current = minutes
+    const id = setInterval(() => {
+      const minutes = autoLogoutMinutesRef.current
+      if (minutes && minutes > 0) {
+        const idleMs = Date.now() - lastHeartbeatRef.current
+        if (idleMs > minutes * 60 * 1000) {
+          // logout 이벤트 전송 후 리다이렉트
+          const token = localStorage.getItem('access_token')
+          if (token && userInfo) {
+            fetch('/api/session-event', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ event: 'logout', user_id: userInfo.user_id }),
+              keepalive: true,
+            }).catch(() => {})
           }
+          window.location.href = '/login'
         }
-      })
-      .catch(() => {})
-  }, [])
+      }
+    }, 10000)
 
-  // 사용자 활동 추적 (ref 기반 — 리렌더 없음)
-  useEffect(() => {
-    const onActivity = () => { lastActivityRef.current = Date.now() }
-    window.addEventListener('mousemove', onActivity, { passive: true })
-    window.addEventListener('keydown', onActivity, { passive: true })
-    window.addEventListener('mousedown', onActivity, { passive: true })
-    return () => {
-      window.removeEventListener('mousemove', onActivity)
-      window.removeEventListener('keydown', onActivity)
-      window.removeEventListener('mousedown', onActivity)
-    }
-  }, [])
+    return () => clearInterval(id)
+  }, [userInfo])
 
+  // heartbeat 전송 — workspace/domain 선택 시에만 동작
   useEffect(() => {
     if (!workspace || !userInfo || !domain) return
 
-    const send = (event: string) => {
+    const getToken = () => localStorage.getItem('access_token') || ''
+
+    const sendBeaconExit = () => {
+      // beforeunload: 응답 불필요, sendBeacon 유지
       const data = JSON.stringify({
-        event,
+        event: 'force_exit',
         user_id: userInfo.user_id,
         domain,
         menu: window.location.pathname,
@@ -54,26 +58,46 @@ export function useHeartbeat(
       )
     }
 
-    const id = setInterval(() => {
-      send('heartbeat')
-
-      // 자동 로그아웃 체크
-      const minutes = autoLogoutMinutesRef.current
-      if (minutes && minutes > 0) {
-        const idleMs = Date.now() - lastActivityRef.current
-        if (idleMs > minutes * 60 * 1000) {
-          send('force_exit')
-          window.location.href = '/login'
+    const sendHeartbeat = async () => {
+      try {
+        const res = await fetch(
+          `/api/workspaces/${encodeURIComponent(workspace)}/session-event`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({
+              event: 'heartbeat',
+              user_id: userInfo.user_id,
+              domain,
+              menu: window.location.pathname,
+            }),
+          }
+        )
+        if (res.ok) {
+          const data = await res.json()
+          // 서버 응답에서 auto_logout_minutes 실시간 갱신
+          if (typeof data.auto_logout_minutes === 'number') {
+            autoLogoutMinutesRef.current = data.auto_logout_minutes > 0 ? data.auto_logout_minutes : null
+          }
+          lastHeartbeatRef.current = Date.now()
         }
+      } catch {
+        // 네트워크 오류 시 무시
       }
-    }, interval)
+    }
 
-    const onUnload = () => send('force_exit')
-    window.addEventListener('beforeunload', onUnload)
+    // 즉시 1회 실행 후 인터벌 설정
+    sendHeartbeat()
+    const id = setInterval(sendHeartbeat, interval)
+
+    window.addEventListener('beforeunload', sendBeaconExit)
 
     return () => {
       clearInterval(id)
-      window.removeEventListener('beforeunload', onUnload)
+      window.removeEventListener('beforeunload', sendBeaconExit)
     }
   }, [workspace, userInfo?.user_id, domain, interval])
 }

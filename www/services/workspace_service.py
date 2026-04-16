@@ -1282,8 +1282,42 @@ def step_report_service(workspace: str, domain: str) -> dict:
     return {"logs": logs, "phases": phases}
 
 
+def cleanup_dangling_sessions(conn, user_id: str, _sql_text) -> int:
+    """이전 로그인 세션 중 logout/force_exit 없이 끝난 세션을 force_exit로 정리.
+    Returns: 정리된 세션 수
+    """
+    # 해당 사용자의 마지막 이벤트가 logout/force_exit가 아닌 세션 ID 목록
+    dangling = conn.execute(_sql_text("""
+        SELECT id, workspace, domain
+        FROM user_session_log t1
+        WHERE user_id = :uid
+          AND event NOT IN ('logout', 'force_exit')
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_log t2
+            WHERE t2.user_id = t1.user_id
+              AND t2.created_at > t1.created_at
+              AND t2.event IN ('logout', 'force_exit')
+          )
+          AND event = (
+            SELECT event FROM user_session_log t3
+            WHERE t3.user_id = t1.user_id
+            ORDER BY t3.created_at DESC
+            LIMIT 1
+          )
+    """), {"uid": user_id}).mappings().all()
+
+    count = 0
+    for row in dangling:
+        conn.execute(_sql_text("""
+            INSERT INTO user_session_log (workspace, domain, user_id, event, menu)
+            VALUES (:ws, :dom, :uid, 'force_exit', NULL)
+        """), {"ws": row["workspace"], "dom": row["domain"], "uid": user_id})
+        count += 1
+    return count
+
+
 def session_event_service(workspace: str, domain: str, user_id: str, event: str, menu: str | None = None) -> dict:
-    """세션 이벤트(login/logout/heartbeat) 기록."""
+    """세션 이벤트(login/workspace_start/heartbeat/logout/force_exit) 기록. 응답에 auto_logout_minutes 포함."""
     from core.database import 엔진
     from sqlalchemy import text as _sql_text
 
@@ -1293,7 +1327,36 @@ def session_event_service(workspace: str, domain: str, user_id: str, event: str,
             VALUES (:ws, :dom, :uid, :event, :menu)
         """), {"ws": workspace, "dom": domain, "uid": user_id, "event": event, "menu": menu})
         conn.commit()
-    return {"ok": True}
+        row = conn.execute(_sql_text(
+            "SELECT value FROM system_settings WHERE key = 'auto_logout_minutes'"
+        )).fetchone()
+    auto_logout_minutes = int(row[0]) if row and row[0] else 0
+    return {"ok": True, "auto_logout_minutes": auto_logout_minutes}
+
+
+def global_session_event_service(user_id: str, event: str) -> dict:
+    """워크스페이스 없이 발생하는 세션 이벤트(login/logout) 기록.
+    - login 이벤트 시: 이전 미종료 세션 자동 정리(force_exit 삽입)
+    - 응답에 auto_logout_minutes 포함
+    """
+    from core.database import 엔진
+    from sqlalchemy import text as _sql_text
+
+    with 엔진.connect() as conn:
+        # login 이벤트 시 이전 댕글링 세션 정리
+        if event == "login":
+            cleanup_dangling_sessions(conn, user_id, _sql_text)
+
+        conn.execute(_sql_text("""
+            INSERT INTO user_session_log (workspace, domain, user_id, event, menu)
+            VALUES ('', '', :uid, :event, NULL)
+        """), {"uid": user_id, "event": event})
+        conn.commit()
+        row = conn.execute(_sql_text(
+            "SELECT value FROM system_settings WHERE key = 'auto_logout_minutes'"
+        )).fetchone()
+    auto_logout_minutes = int(row[0]) if row and row[0] else 0
+    return {"ok": True, "auto_logout_minutes": auto_logout_minutes}
 
 
 def participant_stats_service(workspace: str, domain: str) -> list[dict]:

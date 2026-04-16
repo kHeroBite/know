@@ -4,6 +4,16 @@ import 클라이언트 from '../api/client'
 import { assignmentApi } from '../api/assignment'
 import { workspaceAPI } from '../api/workspace'
 
+function sendWorkspaceStart(workspace: string, domain: string, userId: string) {
+  const token = localStorage.getItem('access_token')
+  if (!token) return
+  fetch(`/api/workspaces/${encodeURIComponent(workspace)}/session-event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ event: 'workspace_start', user_id: userId, domain }),
+  }).catch(() => {})
+}
+
 export type Phase = 'preprocess' | 'work' | 'build' | 'verify' | 'complete' | 'finished'
 export type MyPhase = 'idle' | 'working' | 'done'
 
@@ -48,6 +58,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ selectedWorkspace: name, selectedDomain: domain, selectedDomainLabel: label ?? null, selectedColor: color, phase: 'preprocess', myPhase: 'idle', _statusLoaded: false })
         // 서버에 비동기 저장
         클라이언트.put('/workspaces/preference', { workspace: name, domain, color }).catch(() => {})
+        // workspace_start 이벤트 전송 (user_id는 authStore에서 런타임에 조회)
+        import('./authStore').then(({ useAuthStore }) => {
+          const uid = useAuthStore.getState().user?.user_id
+          if (uid) sendWorkspaceStart(name, domain, uid)
+        })
         // phase/myPhase 상태 복원
         assignmentApi.작업상태(name, domain).then(res => {
           set({ phase: res.data.phase, myPhase: res.data.my_phase })
@@ -105,6 +120,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             } catch {
               // 도메인 목록 실패 시 label 없이 유지
             }
+            // workspace_start 이벤트 전송 (자동 선택)
+            import('./authStore').then(({ useAuthStore }) => {
+              const uid = useAuthStore.getState().user?.user_id
+              if (uid) sendWorkspaceStart(data.workspace, data.domain, uid)
+            })
           }
         } catch {
           // 서버 설정 없으면 무시

@@ -20,7 +20,7 @@ from api.knowledge import 라우터 as 지식작업라우터
 from api.build import 라우터 as 빌드라우터
 from api.realtime import 라우터 as 실시간라우터
 from api.phase1 import 라우터 as phase1라우터, ws라우터 as phase1_ws라우터
-from api.workspace import 라우터 as 워크스페이스라우터, 도메인관리라우터, 시스템설정라우터
+from api.workspace import 라우터 as 워크스페이스라우터, 도메인관리라우터, 시스템설정라우터, 세션이벤트라우터
 from api.backup import 라우터 as 백업라우터
 from api.account import 라우터 as 계정라우터
 from api.assignment import 라우터 as 할당라우터
@@ -130,6 +130,7 @@ else:
 앱.include_router(워크스페이스라우터, prefix="/api", tags=["워크스페이스"])
 앱.include_router(도메인관리라우터, prefix="/api", tags=["도메인관리"])
 앱.include_router(시스템설정라우터, prefix="/api", tags=["시스템설정"])
+앱.include_router(세션이벤트라우터, prefix="/api", tags=["세션이벤트"])
 앱.include_router(백업라우터)
 앱.include_router(계정라우터, prefix="/api", tags=["계정관리"])
 앱.include_router(할당라우터, prefix="/api/assignments", tags=["데이터assign"])

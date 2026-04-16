@@ -11,6 +11,22 @@ interface AuthState {
   logout: () => void
 }
 
+async function sendSessionEvent(event: 'login' | 'logout', user_id: string, token: string) {
+  try {
+    await fetch('/api/session-event', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ event, user_id }),
+      keepalive: true,
+    })
+  } catch {
+    // 네트워크 오류 무시
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -21,10 +37,18 @@ export const useAuthStore = create<AuthState>()(
         const { access_token, user_id: uid, name, auth } = res.data
         localStorage.setItem('access_token', access_token)
         set({ token: access_token, user: { user_id: uid, name, auth } })
+        // login 이벤트 전송 (이전 댕글링 세션 서버에서 자동 정리)
+        await sendSessionEvent('login', uid, access_token)
         // 로그인 후 서버에서 워크스페이스 설정 로드
         useWorkspaceStore.getState().loadPreference()
       },
       logout: () => {
+        const token = localStorage.getItem('access_token')
+        const user = useAuthStore.getState().user
+        if (token && user) {
+          // logout 이벤트 전송 (fire-and-forget)
+          sendSessionEvent('logout', user.user_id, token)
+        }
         localStorage.removeItem('access_token')
         set({ token: null, user: null })
       },
