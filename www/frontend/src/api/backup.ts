@@ -54,3 +54,13 @@ export const backupAPI = {
   downloadDataTarUrl: (name: string) =>
     `/api/backups/${encodeURIComponent(name)}/data-tar`,
 }
+
+// 메일 연락처 API
+export const getEmailContacts = () =>
+  클라이언트.get<{ id: number; name: string; email: string; created_at: string }[]>('/email-contacts')
+
+export const createEmailContact = (data: { name: string; email: string }) =>
+  클라이언트.post<{ id: number; name: string; email: string; created_at: string }>('/email-contacts', data)
+
+export const deleteEmailContact = (id: number) =>
+  클라이언트.delete(`/email-contacts/${id}`)

@@ -40,6 +40,12 @@ export const reportAPI = {
   downloadReportUrl: (workspace: string, backup_folder: string) =>
     `/api/reports/download/${encodeURIComponent(workspace)}/${encodeURIComponent(backup_folder)}`,
 
+  downloadPptFile: (workspace: string, backup_folder: string) =>
+    클라이언트.get(
+      `/reports/download/${encodeURIComponent(workspace)}/${encodeURIComponent(backup_folder)}`,
+      { responseType: 'blob' }
+    ),
+
   getDiff: (
     workspace: string,
     current_backup: string,

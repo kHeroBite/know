@@ -262,6 +262,7 @@ www/
 │   └── security.py            # JWT 발급/검증 + bcrypt 인증
 ├── models/                    # DB 모델 (SQLAlchemy ORM)
 │   ├── account.py, domain.py, dictionary.py
+│   ├── email_contact.py       # EmailContact ORM 모델 (email_contacts 테이블)
 ├── schemas/                   # Pydantic 요청/응답 스키마
 │   ├── auth.py                # LoginResponse: token, user_id, name, auth 반환
 │   ├── common.py, domain.py, dictionary.py, category.py
@@ -285,7 +286,8 @@ www/
 │   ├── assignment.py          # 키워드 할당 API (GET /api/assignments, GET /api/assignments/assign?mode=normal|reprocess, PUT /api/assignments/flag, GET /api/assignments/keyword/{id}, GET /api/assignments/keyword-page)
 │   ├── dict_verify.py         # 사전검증 API (POST /api/dict-verify/run, GET /api/dict-verify/status, POST /api/dict-verify/reprocess)
 │   ├── llm_settings.py        # LLM 설정 API (GET /api/llm-settings, PUT /api/llm-settings/{provider})
-│   └── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
+│   ├── ai_analysis.py         # AI 분석 API (GET /api/ai-analysis/search — LLM+Wikipedia, 프롬프트 GET/PUT 관리자 API)
+│   └── email_contacts.py      # 메일 수신자 API (GET/POST/DELETE /api/email-contacts)
 ├── migrations/                # DB 마이그레이션 SQL
 │   ├── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
 │   └── 002_user_work_phase.sql # user_work_phase 테이블 (사용자별 work 단계 상태)
@@ -300,13 +302,14 @@ www/
 │   └── install_redis.sh       # Redis 설치 스크립트
 ├── know_celery.service        # Celery systemd 유닛 (Redis 설치 후 활성화)
 └── frontend/                  # React SPA (Ant Design 5)
-    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정/작업완료 페이지
+    ├── src/pages/             # 로그인/도메인/사전/카테고리/통계/파이프라인/지식작업/빌드이력/데이터전처리/워크스페이스/LLM설정/작업완료/백업관리 페이지
     │   ├── Phase1Pipeline.tsx # 데이터전처리 페이지 (4패널 레이아웃)
     │   ├── KnowledgeWork.tsx  # 지식관리 작업실 페이지 (3열레이아웃+인피니티스크롤+포커스스타일+단축키15개+핫키설정모달+AI분석+작업이력+flag마킹+순번표시+undo탭전환+자동선택+border+컬럼분리+오류표시, 캐시 제거됨)
     │   ├── LLMSettings.tsx    # LLM 설정 페이지 (ChatGPT/Claude/Gemini/로컬LLM 4종 카드형 설정 + 연결 테스트 + 시스템 설정 섹션: 자동 로그아웃 분 설정 admin only)
     │   ├── Workspace.tsx      # 워크스페이스 관리 페이지 (symlink 관리 + 통합 phase 전이 버튼)
     │   ├── DictVerify.tsx     # 사전검증 페이지 (user.ks/cnlist.ks/synonym 교차검증 결과 표시)
-    │   └── WorkComplete.tsx   # 작업완료 페이지 (정책 #6: 도메인 백업 + WS→도메인 복사 실행 + 사이트/도메인 전용 타이틀 표시 + finalize 후 자동 연결해제)
+    │   ├── WorkComplete.tsx   # 작업완료 페이지 (정책 #6: 도메인 백업 + WS→도메인 복사 실행 + 사이트/도메인 전용 타이틀 표시 + finalize 후 자동 연결해제 + 버튼순서: 완료리포트/공유/PPT/메일 + blob 다운로드)
+    │   └── BackupManage.tsx   # 백업관리 페이지 (메일관리 카드 + 도메인/사이트 필터 + 백업 목록, 사이트관리 메뉴 아래)
     ├── src/components/workspace/ # 작업실 컴포넌트
     │   ├── AIAnalysis.tsx     # AI 분석 패널 (LLM탭+Wikipedia탭 2탭 구조 — Google/Perplexity 제거)
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
@@ -321,6 +324,8 @@ www/
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API + ParticipantStat kw_count/dict_count/dict_per_hour + getSystemSettings/updateSystemSettings)
     ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
     ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
+    ├── src/api/reports.ts     # 리포트 API 클라이언트 (downloadPptFile blob fetch)
+    ├── src/api/backup.ts      # 백업 API 클라이언트 (getEmailContacts/addEmailContact/deleteEmailContact)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
     ├── src/stores/workspaceStore.ts # 워크스페이스 전역 상태 (Zustand — 선택/목록) + completeWorkspace 액션
@@ -465,3 +470,15 @@ www/
 - `hooks/useHeartbeat.ts`: idle 감지(마우스/키보드) + system_settings 기반 자동 로그아웃
 - `pages/LLMSettings.tsx`: 시스템 설정 섹션 추가 (자동 로그아웃 분 설정, admin only)
 - `api/workspace.ts`: ParticipantStat 타입 확장(kw_count/dict_count/dict_per_hour) + getSystemSettings/updateSystemSettings
+
+### Phase 9: 백업관리 독립 메뉴 분리 + 메일관리 + WorkComplete 버튼 재구성 (2026-04-16)
+- `models/email_contact.py` (신규): EmailContact ORM 모델
+- `api/email_contacts.py` (신규): GET/POST/DELETE /api/email-contacts 메일 수신자 관리 API
+- `main.py`: email_contacts 라우터 등록
+- `init_db.py`: email_contacts 테이블 생성
+- `pages/BackupManage.tsx` (신규): 백업관리 페이지 (메일관리 카드 + 도메인/사이트 필터 콤보박스 + 백업 목록)
+- `api/backup.ts`: getEmailContacts/addEmailContact/deleteEmailContact 함수 추가
+- `App.tsx`: /backup-manage 라우트 추가
+- `components/Layout.tsx`: 백업관리 메뉴 항목 추가 (사이트관리 아래)
+- `pages/WorkComplete.tsx`: 버튼 순서 재구성(완료리포트→공유→PPT→메일) + PPT blob 다운로드 + 메일 수신자 Select 전환
+- `api/reports.ts`: downloadPptFile blob fetch 추가

@@ -1,18 +1,20 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Card, Alert, Typography, Space, Row, Col, Statistic, Table, Tag,
-  Checkbox, Input, Button, Modal, message, Descriptions, Spin, Form, Collapse,
+  Checkbox, Input, Button, Modal, message, Descriptions, Spin, Form, Collapse, Select,
 } from 'antd'
 import {
   CheckCircleOutlined, ClockCircleOutlined, TeamOutlined, DatabaseOutlined,
   ShareAltOutlined, MailOutlined, CopyOutlined, ExclamationCircleFilled,
+  FileTextOutlined, FilePptOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
 
-import { backupAPI, type Backup } from '../api/backup'
+import { backupAPI, getEmailContacts, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
+import { reportAPI } from '../api/reports'
 import ReportPanel from '../components/ReportPanel'
 import PageHeader from '../components/PageHeader'
 
@@ -95,6 +97,8 @@ export default function WorkComplete() {
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [emailForm] = Form.useForm<{ to: string }>()
   const [emailSending, setEmailSending] = useState(false)
+  const [pptDownloading, setPptDownloading] = useState(false)
+  const [emailContacts, setEmailContacts] = useState<{ id: number; name: string; email: string }[]>([])
 
   // 단계별 리포트 (isFinished 후 조회)
   const [stepReport, setStepReport] = useState<StepReportResponse | null>(null)
@@ -277,6 +281,37 @@ export default function WorkComplete() {
   const handleDownloadDataTar = () => {
     if (!latestBackup) return
     window.open(backupAPI.downloadDataTarUrl(latestBackup.name), '_blank')
+  }
+
+  const handleDownloadPpt = async () => {
+    if (!selectedWorkspace || !latestBackup) return
+    setPptDownloading(true)
+    try {
+      const res = await reportAPI.downloadPptFile(selectedWorkspace, latestBackup.name)
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${latestBackup.name}.pptx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      message.error('PPT 다운로드 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    } finally {
+      setPptDownloading(false)
+    }
+  }
+
+  const handleOpenEmailModal = async () => {
+    emailForm.resetFields()
+    setEmailModalOpen(true)
+    try {
+      const res = await getEmailContacts()
+      setEmailContacts(res.data || [])
+    } catch {
+      setEmailContacts([])
+    }
   }
 
   const goBackToVerify = async () => {
@@ -543,16 +578,31 @@ export default function WorkComplete() {
                 <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                   <Space wrap>
                     <Button
+                      icon={<FileTextOutlined />}
+                      disabled={!shareUrl}
+                      onClick={() => shareUrl && window.open(shareUrl, '_blank')}
+                    >
+                      완료리포트
+                    </Button>
+                    <Button
                       icon={<ShareAltOutlined />}
                       onClick={() => setShareModalOpen(true)}
                     >
                       {shareUrl ? '공유 링크 보기' : '공유 링크 생성'}
                     </Button>
                     <Button
-                      icon={<MailOutlined />}
-                      onClick={() => { emailForm.resetFields(); setEmailModalOpen(true) }}
+                      icon={<FilePptOutlined />}
+                      loading={pptDownloading}
+                      onClick={handleDownloadPpt}
                     >
-                      메일 발송
+                      파워포인트
+                    </Button>
+                    <Button
+                      icon={<MailOutlined />}
+                      disabled={!shareUrl || !latestBackup?.has_report}
+                      onClick={handleOpenEmailModal}
+                    >
+                      메일
                     </Button>
                     <Button onClick={handleDownloadDataTar}>data.tar 다운로드</Button>
                   </Space>
@@ -611,23 +661,29 @@ export default function WorkComplete() {
           </Modal>
 
           <Modal
-            title="메일 전송"
+            title="메일 발송"
             open={emailModalOpen}
             onCancel={() => setEmailModalOpen(false)}
             onOk={handleSendEmail}
-            okText="전송"
+            okText="발송"
             confirmLoading={emailSending}
           >
             <Form form={emailForm} layout="vertical">
               <Form.Item
                 name="to"
-                label="받는 사람 (이메일)"
-                rules={[
-                  { required: true, message: '이메일 주소를 입력하세요' },
-                  { type: 'email', message: '올바른 이메일 형식이 아닙니다' },
-                ]}
+                label="수신자"
+                rules={[{ required: true, message: '수신자를 선택하세요' }]}
               >
-                <Input placeholder="example@domain.com" />
+                <Select
+                  placeholder="수신자 선택"
+                  showSearch
+                  optionFilterProp="label"
+                  options={emailContacts.map(c => ({
+                    value: c.email,
+                    label: `${c.name} <${c.email}>`,
+                  }))}
+                  notFoundContent={emailContacts.length === 0 ? '등록된 연락처가 없습니다' : '없음'}
+                />
               </Form.Item>
               <Text type="secondary">
                 첨부: PPT 리포트 + data.tar. 공유 URL이 자동으로 본문에 포함됩니다.

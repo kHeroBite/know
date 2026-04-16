@@ -34,6 +34,7 @@ from api.notification import 라우터 as 알림라우터
 from api.site import 라우터 as 사이트라우터
 from api.reports import 라우터 as 리포트라우터
 from api.share import 라우터 as 공유라우터
+from api.email_contacts import 라우터 as 이메일연락처라우터
 
 
 logging.basicConfig(
@@ -144,6 +145,7 @@ else:
 앱.include_router(사이트라우터)
 앱.include_router(리포트라우터)
 앱.include_router(공유라우터)
+앱.include_router(이메일연락처라우터, prefix="/api", tags=["이메일연락처"])
 
 
 # ── 전역 예외 핸들러 ──────────────────────────────────────

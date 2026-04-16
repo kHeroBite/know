@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import PageHeader from '../components/PageHeader'
-import { Card, Input, Button, Select, Switch, message, Spin, Typography, Space, Tag, Row, Col, InputNumber, Divider } from 'antd'
+import { Card, Input, Button, Select, Switch, message, Spin, Typography, Space, Tag, Row, Col, InputNumber, Tabs } from 'antd'
 import { CheckCircleOutlined, CloseCircleOutlined, ApiOutlined, ReloadOutlined } from '@ant-design/icons'
 import { llmAPI, type LLM설정 } from '../api/llm'
 import { workspaceAPI } from '../api/workspace'
@@ -76,8 +76,8 @@ export default function LLMSettings() {
     if (!isAdmin) return
     workspaceAPI.getSystemSettings()
       .then(res => {
-        const setting = res.data.find(s => s.key === 'auto_logout_minutes')
-        if (setting) set자동로그아웃분(parseInt(setting.value, 10) || null)
+        const value = res.data['auto_logout_minutes']
+        if (value) set자동로그아웃분(parseInt(value, 10) || null)
       })
       .catch(() => {})
   }, [isAdmin])
@@ -310,58 +310,80 @@ export default function LLMSettings() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <PageHeader title="AI 설정" />
-      <div style={{ marginBottom: 24 }}>
-        <Text type="secondary">AI 분석에 사용할 LLM 프로바이더를 설정합니다. 여러 개 동시 활성화 시 모든 결과를 비교할 수 있습니다.</Text>
-        {활성수 > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <Tag color="blue">{활성수}개 활성화됨</Tag>
-          </div>
-        )}
-      </div>
+      <PageHeader title="설정" />
 
-      <Title level={5} style={{ marginBottom: 12, color: '#6b7280' }}>로컬LLM</Title>
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        {['local'].map(provider => 카드렌더링(provider))}
-      </Row>
-
-      <Title level={5} style={{ marginBottom: 12, color: '#1677ff' }}>범용LLM</Title>
-      <Row gutter={[16, 16]}>
-        {['openai', 'claude', 'gemini'].map(provider => 카드렌더링(provider))}
-      </Row>
-
-      {isAdmin && (
-        <>
-          <Divider />
-          <Title level={5} style={{ marginBottom: 12, color: '#6b7280' }}>시스템 설정</Title>
-          <Card size="small" style={{ maxWidth: 400 }}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+      <Tabs
+        defaultActiveKey="ai"
+        items={[
+          {
+            key: 'ai',
+            label: 'AI설정',
+            children: (
               <div>
-                <Text style={{ fontSize: 12 }}>자동 로그아웃 (분)</Text>
-                <div style={{ marginTop: 4 }}>
-                  <InputNumber
-                    min={0}
-                    max={1440}
-                    value={자동로그아웃분}
-                    onChange={v => set자동로그아웃분(v)}
-                    placeholder="0 = 비활성"
-                    style={{ width: 160 }}
-                  />
-                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>0 = 자동 로그아웃 비활성</Text>
+                <div style={{ marginBottom: 24 }}>
+                  <Text type="secondary">AI 분석에 사용할 LLM 프로바이더를 설정합니다. 여러 개 동시 활성화 시 모든 결과를 비교할 수 있습니다.</Text>
+                  {활성수 > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <Tag color="blue">{활성수}개 활성화됨</Tag>
+                    </div>
+                  )}
                 </div>
+
+                <Title level={5} style={{ marginBottom: 12, color: '#6b7280' }}>로컬LLM</Title>
+                <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                  {['local'].map(provider => 카드렌더링(provider))}
+                </Row>
+
+                <Title level={5} style={{ marginBottom: 12, color: '#1677ff' }}>범용LLM</Title>
+                <Row gutter={[16, 16]}>
+                  {['openai', 'claude', 'gemini'].map(provider => 카드렌더링(provider))}
+                </Row>
               </div>
-              <Button
-                type="primary"
-                size="small"
-                loading={시스템설정저장중}
-                onClick={시스템설정저장}
-              >
-                저장
-              </Button>
-            </Space>
-          </Card>
-        </>
-      )}
+            ),
+          },
+          {
+            key: 'system',
+            label: '시스템설정',
+            children: (
+              <div>
+                {isAdmin ? (
+                  <>
+                    <Title level={5} style={{ marginBottom: 12, color: '#6b7280' }}>시스템 설정</Title>
+                    <Card size="small" style={{ maxWidth: 400 }}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <div>
+                          <Text style={{ fontSize: 12 }}>자동 로그아웃 (분)</Text>
+                          <div style={{ marginTop: 4 }}>
+                            <InputNumber
+                              min={0}
+                              max={1440}
+                              value={자동로그아웃분}
+                              onChange={v => set자동로그아웃분(v)}
+                              placeholder="0 = 비활성"
+                              style={{ width: 160 }}
+                            />
+                            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>0 = 자동 로그아웃 비활성</Text>
+                          </div>
+                        </div>
+                        <Button
+                          type="primary"
+                          size="small"
+                          loading={시스템설정저장중}
+                          onClick={시스템설정저장}
+                        >
+                          저장
+                        </Button>
+                      </Space>
+                    </Card>
+                  </>
+                ) : (
+                  <Text type="secondary">시스템 설정은 관리자만 접근할 수 있습니다.</Text>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

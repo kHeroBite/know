@@ -24,6 +24,7 @@ from core.security import hash_password
 
 # ORM 기반 모델 import (Base.metadata에 등록됨)
 from models.pipeline import PipelineHistory, PipelineStageLog, TaskAssignment, BuildHistory, AuditLog
+from models.email_contact import EmailContact
 
 # Table 기반 모델 import
 from models.account import 계정테이블, 메타데이터 as 계정메타
@@ -35,9 +36,9 @@ def create_tables():
     """모든 테이블 생성."""
     print("=== 테이블 생성 시작 ===")
     
-    # 1. ORM 기반 테이블 (pipeline_history, pipeline_stage_log, task_assignment, build_history, audit_log)
+    # 1. ORM 기반 테이블 (pipeline_history, pipeline_stage_log, task_assignment, build_history, audit_log, email_contacts)
     Base.metadata.create_all(엔진)
-    print("  [OK] ORM 테이블 5개 생성")
+    print("  [OK] ORM 테이블 생성 (pipeline_history, pipeline_stage_log, task_assignment, build_history, audit_log, email_contacts)")
     
     # 2. Table 기반 테이블 (accounts, domains)
     계정메타.create_all(엔진)

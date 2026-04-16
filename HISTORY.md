@@ -1,5 +1,28 @@
 # HISTORY.md — 작업 이력
 
+## [2026-04-16] 백업관리 독립 메뉴 분리 + 메일관리 카드 + WorkComplete 버튼 재구성 (o4)
+
+> **작업 요약**: 백업관리(/backup-manage) 독립 메뉴 분리(사이트관리 아래), 백업관리 페이지 신규 구현(메일관리 카드 + 도메인/사이트 필터 콤보박스 + 백업 목록), WorkComplete 버튼 순서 재구성(완료리포트/공유/파워포인트/메일), PPT 다운로드 `window.open` → axios blob fetch 전환, email_contacts 모델/API 신규 추가.
+
+### 변경 파일
+- **www/models/email_contact.py** (신규): EmailContact SQLAlchemy ORM 모델
+- **www/api/email_contacts.py** (신규): GET/POST/DELETE /api/email-contacts 엔드포인트
+- **www/main.py**: email_contacts 라우터 등록
+- **www/init_db.py**: email_contacts 테이블 생성
+- **www/frontend/src/pages/BackupManage.tsx** (신규): 백업관리 페이지 (메일관리 카드 + 필터 + 백업 목록, 540줄)
+- **www/frontend/src/api/backup.ts**: getEmailContacts/addEmailContact/deleteEmailContact 함수 추가
+- **www/frontend/src/App.tsx**: /backup-manage 라우트 추가
+- **www/frontend/src/components/Layout.tsx**: 백업관리 메뉴 항목 추가 (사이트관리 아래)
+- **www/frontend/src/pages/WorkComplete.tsx**: 버튼 순서 재구성 + PPT blob 다운로드 + 메일 수신자 Select 전환
+- **www/frontend/src/api/reports.ts**: downloadPptFile blob fetch 추가
+
+### 배경
+- 백업관리가 기존 메뉴에 통합되어 있어 독립 접근이 불편했음
+- WorkComplete PPT 다운로드가 `window.open` 방식으로 Not authenticated 오류 발생
+- 메일 발송 기능에 수신자 주소를 등록/관리하는 UI 부재
+
+---
+
 ## [2026-04-16] 작업완료 페이지 4건 개선 + 자동 로그아웃 설정 (o4)
 
 > **작업 요약**: link_domain() connected_at 기록, participant_stats kw/dict 건수·시간당 실계산, system_settings 테이블 + 자동 로그아웃 API, WorkComplete 사이트/도메인 전용 표시 + finalize 자동 연결해제, useHeartbeat idle 체크 + 자동 로그아웃, LLMSettings 시스템 설정 UI(admin only).

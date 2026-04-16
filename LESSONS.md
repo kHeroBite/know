@@ -447,6 +447,7 @@ elif os.path.isdir(path):
 | L-050 | 사전 UI 변경은 work_history 기록 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-11 | ✅ |
 | L-051 | kplan_debate는 메인(team-lead)에서 직접 실행 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-12 | ✅ |
 | L-052 | 전처리 유사어 파일 우선 — 빌드→전처리 인과 순서 필수 | LESSONS+MEMORY | LESSONS.md+MEMORY.md | 2026-04-12 | ✅ |
+| L-059 | otest 서버 연결 불가 시 배포 미완료 명시 필수 | LESSONS | LESSONS.md | 2026-04-16 | ✅ |
 
 ---
 
@@ -760,4 +761,23 @@ elif os.path.isdir(path):
 **파일**: `/mnt/c/DATA/Project/ai/.claude/scripts/team-cleanup.sh` 섹션 [1.6] + 스크립트 말미 SELF_PANE_KILL 블록 제거.
 
 **재발방지**: PROTECTED_PANES 체크가 섹션 [1.6] 최우선 방어선으로 작동. `_kill_pane()` 우회 경로 없음.
+
+---
+
+## [2026-04-16] 백업관리 독립 메뉴 분리 + 메일관리 카드 + WorkComplete 버튼 재구성
+
+> **작업 요약**: 백업관리 독립 메뉴(/backup-manage) 분리, 메일관리 카드 + 도메인/사이트 필터 콤보박스, WorkComplete 버튼 순서 재구성(완료리포트/공유/PPT/메일), PPT 다운로드 blob fetch 방식 전환, email_contacts 모델/API 신규 추가.
+> **교훈 결과**: 1건 (L-059, Level 2 — docs 기록) + HOOK_BLOCK_OK 2건 (방어 체계 정상 작동)
+
+**MEMORY.md 점검 결과**: L-059는 otest 서버 연결 불가 상황에서 배포 미완료 명시 규칙 — Level 2이나 서버 연결 불가는 환경적 요인으로 MEMORY.md 반영 없음 (oinfra_know에 배포 절차 이미 문서화됨). HOOK_BLOCK_OK 2건(정상 차단). MEMORY.md 반영 없음.
+
+### L-059: otest 서버 연결 불가 시 배포 미완료 명시 필수 (2026-04-16)
+
+**문제**: otest 단계에서 서버(133.186.132.245) ping 100% 손실로 rsync 배포 및 uvicorn 재시작을 건너뜀. 정적 구문 분석만으로 PASS 처리되어 실제 서버 반영 여부 불명확.
+
+**원인**: 서버 연결 불가 시 배포 스킵 결정은 합리적이나, "배포 미완료" 상태를 명시하지 않고 PASS로 표시한 것이 문제.
+
+**재발방지**: otest에서 서버 연결 불가 시 결과에 반드시 "배포 미완료 — 서버 연결 불가" 명시. odone 단계에서 배포 재시도 가능 여부를 확인하고, 커밋 메시지에도 배포 상태 기록.
+
+**Level**: 2 (환경적 요인으로 재발 가능성 있음)
 

@@ -98,9 +98,24 @@ export default function ReportPanel({
     }
   }
 
-  const handleDownload = () => {
-    const url = reportAPI.downloadReportUrl(workspace, currentBackup)
-    window.open(url, '_blank')
+  const handleDownload = async () => {
+    try {
+      const res = await reportAPI.downloadPptFile(workspace, currentBackup)
+      const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/octet-stream' })
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      // Content-Disposition 헤더에서 파일명 추출, 없으면 기본값 사용
+      const disposition = res.headers['content-disposition'] || ''
+      const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/)
+      a.download = match ? decodeURIComponent(match[1]) : `${workspace}_${currentBackup}.pptx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(objectUrl)
+    } catch (e: any) {
+      message.error('PPT 다운로드 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    }
   }
 
   const items = (() => {

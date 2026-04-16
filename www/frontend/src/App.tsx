@@ -24,6 +24,7 @@ import WorkComplete from './pages/WorkComplete'
 import Dashboard from './pages/Dashboard'
 import SiteManage from './pages/SiteManage'
 import PublicShare from './pages/PublicShare'
+import BackupManage from './pages/BackupManage'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
 
@@ -46,6 +47,7 @@ export function isMenuEnabled(
     '/work-complete': wsSelected && (phase === 'verify' || phase === 'complete' || phase === 'finished'),
     '/domain-manage': true,
     '/site-manage': true,
+    '/backup-manage': true,
     '/statistics': true,
     '/accounts': true,
     '/llm-settings': true,
@@ -101,6 +103,7 @@ export default function App() {
         <Route path="dictionary" element={<DictionaryManage />} />
         <Route path="domain-manage" element={<DomainManage />} />
         <Route path="site-manage" element={<SiteManage />} />
+        <Route path="backup-manage" element={<BackupManage />} />
         <Route path="category" element={<CategoryManage />} />
         <Route path="statistics" element={<Statistics />} />
         <Route path="pipeline" element={<Pipeline />} />

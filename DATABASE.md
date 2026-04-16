@@ -215,12 +215,31 @@ INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_logout_minutes'
 - 수정: `PUT /api/system-settings` (admin only) → `{"settings": {...}}`  
 **참고**: workspace_domains.connected_at 컬럼 — link_domain() 호출 시 시작 시각 기록
 
+### email_contacts 테이블 (2026-04-16 신규)
+
+```sql
+CREATE TABLE IF NOT EXISTS email_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+```
+
+**목적**: 작업완료 메일 발송 수신자 목록 관리  
+**주요 API**:
+- 조회: `GET /api/email-contacts` → 전체 수신자 목록
+- 추가: `POST /api/email-contacts` → `{name, email}`
+- 삭제: `DELETE /api/email-contacts/{id}`  
+**참고**: WorkComplete 페이지 메일 발송 시 Select 컴포넌트로 수신자 선택
+
 ---
 
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-16 | email_contacts 테이블 신규 생성 (메일 수신자 관리) | init_db.py, models/email_contact.py |
 | 2026-04-16 | system_settings 테이블 신규 생성 (key-value 전역 설정 + auto_logout_minutes 기본값) | init_db.py |
 | 2026-04-16 | workspace_domains.connected_at 컬럼 기록 추가 — link_domain() 호출 시 시작 시각 기록 | workspace_service.py |
 | 2026-04-14 | kw_{workspace}.flag 값 확장: 'reprocess' 마커 추가 (재처리 대상 키워드 식별) | dict_verify_service.py, assignment_service.py |

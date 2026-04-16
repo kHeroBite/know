@@ -231,8 +231,8 @@ export const workspaceAPI = {
 
   // 시스템 설정
   getSystemSettings: () =>
-    클라이언트.get<SystemSetting[]>('/system-settings'),
+    클라이언트.get<Record<string, string>>('/system-settings'),
 
   updateSystemSettings: (key: string, value: string) =>
-    클라이언트.put('/system-settings', { key, value }),
+    클라이언트.put('/system-settings', { settings: { [key]: value } }),
 }
