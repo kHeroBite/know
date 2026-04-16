@@ -10,6 +10,22 @@ import { workspaceAPI } from '../api/workspace'
 
 const { Text } = Typography
 
+function fmt날짜(dt?: string | null): string | null {
+  if (!dt) return null
+  try {
+    const d = new Date(dt)
+    if (isNaN(d.getTime())) return null
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}`
+  } catch {
+    return null
+  }
+}
+
 interface DomainOption {
   id: string
   name: string | null
@@ -149,6 +165,11 @@ export default function SiteManage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>{site.description}</Text>
                     </div>
                   )}
+                  <div style={{ marginTop: 4 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      최근 작업: {fmt날짜(site.last_work_at) ?? '없음'}
+                    </Text>
+                  </div>
                 </div>
 
                 {/* 버튼 */}

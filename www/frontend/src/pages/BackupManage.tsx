@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
-  FilePptOutlined, MailOutlined, CheckCircleOutlined,
+  FilePptOutlined, MailOutlined, CheckCircleOutlined, DeleteFilled,
 } from '@ant-design/icons'
 import PageHeader from '../components/PageHeader'
 import {
@@ -184,6 +184,23 @@ export default function BackupManage() {
     }
   }
 
+  // ─── 백업 삭제 ────────────────────────────────────────────────
+  const handleDeleteBackup = async (record: Backup) => {
+    // domain 추출: workspace_name 또는 name에서 도메인 ID 매칭
+    const matched = domains.find(d =>
+      record.workspace_name?.toLowerCase().includes(d.id.toLowerCase()) ||
+      record.name?.toLowerCase().includes(d.id.toLowerCase())
+    )
+    const domainId = matched?.id || ''
+    try {
+      await backupAPI.deleteBackup(record.name, domainId)
+      message.success(`백업 삭제 완료: ${record.name}`)
+      await loadBackups()
+    } catch (e: any) {
+      message.error('백업 삭제 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    }
+  }
+
   // ─── PPT 다운로드 ──────────────────────────────────────────────
   const handleDownloadPpt = async (record: Backup) => {
     if (!record.workspace_name) {
@@ -286,88 +303,126 @@ export default function BackupManage() {
     },
   ]
 
+  // ─── 백업 목록에 사이트/도메인 표시용 헬퍼 ────────────────────
+  const getSiteLabel = (b: Backup) => {
+    const matched = sites.find(s =>
+      b.workspace_name?.toLowerCase().includes(s.site_code.toLowerCase()) ||
+      b.name?.toLowerCase().includes(s.site_code.toLowerCase())
+    )
+    return matched ? `${matched.name}(${matched.site_code})` : '-'
+  }
+
+  const getDomainLabel = (b: Backup) => {
+    const matched = domains.find(d =>
+      b.workspace_name?.toLowerCase().includes(d.id.toLowerCase()) ||
+      b.name?.toLowerCase().includes(d.id.toLowerCase())
+    )
+    return matched ? `${matched.name || matched.id}(${matched.id})` : '-'
+  }
+
+  const formatDate = (v: string) => {
+    if (!v) return '-'
+    // ISO 또는 "YYYY-MM-DD HH:MM:SS" → 날짜만
+    return v.split('T')[0].split(' ')[0]
+  }
+
   const backupColumns = [
+    {
+      title: '사이트', key: 'site', width: 130, ellipsis: true,
+      render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{getSiteLabel(r)}</Text>,
+    },
+    {
+      title: '도메인', key: 'domain', width: 130, ellipsis: true,
+      render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{getDomainLabel(r)}</Text>,
+    },
+    {
+      title: 'WS', dataIndex: 'workspace_name', key: 'workspace_name', width: 100, ellipsis: true,
+      render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">-</Text>,
+    },
     {
       title: '백업명', dataIndex: 'name', key: 'name', ellipsis: true,
       render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
     },
     {
-      title: 'WS', dataIndex: 'workspace_name', key: 'workspace_name', width: 110, ellipsis: true,
-      render: (v: string | null) => v ? <Tag>{v}</Tag> : <Text type="secondary">-</Text>,
+      title: '생성일', dataIndex: 'timestamp', key: 'timestamp', width: 100,
+      render: (v: string) => <Text style={{ fontSize: 12 }}>{formatDate(v)}</Text>,
     },
     {
-      title: '생성일', dataIndex: 'timestamp', key: 'timestamp', width: 140,
-      render: (v: string) => <Text style={{ fontSize: 12 }}>{v || '-'}</Text>,
+      title: '사용자사전', key: 'udic', width: 80, align: 'right' as const,
+      render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.udic ?? '-'}</Text>,
     },
     {
-      title: 'UDIC', key: 'udic', width: 60, align: 'right' as const,
-      render: (_: any, r: Backup) => r.dict_counts?.udic ?? '-',
+      title: '복합명사사전', key: 'cndic', width: 90, align: 'right' as const,
+      render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.cndic ?? '-'}</Text>,
     },
     {
-      title: 'CNDIC', key: 'cndic', width: 60, align: 'right' as const,
-      render: (_: any, r: Backup) => r.dict_counts?.cndic ?? '-',
-    },
-    {
-      title: 'THES', key: 'thesaurus', width: 60, align: 'right' as const,
-      render: (_: any, r: Backup) => r.dict_counts?.thesaurus ?? '-',
-    },
-    {
-      title: '액션',
-      key: 'actions',
-      width: 280,
-      render: (_: any, r: Backup) => {
-        const hasShareUrl = !!r.share_url
-        const hasReport = !!r.has_report
-        const canEmail = hasShareUrl && hasReport
-
-        return (
-          <Space size={4}>
-            {/* 완료리포트 — shareUrl 있을 때만 활성 */}
-            <Button
-              size="small"
-              icon={<CheckCircleOutlined />}
-              disabled={!hasShareUrl}
-              onClick={() => { if (r.share_url) window.open(r.share_url, '_blank') }}
-              title={hasShareUrl ? '완료 리포트 열기' : '공유 링크 없음'}
-            >
-              완료리포트
-            </Button>
-
-            {/* 공유 */}
-            <Button
-              size="small"
-              icon={<ShareAltOutlined />}
-              disabled={!r.workspace_name}
-              onClick={() => openShareModal(r)}
-            >
-              공유
-            </Button>
-
-            {/* 파워포인트 — 항상 표시 */}
-            <Button
-              size="small"
-              icon={<FilePptOutlined />}
-              disabled={!r.workspace_name}
-              onClick={() => handleDownloadPpt(r)}
-            >
-              PPT
-            </Button>
-
-            {/* 메일 — shareUrl AND has_report 모두 있을 때만 활성 */}
-            <Button
-              size="small"
-              icon={<MailOutlined />}
-              disabled={!canEmail}
-              onClick={() => openEmailModal(r)}
-              title={canEmail ? '메일 발송' : '공유 링크와 리포트가 모두 필요합니다'}
-            >
-              메일
-            </Button>
-          </Space>
-        )
-      },
+      title: '유사어사전', key: 'thesaurus', width: 80, align: 'right' as const,
+      render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.thesaurus ?? '-'}</Text>,
     },
   ]
+
+  const renderActionRow = (r: Backup) => {
+    const hasShareUrl = !!r.share_url
+    const hasReport = !!r.has_report
+    const canEmail = hasShareUrl && hasReport
+
+    return (
+      <div style={{ padding: '4px 0' }}>
+        <Space size={4}>
+          <Button
+            size="small"
+            icon={<CheckCircleOutlined />}
+            disabled={!hasShareUrl}
+            onClick={() => { if (r.share_url) window.open(r.share_url, '_blank') }}
+            title={hasShareUrl ? '완료 리포트 열기' : '공유 링크 없음'}
+          >
+            완료리포트
+          </Button>
+          <Button
+            size="small"
+            icon={<ShareAltOutlined />}
+            disabled={!r.workspace_name}
+            onClick={() => openShareModal(r)}
+          >
+            공유
+          </Button>
+          <Button
+            size="small"
+            icon={<FilePptOutlined />}
+            disabled={!r.workspace_name}
+            onClick={() => handleDownloadPpt(r)}
+          >
+            PPT
+          </Button>
+          <Button
+            size="small"
+            icon={<MailOutlined />}
+            disabled={!canEmail}
+            onClick={() => openEmailModal(r)}
+            title={canEmail ? '메일 발송' : '공유 링크와 리포트가 모두 필요합니다'}
+          >
+            메일
+          </Button>
+          <Popconfirm
+            title="백업 삭제"
+            description={`"${r.name}" 백업을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+            onConfirm={() => handleDeleteBackup(r)}
+            okText="삭제"
+            cancelText="취소"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              size="small"
+              danger
+              icon={<DeleteFilled />}
+            >
+              삭제
+            </Button>
+          </Popconfirm>
+        </Space>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -468,6 +523,12 @@ export default function BackupManage() {
             loading={backupLoading}
             pagination={{ pageSize: 20, showSizeChanger: false }}
             locale={{ emptyText: '백업 없음' }}
+            expandable={{
+              expandedRowRender: renderActionRow,
+              defaultExpandAllRows: true,
+              expandRowByClick: false,
+              rowExpandable: () => true,
+            }}
           />
         </Card>
 

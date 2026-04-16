@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   Card, Alert, Typography, Space, Row, Col, Statistic, Table, Tag,
-  Checkbox, Input, Button, Modal, message, Descriptions, Spin, Form, Collapse, Select,
+  Checkbox, Input, Button, Modal, message, Descriptions, Spin, Form, Collapse, Select, Progress,
 } from 'antd'
 import {
   CheckCircleOutlined, ClockCircleOutlined, TeamOutlined, DatabaseOutlined,
@@ -84,9 +84,13 @@ export default function WorkComplete() {
   const [participants, setParticipants] = useState<Participant[]>([])
 
   const [siteCode, setSiteCode] = useState<string | null>(null)
+  const [siteName, setSiteName] = useState<string | null>(null)
   const [doBackup, setDoBackup] = useState(true)
   const [backupSuffix, setBackupSuffix] = useState('')
   const [finalizing, setFinalizing] = useState(false)
+  const [finalProgress, setFinalProgress] = useState(0)
+  const [finalStep, setFinalStep] = useState('')
+  const finalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // finished 뷰 전용
   const [latestBackup, setLatestBackup] = useState<Backup | null>(null)
@@ -121,15 +125,24 @@ export default function WorkComplete() {
       // 현재 워크스페이스의 site_code 추출 (없으면 사이트 목록에서 domain_code 역매핑)
       const wsInfo = (wsList.data || []).find((w: any) => w.name === selectedWorkspace)
       let sc = wsInfo?.site_code || null
+      let sn: string | null = null
       if (!sc && selectedDomain) {
         try {
           const { listSites } = await import('../api/site')
           const sites = await listSites()
           const matched = sites.find((s: any) => s.domain_code?.toLowerCase() === selectedDomain.toLowerCase())
-          if (matched) sc = matched.site_code
+          if (matched) { sc = matched.site_code; sn = matched.name || null }
+        } catch {}
+      } else if (sc) {
+        try {
+          const { listSites } = await import('../api/site')
+          const sites = await listSites()
+          const matched = sites.find((s: any) => s.site_code === sc)
+          if (matched) sn = matched.name || null
         } catch {}
       }
       setSiteCode(sc)
+      setSiteName(sn)
 
       // finished 뷰 — 해당 워크스페이스에 연결된 최신 백업 조회
       if (phase === 'finished' && selectedDomain) {
@@ -208,14 +221,43 @@ export default function WorkComplete() {
           {doBackup
             ? <p>백업 폴더: <code>{fullBackupFolder}</code></p>
             : <p>⚠️ 백업 없이 바로 적용됩니다.</p>}
-          {siteCode && <p>사이트: {siteCode.toUpperCase()}</p>}
+          {siteCode && <p>사이트: {siteName ? `${siteName}(${siteCode})` : siteCode}</p>}
+          {selectedDomain && <p>도메인: {selectedDomainLabel ? `${selectedDomainLabel}(${selectedDomain})` : selectedDomain}</p>}
         </div>
       ),
       okText: '모든 작업 완료',
       cancelText: '취소',
       okButtonProps: { danger: !doBackup },
       onOk: async () => {
+        // 진행 모달 시작
         setFinalizing(true)
+        setFinalProgress(0)
+        setFinalStep('준비 중...')
+
+        const steps = doBackup
+          ? [
+              { pct: 10, label: '백업 폴더 생성 중...' },
+              { pct: 30, label: '도메인 파일 백업 중...' },
+              { pct: 55, label: '사전 DB 백업 중...' },
+              { pct: 75, label: '도메인에 적용 중...' },
+              { pct: 88, label: '스냅샷 기록 중...' },
+              { pct: 95, label: '완료 처리 중...' },
+            ]
+          : [
+              { pct: 20, label: '도메인에 적용 중...' },
+              { pct: 55, label: '스냅샷 기록 중...' },
+              { pct: 85, label: '완료 처리 중...' },
+            ]
+
+        let stepIdx = 0
+        finalTimerRef.current = setInterval(() => {
+          if (stepIdx < steps.length) {
+            setFinalProgress(steps[stepIdx].pct)
+            setFinalStep(steps[stepIdx].label)
+            stepIdx++
+          }
+        }, 1800)
+
         try {
           await useWorkspaceStore.getState().finalizeComplete(selectedWorkspace, {
             domain: selectedDomain || undefined,
@@ -223,13 +265,22 @@ export default function WorkComplete() {
             skip_backup: !doBackup,
             site_id: null,
           })
-          message.success('워크스페이스가 완료 처리되었습니다.')
+          if (finalTimerRef.current) clearInterval(finalTimerRef.current)
+          setFinalProgress(100)
+          setFinalStep('완료!')
           try { await workspaceAPI.releaseWorkspace(selectedWorkspace) } catch {}
+          // 테마 색상 포함 워크스페이스 연결 완전 초기화
+          useWorkspaceStore.getState().clearWorkspace()
+          await new Promise(r => setTimeout(r, 800))
+          message.success('워크스페이스가 완료 처리되었습니다.')
           navigate('/workspace')
         } catch (e: any) {
+          if (finalTimerRef.current) clearInterval(finalTimerRef.current)
           message.error('완료 처리 실패: ' + (e?.response?.data?.detail || e?.message || ''))
         } finally {
           setFinalizing(false)
+          setFinalProgress(0)
+          setFinalStep('')
         }
       },
     })
@@ -317,13 +368,21 @@ export default function WorkComplete() {
   const goBackToVerify = async () => {
     if (!selectedWorkspace) return
     try {
-      // 현재 phase에 따라 적절한 이전 단계로 되돌리기
-      const currentPhase = phase || snapshot?.phase || 'complete'
+      // 서버에서 현재 실제 phase를 조회 후 1단계 역전이
+      const phaseRes = await workspaceAPI.getPhase(selectedWorkspace)
+      const serverPhase: string = phaseRes.data?.phase || 'complete'
       const phaseOrder = ['preprocess', 'work', 'build', 'verify', 'complete', 'finished']
-      const idx = phaseOrder.indexOf(currentPhase)
-      const prevPhase = idx > 0 ? phaseOrder[idx - 1] : 'verify'
+      const idx = phaseOrder.indexOf(serverPhase)
+      if (idx <= 0) {
+        message.warning(`현재 단계(${serverPhase})에서는 되돌릴 수 없습니다.`)
+        return
+      }
+      if (serverPhase === 'finished') {
+        message.warning('완료(finished) 상태에서는 되돌릴 수 없습니다.')
+        return
+      }
+      const prevPhase = phaseOrder[idx - 1]
       await useWorkspaceStore.getState().revertPhase(prevPhase as any)
-      // 이전 단계에 해당하는 페이지로 이동
       const pageMap: Record<string, string> = { build: '/build-history', verify: '/dict-verify', work: '/workroom' }
       navigate(pageMap[prevPhase] || '/dict-verify')
     } catch (e: any) {
@@ -399,11 +458,34 @@ export default function WorkComplete() {
   return (
     <div>
       <PageHeader
-        title={`작업 완료 대시보드 — ${siteCode ? siteCode.toUpperCase() : ''} / ${selectedDomainLabel || selectedDomain || ''}`}
+        title={`작업 완료 대시보드 — ${siteCode ? (siteName || siteCode) : ''} / ${selectedDomainLabel || selectedDomain || ''}`}
         showPrev={isComplete}
         prevLabel="이전단계로"
         onPrev={goBackToVerify}
       />
+
+      {/* 완료 처리 진행 모달 */}
+      <Modal
+        open={finalizing}
+        title="완료 처리 중"
+        footer={null}
+        closable={false}
+        maskClosable={false}
+        centered
+        width={400}
+      >
+        <div style={{ padding: '16px 0' }}>
+          <Progress
+            percent={finalProgress}
+            status={finalProgress === 100 ? 'success' : 'active'}
+            strokeColor={finalProgress === 100 ? '#52c41a' : { '0%': '#108ee9', '100%': '#87d068' }}
+          />
+          <div style={{ marginTop: 12, textAlign: 'center', color: '#666' }}>
+            {finalStep}
+          </div>
+        </div>
+      </Modal>
+
       <div style={{ padding: '0 24px 24px' }}>
 
       {isFinished && (
@@ -447,7 +529,7 @@ export default function WorkComplete() {
 
         {isComplete && (
           <Col xs={24} lg={12}>
-            <Card size="small" title="사이트 백업" style={{ marginBottom: 16 }}>
+            <Card size="small" title="도메인 백업" style={{ marginBottom: 16 }}>
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 <div>
                   <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>

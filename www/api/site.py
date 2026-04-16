@@ -12,6 +12,7 @@ from services.site_service import (
     update_site as svc_update_site,
     delete_site as svc_delete_site,
 )
+from services.workspace_service import get_last_work_time_by_site
 
 라우터 = APIRouter(prefix="/api/sites", tags=["사이트"])
 
@@ -25,6 +26,7 @@ class 사이트응답(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     orphaned: bool = False
+    last_work_at: Optional[str] = None
 
 
 class create_site(BaseModel):
@@ -52,7 +54,9 @@ def list_all_sites(
     _current: dict = Depends(get_current_user),
 ):
     """사이트 전체 목록 조회."""
-    return [사이트응답(**item) for item in svc_list_sites(db)]
+    last_work_map = get_last_work_time_by_site()
+    items = svc_list_sites(db)
+    return [사이트응답(**item, last_work_at=last_work_map.get(item["site_code"])) for item in items]
 
 
 @라우터.get("/{site_id}", response_model=사이트응답)

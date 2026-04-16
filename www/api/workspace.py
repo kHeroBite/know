@@ -54,6 +54,7 @@ from services.workspace_service import (
     session_event_service,
     global_session_event_service,
     participant_stats_service,
+    get_last_work_time_by_domain,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -153,7 +154,11 @@ def get_domain_list(
     _current: dict = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """도메인 list_tasks 조회."""
-    return list_domains_service()
+    domains = list_domains_service()
+    last_work_map = get_last_work_time_by_domain()
+    for dm in domains:
+        dm["last_work_at"] = last_work_map.get(dm["id"])
+    return domains
 
 
 @라우터.get("/jiana-versions")
@@ -339,6 +344,22 @@ def link_domain_handler(
         domain = 요청.domain
     else:
         raise HTTPException(status_code=400, detail="site_code 또는 domain 중 하나는 필수입니다")
+
+    # 연결 전 기존 도메인 로그 삭제 (이전 도메인 잔류 로그 제거)
+    from services.workspace_service import _read_state
+    기존상태 = _read_state()
+    기존도메인 = 기존상태.get(name, {}).get("domain")
+    if 기존도메인:
+        db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL)"),
+                   {"dom": 기존도메인})
+        db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL"),
+                   {"dom": 기존도메인})
+    # 새 도메인 로그도 혹시 남아있으면 삭제
+    db.execute(text("DELETE FROM phase1_logs WHERE run_id IN (SELECT run_id FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL)"),
+               {"dom": domain})
+    db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL"),
+               {"dom": domain})
+    db.commit()
 
     return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code)
 
@@ -638,7 +659,7 @@ def completion_dashboard_api(
     if ws상태 is None:
         raise HTTPException(status_code=404, detail="워크스페이스 없음")
 
-    before, after = snapshot_service.get_snapshots_pair(name, db)
+    before, after = snapshot_service.get_snapshots_pair(name, db, domain_code=domain)
     participants = get_participants_stats(name, db)
 
     connected_at = ws상태.get("connected_at") or ws상태.get("created_at")

@@ -1654,3 +1654,39 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
         "phase": "complete",
         "skip_backup": skip_backup,
     }
+
+
+def get_last_work_time_by_site() -> dict[str, str]:
+    """site_code별 가장 최근 작업 시각 반환.
+    finished_at 우선, 없으면 connected_at 사용. 없는 site_code는 제외.
+    """
+    상태 = _read_state()
+    결과: dict[str, str] = {}
+    for ws상태 in 상태.values():
+        site_code = ws상태.get("site_code")
+        if not site_code:
+            continue
+        시각 = ws상태.get("finished_at") or ws상태.get("connected_at")
+        if not 시각:
+            continue
+        if site_code not in 결과 or 시각 > 결과[site_code]:
+            결과[site_code] = 시각
+    return 결과
+
+
+def get_last_work_time_by_domain() -> dict[str, str]:
+    """domain별 가장 최근 작업 시각 반환.
+    finished_at 우선, 없으면 connected_at 사용. domain이 없는 항목은 제외.
+    """
+    상태 = _read_state()
+    결과: dict[str, str] = {}
+    for ws상태 in 상태.values():
+        domain = ws상태.get("domain")
+        if not domain:
+            continue
+        시각 = ws상태.get("finished_at") or ws상태.get("connected_at")
+        if not 시각:
+            continue
+        if domain not in 결과 or 시각 > 결과[domain]:
+            결과[domain] = 시각
+    return 결과

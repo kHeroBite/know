@@ -3,19 +3,34 @@ import PageHeader from '../components/PageHeader'
 import {
   Typography, Button, Input, Select, Space, Popconfirm, message,
   Card, Row, Col, Progress, Modal, Form, Table, Radio,
-  Alert, Checkbox, Divider,
+  Alert, Checkbox, Divider, Spin, Tag,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, FolderOutlined,
-  ImportOutlined, SearchOutlined, BookOutlined, DatabaseOutlined,
+  ImportOutlined, SearchOutlined, BookOutlined, ExperimentOutlined,
 } from '@ant-design/icons'
 import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import { useGlobalTaskStore } from '../stores/globalTaskStore'
-import BackupManager from '../components/BackupManager'
 
 const { Title, Text } = Typography
+
+function fmt날짜(dt?: string | null): string | null {
+  if (!dt) return null
+  try {
+    const d = new Date(dt)
+    if (isNaN(d.getTime())) return null
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}`
+  } catch {
+    return null
+  }
+}
 
 // ─── DicColumn (DictionaryManage에서 이동) ────────────────────────
 
@@ -148,7 +163,7 @@ export default function DomainManage() {
   const { isBlocked, currentTask, executeDomainAdd, cancelDomainAdd, executeDomainDelete, restoreDomainPolling } = useGlobalTaskStore()
 
   // 도메인 목록
-  const [도메인목록, set도메인목록] = useState<{id: string, name: string | null}[]>([])
+  const [도메인목록, set도메인목록] = useState<{id: string, name: string | null, last_work_at?: string | null}[]>([])
   const [워크스페이스목록, set워크스페이스목록] = useState<any[]>([])
   const [로딩, set로딩] = useState(false)
 
@@ -173,8 +188,16 @@ export default function DomainManage() {
   // 사전관리 선택
   const [사전도메인, set사전도메인] = useState<string | null>(null)
   const [dicKey, setDicKey] = useState(0)
-  const [백업도메인, set백업도메인] = useState<string | null>(null)
-  const [backupOpen, setBackupOpen] = useState(false)
+
+  // 형태소분석
+  const [형태소도메인, set형태소도메인] = useState<string | null>(null)
+  const [형태소입력, set형태소입력] = useState('')
+  const [형태소로딩Lite, set형태소로딩Lite] = useState(false)
+  const [형태소로딩Full, set형태소로딩Full] = useState(false)
+  const [형태소로딩유사어, set형태소로딩유사어] = useState(false)
+  const [형태소결과Lite, set형태소결과Lite] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
+  const [형태소결과Full, set형태소결과Full] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
+  const [유사어결과, set유사어결과] = useState<{head_word: string; tail_word: string}[] | null>(null)
 
   // 임포트
   const [임포트모달, set임포트모달] = useState(false)
@@ -375,6 +398,31 @@ export default function DomainManage() {
     })
   }
 
+  const 형태소분석실행 = async () => {
+    const kw = 형태소입력.trim()
+    if (!kw || !형태소도메인) return
+    set형태소결과Lite(null)
+    set형태소결과Full(null)
+    set유사어결과(null)
+    set형태소로딩Lite(true)
+    set형태소로딩Full(true)
+    set형태소로딩유사어(true)
+    // 3개 병렬 호출
+    const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: 형태소도메인 })
+      .then(r => set형태소결과Lite(r.data))
+      .catch(() => set형태소결과Lite({ keyword: kw, result: '분석 실패', tokens: [] }))
+      .finally(() => set형태소로딩Lite(false))
+    const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: 형태소도메인 })
+      .then(r => set형태소결과Full(r.data))
+      .catch(() => set형태소결과Full({ keyword: kw, result: '분석 실패', tokens: [] }))
+      .finally(() => set형태소로딩Full(false))
+    const synPromise = 클라이언트.get(`/dictionaries/${형태소도메인}/thesaurus/list`, { params: { search: kw, size: 30 } })
+      .then(r => set유사어결과(r.data?.items || []))
+      .catch(() => set유사어결과([]))
+      .finally(() => set형태소로딩유사어(false))
+    await Promise.all([litePromise, fullPromise, synPromise])
+  }
+
   return (
     <div>
       <PageHeader title="도메인 관리" />
@@ -419,7 +467,7 @@ export default function DomainManage() {
                   }}
                   styles={{ body: { padding: 16 } }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <div>
                       <Text strong style={{ fontSize: 15 }}>{dm.name ? dm.name : dm.id}</Text>
                       {dm.name && <Text type="secondary" style={{ fontSize: 12 }}> ({dm.id})</Text>}
@@ -430,15 +478,27 @@ export default function DomainManage() {
                       <Text type="secondary" style={{ fontSize: 12, color: '#999' }}>미연결</Text>
                     )}
                   </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      최근 작업: {fmt날짜(dm.last_work_at) ?? '없음'}
+                    </Text>
+                  </div>
                   <Space size={8}>
                     <Button icon={<BookOutlined />} type={선택됨 ? 'primary' : 'default'}
                       disabled={isBlocked}
                       onClick={() => { set사전도메인(선택됨 ? null : dm.id); setDicKey(k => k + 1) }}
                     >사전 관리</Button>
-                    <Button icon={<DatabaseOutlined />}
+                    <Button icon={<ExperimentOutlined />}
+                      type={형태소도메인 === dm.id ? 'primary' : 'default'}
                       disabled={isBlocked}
-                      onClick={() => { set백업도메인(dm.id); setBackupOpen(true) }}
-                    >백업 관리</Button>
+                      onClick={() => {
+                        set형태소도메인(형태소도메인 === dm.id ? null : dm.id)
+                        set형태소입력('')
+                        set형태소결과Lite(null)
+                        set형태소결과Full(null)
+                        set유사어결과(null)
+                      }}
+                    >형태소분석</Button>
                     {isSuper && <>
                       <Button icon={<EditOutlined />} disabled={연결됨}
                         onClick={() => { set이름변경대상(dm); set변경후이름(dm.name ?? '') }}>이름 변경</Button>
@@ -478,6 +538,116 @@ export default function DomainManage() {
             <Col span={8}><DicColumn dicType="udic" 선택도메인={사전도메인} /></Col>
             <Col span={8}><DicColumn dicType="cndic" 선택도메인={사전도메인} /></Col>
             <Col span={8}><DicColumn dicType="thesaurus" 선택도메인={사전도메인} /></Col>
+          </Row>
+        </>
+      )}
+
+      {/* ─── 형태소분석 영역 ─── */}
+      {형태소도메인 && (
+        <>
+          <Divider />
+          <Title level={5} style={{ margin: '0 0 12px' }}><ExperimentOutlined /> {형태소도메인} 형태소분석</Title>
+          <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+            <Input
+              placeholder="분석할 키워드 입력"
+              value={형태소입력}
+              onChange={e => set형태소입력(e.target.value)}
+              onPressEnter={형태소분석실행}
+              allowClear
+              style={{ maxWidth: 400 }}
+            />
+            <Button
+              type="primary"
+              icon={<ExperimentOutlined />}
+              onClick={형태소분석실행}
+              loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
+              disabled={!형태소입력.trim()}
+            >분석</Button>
+          </Space.Compact>
+          <Row gutter={[16, 16]}>
+            {/* Lite 분석 */}
+            <Col xs={24} md={8}>
+              <Card title="Lite 형태소분석" size="small" style={{ minHeight: 200 }}>
+                {형태소로딩Lite ? (
+                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                ) : 형태소결과Lite ? (
+                  <div>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                      <Text strong>{형태소결과Lite.keyword}</Text>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      {형태소결과Lite.tokens.length > 0
+                        ? 형태소결과Lite.tokens.map((t, i) => (
+                            <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
+                          ))
+                        : <Text type="secondary">결과 없음</Text>
+                      }
+                    </div>
+                    {형태소결과Lite.result && (
+                      <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                        {형태소결과Lite.result}
+                      </pre>
+                    )}
+                  </div>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
+                )}
+              </Card>
+            </Col>
+            {/* Full 분석 */}
+            <Col xs={24} md={8}>
+              <Card title="Full 형태소분석 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+                {형태소로딩Full ? (
+                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                ) : 형태소결과Full ? (
+                  <div>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                      <Text strong>{형태소결과Full.keyword}</Text>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      {형태소결과Full.tokens.length > 0
+                        ? 형태소결과Full.tokens.map((t, i) => (
+                            <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
+                          ))
+                        : <Text type="secondary">결과 없음</Text>
+                      }
+                    </div>
+                    {형태소결과Full.result && (
+                      <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                        {형태소결과Full.result}
+                      </pre>
+                    )}
+                  </div>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
+                )}
+              </Card>
+            </Col>
+            {/* 유사어 확장 */}
+            <Col xs={24} md={8}>
+              <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
+                {형태소로딩유사어 ? (
+                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                ) : 유사어결과 ? (
+                  유사어결과.length > 0 ? (
+                    <div>
+                      {유사어결과.map((s, i) => (
+                        <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
+                          <Tag color="green">{s.head_word}</Tag>
+                          <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
+                  )
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
+                )}
+              </Card>
+            </Col>
           </Row>
         </>
       )}
@@ -793,11 +963,7 @@ export default function DomainManage() {
         )}
       </Modal>
 
-      <BackupManager
-        open={backupOpen}
-        onClose={() => setBackupOpen(false)}
-        domain={백업도메인 || ''}
-      />
+
     </div>
   )
 }

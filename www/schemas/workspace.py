@@ -3,8 +3,8 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 
-# 워크스페이스 전체 phase (4단계 순방향 전이)
-WorkspacePhase = Literal["preprocess", "work", "build", "verify"]
+# 워크스페이스 전체 phase
+WorkspacePhase = Literal["preprocess", "work", "build", "verify", "complete", "finished"]
 
 # 사용자 개인 phase (작업실 내 상태)
 MyPhase = Literal["idle", "working", "done"]

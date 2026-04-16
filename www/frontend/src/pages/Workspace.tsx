@@ -41,6 +41,22 @@ import PageHeader from '../components/PageHeader'
 
 const { Title, Text } = Typography
 
+function fmt날짜(dt?: string | null): string | null {
+  if (!dt) return null
+  try {
+    const d = new Date(dt)
+    if (isNaN(d.getTime())) return null
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}`
+  } catch {
+    return null
+  }
+}
+
 const 프리셋색상 = [
   '#0f1c3f', '#1a1a2e', '#1a2744', '#1e3a5f',
   '#134e4a', '#14532d', '#4c1d95', '#7f1d1d',
@@ -575,7 +591,6 @@ export default function Workspace() {
                       {(ws.status === 'IDLE' || ws.status === 'FAILED') && (
                         <>
                           <Button
-                            type="primary"
                             size="small"
                             icon={<LinkOutlined />}
                             disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
@@ -584,6 +599,7 @@ export default function Workspace() {
                               set선택사이트(null)
                               set선택도메인(null)
                             }}
+                            style={{ backgroundColor: ws.color || '#1a1a2e', borderColor: ws.color || '#1a1a2e', color: '#fff' }}
                           >
                             연결
                           </Button>
@@ -614,10 +630,10 @@ export default function Workspace() {
                           ) : (
                             <>
                               <Button
-                                type="primary"
                                 size="small"
                                 icon={<CheckCircleOutlined />}
                                 disabled={!currentUser}
+                                style={{ backgroundColor: ws.color || '#1a1a2e', borderColor: ws.color || '#1a1a2e', color: '#fff' }}
                                 onClick={async () => {
                                   if (ws.domain) {
                                     setWorkspace(ws.name, ws.domain, ws.color, 도메인목록.find(d => d.id === ws.domain)?.name ?? null)
@@ -756,6 +772,17 @@ export default function Workspace() {
             : <Text type="secondary">사이트를 먼저 선택하세요</Text>
           }
         </div>
+        {선택사이트 && (() => {
+          const site = 사이트목록.find(s => s.site_code === 선택사이트)
+          const 최근작업 = fmt날짜(site?.last_work_at)
+          return (
+            <div style={{ marginTop: 4 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                최근 작업: {최근작업 ?? '없음'}
+              </Text>
+            </div>
+          )
+        })()}
         <Select
           style={{ width: '100%', marginTop: 12 }}
           placeholder="jiana 버전 선택"

@@ -35,7 +35,7 @@ OLD_DOMAIN_DIR = "/home/know/apps/jiana_admin_server"
 # ──────────────────────────────────────────────
 DEFAULT_JIANA_HOME = "/home/know/jiana1.5.12"
 JAVA_HOME = "/home/know/jdk1.7.0_80"
-DICT_BACKUP_DIR = "/home/know/dict_backup"
+DICT_BACKUP_DIR = os.path.join(KNOW_OPS_ROOT, "backup")
 
 # ──────────────────────────────────────────────
 # 도메인 복사 진행률 임시 경로

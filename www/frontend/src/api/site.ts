@@ -9,6 +9,7 @@ export interface Site {
   created_at?: string
   updated_at?: string
   orphaned?: boolean
+  last_work_at?: string | null
 }
 
 export interface SiteInput {
