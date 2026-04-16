@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Modal,
-  message, Statistic, Row, Col, Divider
+  message, Statistic, Row, Col, Divider, Input
 } from 'antd'
-import { BuildOutlined, ReloadOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { BuildOutlined, ReloadOutlined, StopOutlined, CheckCircleOutlined, ExperimentOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { 빌드API } from '../api/pipeline'
+import { 사전검증API, 분석결과 } from '../api/dict_verify'
 import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
@@ -75,11 +76,64 @@ export default function BuildHistory() {
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
 
+  // 형태소분석 테스트
+  const [분석키워드, set분석키워드] = useState('')
+  const [분석결과목록, set분석결과목록] = useState<분석결과[]>([])
+  const [분석중, set분석중] = useState(false)
+
   // 전체 이력
   const [전체이력, set전체이력] = useState<빌드이력항목[]>([])
   const [도메인통계목록, set도메인통계목록] = useState<도메인통계[]>([])
   const [사이트통계목록, set사이트통계목록] = useState<any[]>([])
   const [이력로딩, set이력로딩] = useState(false)
+
+  const 단일분석 = useCallback(async () => {
+    const kw = 분석키워드.trim()
+    if (!kw) { message.warning('키워드를 입력하세요'); return }
+    set분석중(true)
+    try {
+      const res = await 사전검증API.형태소분석(kw, currentDomain || undefined, selectedWorkspace || undefined)
+      set분석결과목록(prev => [res.data, ...prev])
+    } catch {
+      message.error('형태소분석 실패')
+    } finally {
+      set분석중(false)
+    }
+  }, [분석키워드, currentDomain, selectedWorkspace])
+
+  const 일괄분석 = useCallback(async () => {
+    const kw = 분석키워드.trim()
+    if (!kw) { message.warning('키워드를 입력하세요 (여러 개는 쉼표/줄바꿈 구분)'); return }
+    const keywords = kw.split(/[,\n]+/).map(k => k.trim()).filter(Boolean)
+    if (keywords.length === 0) return
+    set분석중(true)
+    try {
+      const results: 분석결과[] = []
+      for (const keyword of keywords) {
+        const res = await 사전검증API.형태소분석(keyword, currentDomain || undefined, selectedWorkspace || undefined)
+        results.push(res.data)
+      }
+      set분석결과목록(prev => [...results, ...prev])
+    } catch {
+      message.error('일괄 형태소분석 실패')
+    } finally {
+      set분석중(false)
+    }
+  }, [분석키워드, currentDomain, selectedWorkspace])
+
+  const 분석컬럼 = [
+    { title: '키워드', dataIndex: 'keyword', key: 'keyword', width: 180 },
+    {
+      title: '분석 결과', dataIndex: 'result', key: 'result',
+      render: (v: string) => <Text style={{ fontSize: 12, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{v || '-'}</Text>,
+    },
+    {
+      title: '토큰', dataIndex: 'tokens', key: 'tokens',
+      render: (v: string[]) => v && v.length > 0
+        ? v.map((t, i) => <Tag key={i} style={{ fontSize: 11 }}>{t}</Tag>)
+        : <Text type="secondary">-</Text>,
+    },
+  ]
 
   // 현재 도메인 이력 조회 + 최근 빌드 상태 복원
   const 현재이력조회 = useCallback(async () => {
@@ -170,7 +224,13 @@ export default function BuildHistory() {
           pollRef.current = setInterval(() => 빌드로그조회Ref.current?.(), 2000)
         }
       }
-    }).catch(() => {})
+    }).catch((err: any) => {
+      // 404: 이 도메인의 빌드 이력 없음 → 상태 초기화 (다운로드 버튼 숨김)
+      if (err?.response?.status === 404) {
+        set최근빌드ID(null)
+        set최근빌드상태('')
+      }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDomain, mountKey])
 
@@ -416,6 +476,34 @@ export default function BuildHistory() {
           </div>
         )}
       </Card>
+
+      {/* 형태소분석 테스트 — 빌드 성공 후 표시 (빌드된 사전 대상) */}
+      {(최근빌드상태 === 'completed' || 최근빌드상태 === 'success') && !빌드중 && (
+        <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트 (빌드된 사전 기준)</>}>
+          <Space style={{ marginBottom: 12 }}>
+            <Input
+              placeholder="키워드 입력 (여러 개: 쉼표/줄바꿈 구분)"
+              value={분석키워드}
+              onChange={e => set분석키워드(e.target.value)}
+              onPressEnter={단일분석}
+              style={{ width: 360 }}
+              allowClear
+            />
+            <Button type="primary" icon={<SearchOutlined />} onClick={단일분석} loading={분석중}>분석</Button>
+            <Button icon={<ExperimentOutlined />} onClick={일괄분석} loading={분석중}>일괄</Button>
+          </Space>
+          {분석결과목록.length > 0 && (
+            <Table
+              rowKey={(_, i) => `b-${i}`}
+              dataSource={분석결과목록}
+              columns={분석컬럼}
+              size="small"
+              pagination={false}
+              style={{ maxHeight: 300, overflow: 'auto' }}
+            />
+          )}
+        </Card>
+      )}
 
       <Divider />
 

@@ -259,9 +259,8 @@ export default function DictVerify() {
         onNext={handleComplete}
       />
 
-      {/* 형태소분석 테스트 — 숨김 처리 (기능 코드 보존) */}
-      {false && (
-        <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트</>}>
+      {/* 형태소분석 테스트 */}
+      <Card size="small" title={<><ExperimentOutlined /> 형태소분석 테스트</>}>
           <Space style={{ marginBottom: 12 }}>
             <Input
               placeholder="키워드 입력 (여러 개: 쉼표/줄바꿈 구분)"
@@ -284,8 +283,7 @@ export default function DictVerify() {
               style={{ maxHeight: 300, overflow: 'auto' }}
             />
           )}
-        </Card>
-      )}
+      </Card>
 
       {/* 사전 검증 실행 */}
       <Card
