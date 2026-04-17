@@ -397,14 +397,45 @@ export default function BackupManage() {
     },
   ]
 
+  // 백업 row의 도메인 코드 추출 (workspace_name 또는 name에서)
+  const getDomainCodeFromBackup = (b: Backup): string | null => {
+    const matched = domains.find(d =>
+      b.workspace_name?.toLowerCase().includes(d.id.toLowerCase()) ||
+      b.name?.toLowerCase().includes(d.id.toLowerCase())
+    )
+    return matched ? matched.id : null
+  }
+
+  const handleOpenMorpheme = (r: Backup) => {
+    const domainCode = getDomainCodeFromBackup(r)
+    if (domainCode) {
+      setSelectedDomain(domainCode)
+      setTimeout(() => {
+        document.getElementById('morpheme-panel')?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
+    } else {
+      message.warning('해당 백업의 도메인을 찾을 수 없습니다')
+    }
+  }
+
   const renderActionRow = (r: Backup) => {
     const hasShareUrl = !!r.share_url
     const hasReport = !!r.has_report
     const canEmail = hasShareUrl && hasReport
+    const hasDomain = !!getDomainCodeFromBackup(r)
 
     return (
       <div style={{ padding: '4px 0' }}>
         <Space size={4}>
+          <Button
+            size="small"
+            icon={<ExperimentOutlined />}
+            disabled={!hasDomain}
+            onClick={() => handleOpenMorpheme(r)}
+            title={hasDomain ? '형태소분析' : '도메인 정보 없음'}
+          >
+            형태소분析
+          </Button>
           <Button
             size="small"
             icon={<CheckCircleOutlined />}
@@ -572,7 +603,7 @@ export default function BackupManage() {
         {selectedDomain && selectedDomain !== 'all' && (
           <>
             <Divider />
-            <div style={{ marginBottom: 12 }}>
+            <div id="morpheme-panel" style={{ marginBottom: 12 }}>
               <Text strong style={{ fontSize: 15 }}>
                 <ExperimentOutlined /> {selectedDomain} 형태소분析
               </Text>
