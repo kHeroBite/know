@@ -46,7 +46,7 @@ export default function BackupManage() {
   const [sites, setSites] = useState<{ id: number; site_code: string; name: string; domain_code: string }[]>([])
   const [selectedSite, setSelectedSite] = useState<string>('all')
 
-  // ─── 형태소분析 ────────────────────────────────────────────────
+  // ─── 형태소분석 ────────────────────────────────────────────────
   const [형태소입력, set형태소입력] = useState('')
   const [형태소로딩Lite, set형태소로딩Lite] = useState(false)
   const [형태소로딩Full, set형태소로딩Full] = useState(false)
@@ -146,8 +146,8 @@ export default function BackupManage() {
     loadBackups()
   }, [loadBackups])
 
-  // ─── 형태소분析 실행 ───────────────────────────────────────────
-  const 형태소분析실행 = async () => {
+  // ─── 형태소분석 실행 ───────────────────────────────────────────
+  const 형태소분석실행 = async () => {
     const kw = 형태소입력.trim()
     if (!kw || !selectedDomain || selectedDomain === 'all') return
     set형태소결과Lite(null)
@@ -158,11 +158,11 @@ export default function BackupManage() {
     set형태소로딩유사어(true)
     const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: selectedDomain })
       .then(r => set형태소결과Lite(r.data))
-      .catch(() => set형태소결과Lite({ keyword: kw, result: '분析 실패', tokens: [] }))
+      .catch(() => set형태소결과Lite({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Lite(false))
     const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: selectedDomain })
       .then(r => set형태소결과Full(r.data))
-      .catch(() => set형태소결과Full({ keyword: kw, result: '분析 실패', tokens: [] }))
+      .catch(() => set형태소결과Full({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Full(false))
     const synPromise = 클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: kw, size: 30 } })
       .then(r => set형태소결과유사어(r.data?.items || []))
@@ -432,9 +432,9 @@ export default function BackupManage() {
             icon={<ExperimentOutlined />}
             disabled={!hasDomain}
             onClick={() => handleOpenMorpheme(r)}
-            title={hasDomain ? '형태소분析' : '도메인 정보 없음'}
+            title={hasDomain ? '형태소분석' : '도메인 정보 없음'}
           >
-            형태소분析
+            형태소분석
           </Button>
           <Button
             size="small"
@@ -599,36 +599,36 @@ export default function BackupManage() {
           />
         </Card>
 
-        {/* ── 형태소분析 패널 ── */}
+        {/* ── 형태소분석 패널 ── */}
         {selectedDomain && selectedDomain !== 'all' && (
           <>
             <Divider />
             <div id="morpheme-panel" style={{ marginBottom: 12 }}>
               <Text strong style={{ fontSize: 15 }}>
-                <ExperimentOutlined /> {selectedDomain} 형태소분析
+                <ExperimentOutlined /> {selectedDomain} 형태소분석
               </Text>
             </div>
             <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
               <Input
-                placeholder="분析할 키워드 입력"
+                placeholder="분석할 키워드 입력"
                 value={형태소입력}
                 onChange={e => set형태소입력(e.target.value)}
-                onPressEnter={형태소분析실행}
+                onPressEnter={형태소분석실행}
                 allowClear
                 style={{ maxWidth: 400 }}
               />
               <Button
                 type="primary"
                 icon={<ExperimentOutlined />}
-                onClick={형태소분析실행}
+                onClick={형태소분석실행}
                 loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
                 disabled={!형태소입력.trim()}
-              >분析</Button>
+              >분석</Button>
             </Space.Compact>
             <Row gutter={[16, 16]}>
-              {/* Lite 분析 */}
+              {/* Lite 분석 */}
               <Col xs={24} md={8}>
-                <Card title="Lite 형태소분析" size="small" style={{ minHeight: 200 }}>
+                <Card title="Lite 형태소분석" size="small" style={{ minHeight: 200 }}>
                   {형태소로딩Lite ? (
                     <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
                   ) : 형태소결과Lite ? (
@@ -652,13 +652,13 @@ export default function BackupManage() {
                       )}
                     </div>
                   ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                   )}
                 </Card>
               </Col>
-              {/* Full 분析 */}
+              {/* Full 분석 */}
               <Col xs={24} md={8}>
-                <Card title="Full 형태소분析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+                <Card title="Full 형태소분석 (품사 포함)" size="small" style={{ minHeight: 200 }}>
                   {형태소로딩Full ? (
                     <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
                   ) : 형태소결과Full ? (
@@ -682,7 +682,7 @@ export default function BackupManage() {
                       )}
                     </div>
                   ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                   )}
                 </Card>
               </Col>
@@ -705,7 +705,7 @@ export default function BackupManage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
                     )
                   ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                   )}
                 </Card>
               </Col>

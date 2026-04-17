@@ -786,7 +786,7 @@ export default function KnowledgeWork() {
 
     // 방향키(prevLine/nextLine/prevAnalysis/nextAnalysis)는 키워드 선택 상태면 항상 동작 (포커스 모드 자동 진입)
     if ((action === 'prevLine' || action === 'nextLine' || action === 'prevAnalysis' || action === 'nextAnalysis') && selected) {
-      // 분析결과 로딩 중에는 방향키 모두 차단
+      // 분석결과 로딩 중에는 방향키 모두 차단
       if (!selected) { e.preventDefault(); return }
       if (!isCenterFocused) setIsCenterFocused(true)
       e.preventDefault()
