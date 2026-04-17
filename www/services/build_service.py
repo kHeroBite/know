@@ -172,7 +172,10 @@ class BuildService:
             ws_state = _read_state()
             connected_at = ws_state.get(workspace, {}).get("connected_at")
             if connected_at:
-                q = q.filter(BuildHistory.started_at >= connected_at)
+                # connected_at은 ISO 포맷('T' 구분자), started_at은 공백 구분자
+                # 문자열 비교를 위해 'T'→공백으로 정규화 ('T'=0x54 > ' '=0x20 이라 오비교 발생)
+                connected_at_norm = connected_at.replace("T", " ")
+                q = q.filter(BuildHistory.started_at >= connected_at_norm)
         bh = q.order_by(BuildHistory.id.desc()).first()
         if not bh:
             raise HTTPException(
