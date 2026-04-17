@@ -39,13 +39,18 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
     if not os.path.isdir(DICT_BACKUP_DIR):
         return []
     result: list[dict[str, Any]] = []
-    prefix = f"{domain}_"
     for item in sorted(Path(DICT_BACKUP_DIR).iterdir()):
         if not item.is_dir():
             continue
-        if not item.name.startswith(prefix):
-            continue
         meta = _read_metadata(item)
+        # metadata가 있으면 domain 필드로 검증, 없으면 이름 prefix fallback
+        if meta:
+            if meta.get("domain", "").lower() != domain.lower():
+                continue
+        else:
+            # 구형 폴더(metadata 없음): domain_timestamp 형식 지원
+            if not item.name.startswith(f"{domain}_"):
+                continue
         if meta:
             has_db_backup = bool(meta.get("backup_files")) or bool(meta.get("backup_tables"))
             entry = {
@@ -307,12 +312,20 @@ def delete_backup(domain: str, backup_name: str, db) -> dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"백업을 찾을 수 없습니다: {backup_name}",
         )
-    # 도메인 소속 검증 (디렉토리 이름 prefix)
-    if not backup_name.startswith(f"{domain}_"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"백업이 도메인 '{domain}'에 속하지 않습니다",
-        )
+    # 도메인 소속 검증 (metadata 우선, fallback: 이름 prefix)
+    meta = _read_metadata(backup_path)
+    if meta:
+        if meta.get("domain", "").lower() != domain.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"백업이 도메인 '{domain}'에 속하지 않습니다",
+            )
+    else:
+        if not backup_name.startswith(f"{domain}_"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"백업이 도메인 '{domain}'에 속하지 않습니다",
+            )
 
     # 디렉토리 제거 (BAK_ 테이블은 수동 정리 대상 — DROP 하지 않음)
     try:

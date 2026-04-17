@@ -211,7 +211,7 @@ export default function WorkComplete() {
 
   const handleFinalize = () => {
     if (!selectedWorkspace) return
-    const fixedPrefix = `${selectedDomain}_${siteCode || selectedDomain}_`
+    const fixedPrefix = `${siteCode || selectedDomain}_${selectedDomain}_`
     const fullBackupFolder = fixedPrefix + backupSuffix
     Modal.confirm({
       title: '정말 완료 처리하시겠습니까?',
@@ -539,7 +539,7 @@ export default function WorkComplete() {
                 <div>
                   <Text type="secondary" style={{ fontSize: 12 }}>백업 폴더명</Text>
                   <div style={{ marginTop: 4, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontFamily: 'monospace', fontSize: 14 }}>
-                    <Text strong>{selectedDomain}_{siteCode || selectedDomain}_</Text>
+                    <Text strong>{siteCode || selectedDomain}_{selectedDomain}_</Text>
                     <Input
                       value={backupSuffix}
                       disabled={!doBackup}
