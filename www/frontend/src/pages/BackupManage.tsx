@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Row, Col,
-  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin,
+  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin, Statistic,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
@@ -57,6 +57,7 @@ export default function BackupManage() {
 
   // ─── 백업 목록 ─────────────────────────────────────────────────
   const [backups, setBackups] = useState<Backup[]>([])
+  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
   const [backupLoading, setBackupLoading] = useState(false)
 
   // ─── 공유 모달 ─────────────────────────────────────────────────
@@ -384,16 +385,24 @@ export default function BackupManage() {
       render: (v: string) => <Text style={{ fontSize: 12 }}>{formatDate(v)}</Text>,
     },
     {
-      title: '사용자사전', key: 'udic', width: 80, align: 'right' as const,
+      title: '사용자사전', key: 'udic', width: 100, align: 'right' as const,
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.udic ?? '-'}</Text>,
     },
     {
-      title: '복합명사사전', key: 'cndic', width: 90, align: 'right' as const,
+      title: '복합명사사전', key: 'cndic', width: 110, align: 'right' as const,
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.cndic ?? '-'}</Text>,
     },
     {
-      title: '유사어사전', key: 'thesaurus', width: 80, align: 'right' as const,
+      title: '유사어사전', key: 'thesaurus', width: 100, align: 'right' as const,
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.thesaurus ?? '-'}</Text>,
+    },
+    {
+      title: '용량',
+      dataIndex: 'size_mb',
+      key: 'size_mb',
+      width: 80,
+      align: 'right' as const,
+      render: (v: number) => <Text style={{ fontSize: 12 }}>{v != null ? `${v.toFixed(1)}MB` : '-'}</Text>,
     },
   ]
 
@@ -580,6 +589,38 @@ export default function BackupManage() {
           </Space>
         </Card>
 
+        {/* ── 용량 대시보드 ── */}
+        {backups.length > 0 && (
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Row gutter={16}>
+              <Col>
+                <Statistic
+                  title="전체 백업 용량"
+                  value={backups.reduce((sum, b) => sum + (b.size_mb || 0), 0).toFixed(1)}
+                  suffix="MB"
+                />
+              </Col>
+              {domains.map(d => {
+                const domainBackups = backups.filter(b =>
+                  b.workspace_name?.toLowerCase().includes(d.id.toLowerCase()) ||
+                  b.name?.toLowerCase().includes(d.id.toLowerCase())
+                )
+                const total = domainBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0)
+                if (domainBackups.length === 0) return null
+                return (
+                  <Col key={d.id}>
+                    <Statistic
+                      title={`${d.name || d.id} (${d.id})`}
+                      value={total.toFixed(1)}
+                      suffix="MB"
+                    />
+                  </Col>
+                )
+              })}
+            </Row>
+          </Card>
+        )}
+
         {/* ── 백업 목록 테이블 ── */}
         <Card size="small" title="백업 목록">
           <Table
@@ -592,8 +633,11 @@ export default function BackupManage() {
             locale={{ emptyText: '백업 없음' }}
             expandable={{
               expandedRowRender: renderActionRow,
-              defaultExpandAllRows: true,
-              expandRowByClick: false,
+              expandedRowKeys,
+              onExpand: (expanded, record) => {
+                setExpandedRowKeys(expanded ? [record.name] : [])
+              },
+              expandRowByClick: true,
               rowExpandable: () => true,
             }}
           />

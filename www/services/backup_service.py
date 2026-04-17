@@ -51,6 +51,13 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
             # 구형 폴더(metadata 없음): domain_timestamp 형식 지원
             if not item.name.startswith(f"{domain}_"):
                 continue
+        # 폴더 크기 계산
+        try:
+            size_bytes = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
+        except OSError:
+            size_bytes = 0
+        size_mb = round(size_bytes / (1024 * 1024), 1)
+
         if meta:
             has_db_backup = bool(meta.get("backup_files")) or bool(meta.get("backup_tables"))
             entry = {
@@ -62,6 +69,8 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
                 "files": meta.get("files", []),
                 "backup_files": meta.get("backup_files", []),
                 "backup_tables": meta.get("backup_tables", []),
+                "size_bytes": size_bytes,
+                "size_mb": size_mb,
             }
         else:
             # 메타데이터 없음 — 디렉토리 mtime 기반
@@ -77,6 +86,8 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
                 "has_db_backup": False,
                 "files": [],
                 "backup_tables": [],
+                "size_bytes": size_bytes,
+                "size_mb": size_mb,
             }
         result.append(entry)
     # 타임스탬프 내림차순

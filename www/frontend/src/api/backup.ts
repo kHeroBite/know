@@ -10,6 +10,7 @@ export interface Backup {
   workspace_name?: string | null
   share_url?: string | null
   has_report?: boolean
+  size_mb?: number
 }
 
 export interface BackupListResponse {
