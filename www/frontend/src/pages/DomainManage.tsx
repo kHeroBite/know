@@ -408,11 +408,11 @@ export default function DomainManage() {
     set형태소로딩Full(true)
     set형태소로딩유사어(true)
     // 3개 병렬 호출
-    const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: 형태소도메인 })
+    const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: 형태소도메인, skip_workspace: true })
       .then(r => set형태소결과Lite(r.data))
       .catch(() => set형태소결과Lite({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Lite(false))
-    const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: 형태소도메인 })
+    const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: 형태소도메인, skip_workspace: true })
       .then(r => set형태소결과Full(r.data))
       .catch(() => set형태소결과Full({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Full(false))

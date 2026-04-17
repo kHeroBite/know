@@ -47,6 +47,7 @@ export default function BackupManage() {
   const [selectedSite, setSelectedSite] = useState<string>('all')
 
   // ─── 형태소분석 ────────────────────────────────────────────────
+  const [selectedBackup, setSelectedBackup] = useState<Backup | null>(null)
   const [형태소입력, set형태소입력] = useState('')
   const [형태소로딩Lite, set형태소로딩Lite] = useState(false)
   const [형태소로딩Full, set형태소로딩Full] = useState(false)
@@ -157,11 +158,14 @@ export default function BackupManage() {
     set형태소로딩Lite(true)
     set형태소로딩Full(true)
     set형태소로딩유사어(true)
-    const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: selectedDomain })
+    const payload = selectedBackup
+      ? { keyword: kw, domain: selectedDomain, backup_name: selectedBackup.name }
+      : { keyword: kw, domain: selectedDomain, skip_workspace: true }
+    const litePromise = 클라이언트.post('/morpheme/analyze', payload)
       .then(r => set형태소결과Lite(r.data))
       .catch(() => set형태소결과Lite({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Lite(false))
-    const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: selectedDomain })
+    const fullPromise = 클라이언트.post('/morpheme/analyze-full', payload)
       .then(r => set형태소결과Full(r.data))
       .catch(() => set형태소결과Full({ keyword: kw, result: '분석 실패', tokens: [] }))
       .finally(() => set형태소로딩Full(false))
@@ -404,6 +408,15 @@ export default function BackupManage() {
       align: 'right' as const,
       render: (v: number) => <Text style={{ fontSize: 12 }}>{v != null ? `${v.toFixed(1)}MB` : '-'}</Text>,
     },
+    {
+      title: 'jiana',
+      dataIndex: 'jiana_version',
+      key: 'jiana_version',
+      width: 80,
+      render: (v: string | null | undefined) => v
+        ? <Tag style={{ fontSize: 11 }}>{v}</Tag>
+        : <Text type="secondary" style={{ fontSize: 11 }}>-</Text>,
+    },
   ]
 
   // 백업 row의 도메인 코드 추출 (workspace_name 또는 name에서)
@@ -419,6 +432,7 @@ export default function BackupManage() {
     const domainCode = getDomainCodeFromBackup(r)
     if (domainCode) {
       setSelectedDomain(domainCode)
+      setSelectedBackup(r)
       setTimeout(() => {
         document.getElementById('morpheme-panel')?.scrollIntoView({ behavior: 'smooth' })
       }, 100)
@@ -651,6 +665,16 @@ export default function BackupManage() {
               <Text strong style={{ fontSize: 15 }}>
                 <ExperimentOutlined /> {selectedDomain} 형태소분석
               </Text>
+              {selectedBackup && (
+                <>
+                  <Tag color="orange" style={{ marginLeft: 8, fontSize: 11 }}>
+                    백업: {selectedBackup.name}
+                  </Tag>
+                  <Button size="small" onClick={() => setSelectedBackup(null)} style={{ marginLeft: 8 }}>
+                    도메인 현재 사전으로
+                  </Button>
+                </>
+              )}
             </div>
             <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
               <Input

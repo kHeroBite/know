@@ -46,7 +46,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
     with tempfile.TemporaryDirectory(prefix="morph_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"
         output_file = Path(tmpdir) / "output.txt"
-        input_file.write_text(keyword.strip() + "\n", encoding="euc-kr", errors="replace")
+        input_file.write_text(keyword.strip() + "\n", encoding="utf-8")
 
         env = os.environ.copy()
         env["JAVA_HOME"] = JAVA_HOME
@@ -56,7 +56,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
             proc = subprocess.run(
                 [
                     f"{JAVA_HOME}/bin/java",
-                    "-Dfile.encoding=EUC-KR",
+                    "-Dfile.encoding=UTF-8",
                     "-classpath", classpath,
                     "test.LiteTest",
                     f"{jh_data_root}/",
@@ -82,7 +82,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
 
             # 결과 파일 읽기
             if output_file.exists():
-                result_text = output_file.read_text(encoding="euc-kr", errors="replace").strip()
+                result_text = output_file.read_text(encoding="utf-8", errors="replace").strip()
             else:
                 result_text = proc.stdout.strip() if proc.stdout else ""
 
@@ -131,7 +131,14 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
     jh = jiana_home
     lib_path = f"{jh}/lib"
     classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
-    resource_path = f"{jh}/resources/korean"
+    # LiteTest와 동일한 jiana 루트 결정 로직 적용
+    # workspace jiana인 경우 jh/data/ 존재 → jh 사용 (최신 udic)
+    # 구버전 엔진 경로인 경우 jh/resources/korean fallback
+    resource_path = jh
+    if not os.path.isdir(os.path.join(jh, "data")):
+        candidate = os.path.join(jh, "resources", "korean")
+        if os.path.isdir(os.path.join(candidate, "data")):
+            resource_path = candidate
 
     with tempfile.TemporaryDirectory(prefix="morph_full_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"

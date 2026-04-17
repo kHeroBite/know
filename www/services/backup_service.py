@@ -29,6 +29,22 @@ def _read_metadata(backup_dir: Path) -> dict[str, Any] | None:
         return None
 
 
+def _detect_jiana_version(domain: str):
+    """domain/lib/jiana-dist-* 에서 jiana 버전 탐색."""
+    domain_path = Path(DOMAIN_DIR) / domain
+    lib_path = domain_path / "lib"
+    if not lib_path.is_dir():
+        return None
+    candidates = sorted(
+        [c for c in lib_path.iterdir() if c.is_dir() and c.name.startswith("jiana-dist-")],
+        reverse=True
+    )
+    for c in candidates:
+        if (c / "lib" / "jiana1.5.jar").exists():
+            return c.name.replace("jiana-dist-", "")
+    return None
+
+
 def list_backups(domain: str) -> list[dict[str, Any]]:
     """DICT_BACKUP_DIR 스캔 → {domain}_* 패턴 + metadata.json 병합.
 
@@ -71,6 +87,7 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
                 "backup_tables": meta.get("backup_tables", []),
                 "size_bytes": size_bytes,
                 "size_mb": size_mb,
+                "jiana_version": meta.get("jiana_version") if meta else None,
             }
         else:
             # 메타데이터 없음 — 디렉토리 mtime 기반
@@ -88,6 +105,7 @@ def list_backups(domain: str) -> list[dict[str, Any]]:
                 "backup_tables": [],
                 "size_bytes": size_bytes,
                 "size_mb": size_mb,
+                "jiana_version": None,
             }
         result.append(entry)
     # 타임스탬프 내림차순
@@ -153,6 +171,7 @@ def _backup_current_state(domain: str, db) -> dict[str, Any]:
         "backup_files": backup_db_files,
         "files": files,
         "auto": True,
+        "jiana_version": _detect_jiana_version(domain),
     }
     try:
         with open(backup_path / "metadata.json", "w", encoding="utf-8") as f:

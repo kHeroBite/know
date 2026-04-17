@@ -11,6 +11,7 @@ export interface Backup {
   share_url?: string | null
   has_report?: boolean
   size_mb?: number
+  jiana_version?: string | null
 }
 
 export interface BackupListResponse {
