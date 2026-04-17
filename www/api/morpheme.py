@@ -1,6 +1,7 @@
 """analyze_morpheme API 엔드포인트"""
 from typing import Optional
 import asyncio
+import glob as _glob
 import os
 from functools import partial
 
@@ -23,11 +24,24 @@ class AnalyzeRequest(BaseModel):
 
 
 def _resolve_jiana_home(workspace: Optional[str], domain: Optional[str]) -> Optional[str]:
-    """workspace 우선, 없으면 domain 경로에서 jiana_home 결정."""
+    """workspace 우선, 없으면 domain 경로에서 jiana_home 결정.
+
+    domain 경로: lib/jiana-dist-*/ 자동 탐색 (버전 하위 디렉토리 지원).
+    예: domain/epost/lib/jiana-dist-1.5.13/ 형태.
+    """
     if workspace:
         return get_jiana_home_path(workspace)
     if domain:
-        return os.path.join(DOMAIN_DIR, domain)
+        domain_path = os.path.join(DOMAIN_DIR, domain)
+        # lib/jiana-dist-* 하위 디렉토리 탐색 (버전 디렉토리 패턴)
+        candidates = _glob.glob(os.path.join(domain_path, "lib", "jiana-dist-*"))
+        for c in sorted(candidates, reverse=True):  # 최신 버전 우선
+            if os.path.isfile(os.path.join(c, "lib", "jiana1.5.jar")):
+                return c
+        # fallback: domain_path 직접 (jiana1.5.jar가 바로 있는 경우)
+        if os.path.isfile(os.path.join(domain_path, "lib", "jiana1.5.jar")):
+            return domain_path
+        return domain_path  # 최후 fallback (기존 동작)
     return None
 
 

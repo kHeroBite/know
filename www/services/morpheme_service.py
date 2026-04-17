@@ -34,6 +34,15 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
     lib_path = f"{jh}/lib"
     classpath = f"{lib_path}/jiana1.5.jar:{lib_path}/dqdic-1.0.3.jar"
 
+    # LiteTest에 전달하는 jiana 루트: data/ 폴더가 바로 있는 경로여야 함.
+    # workspace jiana: {jh}/data/ 존재
+    # domain jiana-dist: {jh}/resources/korean/data/ 존재 → resources/korean을 루트로 사용
+    jh_data_root = jh
+    if not os.path.isdir(os.path.join(jh, "data")):
+        candidate = os.path.join(jh, "resources", "korean")
+        if os.path.isdir(os.path.join(candidate, "data")):
+            jh_data_root = candidate
+
     with tempfile.TemporaryDirectory(prefix="morph_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"
         output_file = Path(tmpdir) / "output.txt"
@@ -50,7 +59,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
                     "-Dfile.encoding=EUC-KR",
                     "-classpath", classpath,
                     "test.LiteTest",
-                    f"{jh}/",
+                    f"{jh_data_root}/",
                     "use",
                     str(input_file),
                     str(output_file),
