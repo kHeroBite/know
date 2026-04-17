@@ -163,10 +163,16 @@ class BuildService:
     # 빌드 상태 조회
     # ──────────────────────────────────────────────
     def get_build_status_service(self, db: Session, domain: str, workspace: Optional[str] = None) -> dict:
-        """최신 BuildHistory 조회 (workspace 지정 시 해당 workspace의 빌드만)"""
+        """최신 BuildHistory 조회 (workspace 지정 시 현재 연결 이후 빌드만)"""
         q = db.query(BuildHistory).filter(BuildHistory.domain == domain)
         if workspace:
             q = q.filter(BuildHistory.workspace == workspace)
+            # connected_at 이후 시작된 빌드만 인정 (이전 연결의 빌드 이력 제외)
+            from services.workspace_service import _read_state
+            ws_state = _read_state()
+            connected_at = ws_state.get(workspace, {}).get("connected_at")
+            if connected_at:
+                q = q.filter(BuildHistory.started_at >= connected_at)
         bh = q.order_by(BuildHistory.id.desc()).first()
         if not bh:
             raise HTTPException(
