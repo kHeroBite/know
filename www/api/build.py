@@ -98,11 +98,12 @@ def cancel_build(
 @라우터.get("/{domain}/status")
 def get_build_status(
     domain: str,
+    workspace: str = Query("", alias="workspace"),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(db_session),
 ):
     """현재 빌드 상태 (최신 BuildHistory)"""
-    return build_service.get_build_status_service(db, domain)
+    return build_service.get_build_status_service(db, domain, workspace=workspace or None)
 
 
 @라우터.get("/history-all")

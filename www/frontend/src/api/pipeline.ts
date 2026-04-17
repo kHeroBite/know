@@ -40,8 +40,8 @@ export const 빌드API = {
   빌드취소: (domain: string) =>
     클라이언트.post(`/build/${domain}/cancel`),
 
-  상태조회: (domain: string) =>
-    클라이언트.get(`/build/${domain}/status`),
+  상태조회: (domain: string, workspace?: string) =>
+    클라이언트.get(`/build/${domain}/status`, { params: workspace ? { workspace } : {} }),
 
   이력조회: (domain: string) =>
     클라이언트.get(`/build/${domain}/history`),

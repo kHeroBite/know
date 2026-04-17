@@ -57,7 +57,7 @@ export function createBuildOpsSlice(
       get()._startPolling(
         taskId,
         async () => {
-          const res = await 빌드API.상태조회(domain)
+          const res = await 빌드API.상태조회(domain, workspace || undefined)
           const status = res.data?.status
           if (status === 'completed' || status === 'success') {
             return { percent: 100, done: true, error: false }

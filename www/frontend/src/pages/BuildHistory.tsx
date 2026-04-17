@@ -214,7 +214,7 @@ export default function BuildHistory() {
     set최근빌드ID(null)
     set최근빌드상태('')
     set빌드완료여부(false)
-    빌드API.상태조회(currentDomain).then((res: any) => {
+    빌드API.상태조회(currentDomain, selectedWorkspace || undefined).then((res: any) => {
       const d = res.data
       if (!d) return
       // 상태 복원 (항상)
@@ -228,7 +228,7 @@ export default function BuildHistory() {
         }
       }
     }).catch((err: any) => {
-      // 404: 이 도메인의 빌드 이력 없음 → 상태 초기화 (다운로드 버튼 숨김)
+      // 404: 이 도메인+workspace의 빌드 이력 없음 → 상태 초기화 (다운로드 버튼 숨김)
       if (err?.response?.status === 404) {
         set최근빌드ID(null)
         set최근빌드상태('')
@@ -240,7 +240,7 @@ export default function BuildHistory() {
   const 빌드로그조회 = useCallback(async () => {
     if (!currentDomain) return
     try {
-      const res = await 빌드API.상태조회(currentDomain)
+      const res = await 빌드API.상태조회(currentDomain, selectedWorkspace || undefined)
       const d = res.data
       if (d.log_text) {
         const lines = d.log_text.split('\n').filter((l: string) => l.trim())

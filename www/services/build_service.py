@@ -162,14 +162,12 @@ class BuildService:
     # ──────────────────────────────────────────────
     # 빌드 상태 조회
     # ──────────────────────────────────────────────
-    def get_build_status_service(self, db: Session, domain: str) -> dict:
-        """최신 BuildHistory 조회"""
-        bh = (
-            db.query(BuildHistory)
-            .filter(BuildHistory.domain == domain)
-            .order_by(BuildHistory.id.desc())
-            .first()
-        )
+    def get_build_status_service(self, db: Session, domain: str, workspace: Optional[str] = None) -> dict:
+        """최신 BuildHistory 조회 (workspace 지정 시 해당 workspace의 빌드만)"""
+        q = db.query(BuildHistory).filter(BuildHistory.domain == domain)
+        if workspace:
+            q = q.filter(BuildHistory.workspace == workspace)
+        bh = q.order_by(BuildHistory.id.desc()).first()
         if not bh:
             raise HTTPException(
                 status_code=404, detail=f"도메인 '{domain}'의 빌드 이력이 없습니다."
