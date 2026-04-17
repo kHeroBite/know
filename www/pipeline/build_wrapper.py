@@ -161,20 +161,6 @@ def run_build(
             except Exception as e:
                 logger.warning("DB 기반 재분석 실패 (빌드 결과 유지): %s", e)
 
-        # 빌드 완료 후 snapshot_after 기록 (완료 대시보드 before/after 비교용)
-        if workspace:
-            try:
-                from services import snapshot_service
-                from core.database import SessionLocal
-                _snap_db = SessionLocal()
-                try:
-                    snapshot_service.take_snapshot(workspace, domain, "after", _snap_db)
-                    logger.info("snapshot_after 기록 완료: workspace=%s, domain=%s", workspace, domain)
-                finally:
-                    _snap_db.close()
-            except Exception as e:
-                logger.warning("snapshot_after 기록 실패 (무시): %s", e)
-
         return {
             "output_path": data_tar,
             "entry_count": entry_count,
@@ -259,7 +245,10 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
     logger.info("[2/3] 기존 data.tar 삭제")
     logs.append("[1/3] ant dic 컴파일 complete")
     logs.append("[2/3] 기존 data.tar 삭제...")
-    _publish_log(pipeline_id, "build", "\n".join(logs), domain=domain)
+    full_log = "\n".join(logs)
+    _publish_log(pipeline_id, "build", full_log, domain=domain)
+    if build_history_id:
+        _update_build_history(build_history_id, log_text=full_log)
     if os.path.exists(data_tar):
         os.remove(data_tar)
         logs.append(f"  삭제 complete: {data_tar}")
@@ -269,7 +258,10 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
     # ── [3/3] data.tar 생성 ─────────────────────────────────────
     logger.info("[3/3] data.tar 생성 시작")
     logs.append("[3/3] data.tar 생성...")
-    _publish_log(pipeline_id, "build", "\n".join(logs), domain=domain)
+    full_log = "\n".join(logs)
+    _publish_log(pipeline_id, "build", full_log, domain=domain)
+    if build_history_id:
+        _update_build_history(build_history_id, log_text=full_log)
     tar_targets = [
         "data",
         "eng_eng.pair",
@@ -292,6 +284,8 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
 
     full_log = "\n".join(logs)
     _publish_log(pipeline_id, "build", full_log, domain=domain)
+    if build_history_id:
+        _update_build_history(build_history_id, log_text=full_log)
 
     return {"returncode": 0, "log": full_log, "stderr": ""}
 
