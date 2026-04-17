@@ -296,6 +296,28 @@ def _run_antdic(domain: str, pipeline_id: Optional[int],
     logs.append(f"  생성 complete: {data_tar}")
     logger.info("[3/3] data.tar 생성 complete: %s", data_tar)
 
+    # ── [+] data/ → resources/korean/data/ 동기화 (FullTest 사용자사전 갱신) ──
+    data_src = os.path.join(build_home, "data")
+    resources_data_dst = os.path.join(build_home, "resources", "korean", "data")
+    if os.path.isdir(data_src) and os.path.isdir(resources_data_dst):
+        import shutil as _shutil
+        sync_errors = []
+        for fname in os.listdir(data_src):
+            src_file = os.path.join(data_src, fname)
+            dst_file = os.path.join(resources_data_dst, fname)
+            if os.path.isfile(src_file):
+                try:
+                    _shutil.copy2(src_file, dst_file)
+                except Exception as e:
+                    sync_errors.append(f"{fname}: {e}")
+        if sync_errors:
+            logs.append(f"  [경고] resources/korean/data 동기화 일부 실패: {sync_errors[:3]}")
+        else:
+            logs.append(f"  [+] resources/korean/data 동기화 complete ({len(os.listdir(data_src))}개 파일)")
+        logger.info("[+] data → resources/korean/data 동기화 complete: %s", build_home)
+    else:
+        logs.append(f"  [+] resources/korean/data 없음 (동기화 스킵)")
+
     full_log = "\n".join(logs)
     _publish_log(pipeline_id, "build", full_log, domain=domain)
     if build_history_id:
