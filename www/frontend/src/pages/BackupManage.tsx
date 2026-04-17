@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Row, Col,
-  Form, message, Modal, Tag, Typography, Popconfirm,
+  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
   FilePptOutlined, MailOutlined, CheckCircleOutlined, DeleteFilled,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import PageHeader from '../components/PageHeader'
 import {
@@ -16,6 +17,7 @@ import { shareAPI } from '../api/share'
 import { reportAPI } from '../api/reports'
 import { workspaceAPI } from '../api/workspace'
 import { listSites } from '../api/site'
+import 클라이언트 from '../api/client'
 
 const { Text } = Typography
 
@@ -43,6 +45,15 @@ export default function BackupManage() {
   const [selectedDomain, setSelectedDomain] = useState<string>('all')
   const [sites, setSites] = useState<{ id: number; site_code: string; name: string; domain_code: string }[]>([])
   const [selectedSite, setSelectedSite] = useState<string>('all')
+
+  // ─── 형태소분析 ────────────────────────────────────────────────
+  const [형태소입력, set형태소입력] = useState('')
+  const [형태소로딩Lite, set형태소로딩Lite] = useState(false)
+  const [형태소로딩Full, set형태소로딩Full] = useState(false)
+  const [형태소로딩유사어, set형태소로딩유사어] = useState(false)
+  const [형태소결과Lite, set형태소결과Lite] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
+  const [형태소결과Full, set형태소결과Full] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
+  const [형태소결과유사어, set형태소결과유사어] = useState<{head_word: string; tail_word: string}[] | null>(null)
 
   // ─── 백업 목록 ─────────────────────────────────────────────────
   const [backups, setBackups] = useState<Backup[]>([])
@@ -134,6 +145,31 @@ export default function BackupManage() {
   useEffect(() => {
     loadBackups()
   }, [loadBackups])
+
+  // ─── 형태소분析 실행 ───────────────────────────────────────────
+  const 형태소분析실행 = async () => {
+    const kw = 형태소입력.trim()
+    if (!kw || !selectedDomain || selectedDomain === 'all') return
+    set형태소결과Lite(null)
+    set형태소결과Full(null)
+    set형태소결과유사어(null)
+    set형태소로딩Lite(true)
+    set형태소로딩Full(true)
+    set형태소로딩유사어(true)
+    const litePromise = 클라이언트.post('/morpheme/analyze', { keyword: kw, domain: selectedDomain })
+      .then(r => set형태소결과Lite(r.data))
+      .catch(() => set형태소결과Lite({ keyword: kw, result: '분析 실패', tokens: [] }))
+      .finally(() => set형태소로딩Lite(false))
+    const fullPromise = 클라이언트.post('/morpheme/analyze-full', { keyword: kw, domain: selectedDomain })
+      .then(r => set형태소결과Full(r.data))
+      .catch(() => set형태소결과Full({ keyword: kw, result: '분析 실패', tokens: [] }))
+      .finally(() => set형태소로딩Full(false))
+    const synPromise = 클라이언트.get(`/dictionaries/${selectedDomain}/thesaurus/list`, { params: { search: kw, size: 30 } })
+      .then(r => set형태소결과유사어(r.data?.items || []))
+      .catch(() => set형태소결과유사어([]))
+      .finally(() => set형태소로딩유사어(false))
+    await Promise.all([litePromise, fullPromise, synPromise])
+  }
 
   // ─── 사이트 필터 적용 백업 목록 ────────────────────────────────
   const filteredBackups = backups.filter(b => {
@@ -531,6 +567,120 @@ export default function BackupManage() {
             }}
           />
         </Card>
+
+        {/* ── 형태소분析 패널 ── */}
+        {selectedDomain && selectedDomain !== 'all' && (
+          <>
+            <Divider />
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ fontSize: 15 }}>
+                <ExperimentOutlined /> {selectedDomain} 형태소분析
+              </Text>
+            </div>
+            <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+              <Input
+                placeholder="분析할 키워드 입력"
+                value={형태소입력}
+                onChange={e => set형태소입력(e.target.value)}
+                onPressEnter={형태소분析실행}
+                allowClear
+                style={{ maxWidth: 400 }}
+              />
+              <Button
+                type="primary"
+                icon={<ExperimentOutlined />}
+                onClick={형태소분析실행}
+                loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
+                disabled={!형태소입력.trim()}
+              >분析</Button>
+            </Space.Compact>
+            <Row gutter={[16, 16]}>
+              {/* Lite 분析 */}
+              <Col xs={24} md={8}>
+                <Card title="Lite 형태소분析" size="small" style={{ minHeight: 200 }}>
+                  {형태소로딩Lite ? (
+                    <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                  ) : 형태소결과Lite ? (
+                    <div>
+                      <div style={{ marginBottom: 8 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                        <Text strong>{형태소결과Lite.keyword}</Text>
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        {형태소결과Lite.tokens.length > 0
+                          ? 형태소결과Lite.tokens.map((t, i) => (
+                              <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
+                            ))
+                          : <Text type="secondary">결과 없음</Text>
+                        }
+                      </div>
+                      {형태소결과Lite.result && (
+                        <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                          {형태소결과Lite.result}
+                        </pre>
+                      )}
+                    </div>
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                  )}
+                </Card>
+              </Col>
+              {/* Full 분析 */}
+              <Col xs={24} md={8}>
+                <Card title="Full 형태소분析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+                  {형태소로딩Full ? (
+                    <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                  ) : 형태소결과Full ? (
+                    <div>
+                      <div style={{ marginBottom: 8 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                        <Text strong>{형태소결과Full.keyword}</Text>
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        {형태소결과Full.tokens.length > 0
+                          ? 형태소결과Full.tokens.map((t, i) => (
+                              <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
+                            ))
+                          : <Text type="secondary">결과 없음</Text>
+                        }
+                      </div>
+                      {형태소결과Full.result && (
+                        <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                          {형태소결과Full.result}
+                        </pre>
+                      )}
+                    </div>
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                  )}
+                </Card>
+              </Col>
+              {/* 유사어 확장 */}
+              <Col xs={24} md={8}>
+                <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
+                  {형태소로딩유사어 ? (
+                    <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                  ) : 형태소결과유사어 ? (
+                    형태소결과유사어.length > 0 ? (
+                      <div>
+                        {형태소결과유사어.map((s, i) => (
+                          <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
+                            <Tag color="green">{s.head_word}</Tag>
+                            <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
+                    )
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
+                  )}
+                </Card>
+              </Col>
+            </Row>
+          </>
+        )}
 
       </div>
 
