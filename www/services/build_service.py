@@ -356,7 +356,7 @@ def _estimate_build_percent(status: str, log_text: str) -> int:
     # running 상태에서 log 분석 (단계 마커 순서대로 체크)
     if "[재분석]" in log_text:
         return 95
-    if "[3/3] data.tar 생성 complete" in log_text:
+    if "생성 complete:" in log_text:
         return 90
     if "[3/3] data.tar 생성" in log_text:
         return 75
