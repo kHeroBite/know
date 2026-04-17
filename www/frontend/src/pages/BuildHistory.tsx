@@ -177,6 +177,9 @@ export default function BuildHistory() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // 빌드로그조회 최신 버전을 항상 참조 (stale closure 방지)
   const 빌드로그조회Ref = useRef<(() => Promise<void>) | null>(null)
+  // selectedWorkspace 최신값 ref (setInterval stale closure 방지)
+  const selectedWorkspaceRef = useRef<string | null>(null)
+  selectedWorkspaceRef.current = selectedWorkspace
   // 현재 진행 중인 빌드 ID 추적 (타이밍 이슈: 이전 빌드 completed 오조회 방지)
   const currentBuildIdRef = useRef<number | null>(null)
   // 페이지 마운트 카운터 — 마운트/언마운트 시마다 증가하여 상태 복원 useEffect를 강제 재실행
@@ -241,7 +244,7 @@ export default function BuildHistory() {
   const 빌드로그조회 = useCallback(async () => {
     if (!currentDomain) return
     try {
-      const res = await 빌드API.상태조회(currentDomain, selectedWorkspace || undefined)
+      const res = await 빌드API.상태조회(currentDomain, selectedWorkspaceRef.current || undefined)
       const d = res.data
       if (d.log_text) {
         const lines = d.log_text.split('\n').filter((l: string) => l.trim())
@@ -249,9 +252,21 @@ export default function BuildHistory() {
       }
       set최근빌드상태(d.status)
       if (d.id) set최근빌드ID(d.id)
-      // 진행률 갱신
+      // 진행률 갱신 — 백엔드 percent 우선, 0이면 로그 텍스트로 직접 추정
       if (d.status === 'running') {
-        set빌드퍼센트(d.percent ?? 50)
+        const logText: string = d.log_text || ''
+        let pct = d.percent ?? 0
+        if (!pct) {
+          if (logText.includes('[재분석]'))                          pct = 95
+          else if (logText.includes('생성 complete'))               pct = 90
+          else if (logText.includes('추가: synonym'))               pct = 75
+          else if (logText.includes('추가: meaning') || logText.includes('추가: hypernym')) pct = 60
+          else if (logText.includes('[1/3] ant dic 컴파일 complete')) pct = 50
+          else if (logText.includes('[OUT]'))                        pct = 30
+          else if (logText.includes('[1/3]') || logText.includes('[thesaurus export]')) pct = 15
+          else                                                       pct = 5
+        }
+        set빌드퍼센트(pct)
       }
       // 빌드 중에도 이력 테이블 갱신
       현재이력조회()
