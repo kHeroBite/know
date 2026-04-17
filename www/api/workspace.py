@@ -359,6 +359,10 @@ def link_domain_handler(
                {"dom": domain})
     db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom OR domain='' OR domain IS NULL"),
                {"dom": domain})
+    # After 스냅샷 삭제 — 재연결 시 이전 After가 남아 증감이 0으로 보이는 버그 방지
+    # Before는 연결 직후 새로 찍히므로 After만 삭제
+    db.execute(text("DELETE FROM workspace_snapshots WHERE workspace_name=:ws AND domain_code=:dom AND snapshot_type='after'"),
+               {"ws": name, "dom": domain.upper()})
     db.commit()
 
     return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code)
