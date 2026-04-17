@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import {
   Card, Button, Table, Tag, Typography, Space, Modal,
-  message, Statistic, Row, Col, Divider, Input
+  message, Statistic, Row, Col, Divider, Input, Progress
 } from 'antd'
 import { BuildOutlined, ReloadOutlined, StopOutlined, CheckCircleOutlined, ExperimentOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -74,6 +74,7 @@ export default function BuildHistory() {
   const [최근빌드상태, set최근빌드상태] = useState<string>('')
   // 이번 페이지 진입 후 빌드가 실제로 완료됐는지 추적 (복귀 시 이전 성공 상태 오표시 방지)
   const [빌드완료여부, set빌드완료여부] = useState(false)
+  const [빌드퍼센트, set빌드퍼센트] = useState(0)
   const [현재이력, set현재이력] = useState<빌드이력항목[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const 로그박스Ref = useRef<HTMLDivElement>(null)
@@ -248,6 +249,10 @@ export default function BuildHistory() {
       }
       set최근빌드상태(d.status)
       if (d.id) set최근빌드ID(d.id)
+      // 진행률 갱신
+      if (d.status === 'running') {
+        set빌드퍼센트(d.percent ?? 50)
+      }
       // 빌드 중에도 이력 테이블 갱신
       현재이력조회()
       전체이력조회()
@@ -259,8 +264,11 @@ export default function BuildHistory() {
         currentBuildIdRef.current = null
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
         if (d.status === 'completed' || d.status === 'success') {
+          set빌드퍼센트(100)
           set빌드완료여부(true)
           set분석결과목록([])
+        } else {
+          set빌드퍼센트(0)
         }
       }
     } catch { /* 무시 */ }
@@ -310,6 +318,7 @@ export default function BuildHistory() {
     set빌드중(true)
     set빌드로그([])
     set분석결과목록([])
+    set빌드퍼센트(0)
     currentBuildIdRef.current = -1  // -1: 아직 ID 모름, 받기 전까지 완료 처리 무시
     // WebSocket 먼저 연결 후 빌드 시작 (빠른 빌드 로그 누락 방지)
     빌드웹소켓연결(currentDomain)
@@ -449,6 +458,22 @@ export default function BuildHistory() {
       <Card
         extra={
           <Space>
+            {빌드중 && (
+              <Progress
+                percent={빌드퍼센트}
+                size="small"
+                style={{ width: 160, marginBottom: 0 }}
+                status="active"
+              />
+            )}
+            {!빌드중 && 빌드퍼센트 === 100 && (
+              <Progress
+                percent={100}
+                size="small"
+                style={{ width: 160, marginBottom: 0 }}
+                status="success"
+              />
+            )}
             {빌드중 ? (
               <Button danger icon={<StopOutlined />} onClick={빌드중지}>
                 빌드 중지
