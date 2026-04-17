@@ -70,17 +70,20 @@ def take_snapshot(
     domain_code: str,
     snapshot_type: str,
     db: Session,
+    *,
+    use_ws_tables: bool = False,
 ) -> dict:
     """워크스페이스 사전 테이블 count를 수집하여 workspace_snapshots에 기록.
 
     snapshot_type: 'before' | 'after'
     - before: WS 테이블 기준 (연결 시 복사된 초기값)
     - after:  도메인 원본 테이블 기준 (역방향 복사 완료 후 최종값)
+              use_ws_tables=True 이면 WS 테이블 기준 (빌드 완료 시 중간 스냅샷)
     """
     if snapshot_type not in ("before", "after"):
         raise ValueError(f"snapshot_type must be 'before' or 'after', got: {snapshot_type}")
 
-    if snapshot_type == "after":
+    if snapshot_type == "after" and not use_ws_tables:
         counts = _collect_counts_after(db, domain_code.upper())
     else:
         counts = _collect_counts_before(db, workspace_name, domain_code.upper())

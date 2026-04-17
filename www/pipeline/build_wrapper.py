@@ -151,6 +151,20 @@ def run_build(
         logger.info("빌드 complete: domain=%s, entry_count=%s, file_size=%s",
                     domain, entry_count, file_size)
 
+        # 빌드 완료 후 WS 테이블 기준 after 스냅샷 저장 (작업완료 페이지 before vs after 비교용)
+        if workspace:
+            try:
+                from core.database import SessionLocal
+                from services import snapshot_service
+                _snap_sess = SessionLocal()
+                try:
+                    snapshot_service.take_snapshot(workspace, domain, "after", _snap_sess, use_ws_tables=True)
+                    logger.info("빌드 완료 after 스냅샷 저장: workspace=%s, domain=%s", workspace, domain)
+                finally:
+                    _snap_sess.close()
+            except Exception as e:
+                logger.warning("after 스냅샷 저장 실패 (빌드 결과 유지): %s", e)
+
         # 빌드 완료 후 DB 기반으로 keyword_assignments 재분석 (refine.txt 없어도 동작)
         if workspace:
             try:

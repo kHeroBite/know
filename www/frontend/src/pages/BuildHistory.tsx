@@ -308,6 +308,15 @@ export default function BuildHistory() {
           if (msg.log) {
             const lines = msg.log.split('\n').filter((l: string) => l.trim())
             set빌드로그(lines)
+            // 폴링 전에 완료되는 빠른 빌드를 위해 WebSocket 로그로도 percent 갱신
+            const logText = lines.join('\n')
+            if (logText.includes('[재분석]'))                                set빌드퍼센트(prev => Math.max(prev, 95))
+            else if (logText.includes('[3/3] data.tar 생성 complete'))       set빌드퍼센트(prev => Math.max(prev, 90))
+            else if (logText.includes('[3/3] data.tar 생성'))                set빌드퍼센트(prev => Math.max(prev, 75))
+            else if (logText.includes('[2/3]'))                              set빌드퍼센트(prev => Math.max(prev, 60))
+            else if (logText.includes('[1/3] ant dic 컴파일 complete'))      set빌드퍼센트(prev => Math.max(prev, 50))
+            else if (logText.includes('[OUT]'))                              set빌드퍼센트(prev => Math.max(prev, 30))
+            else if (logText.includes('[thesaurus export]') || logText.includes('[1/3]')) set빌드퍼센트(prev => Math.max(prev, 15))
           } else {
             set빌드로그(prev => [...prev.slice(-499), e.data])
           }
