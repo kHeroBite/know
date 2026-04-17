@@ -155,4 +155,7 @@ def get_snapshots_pair(
     """(before, after) 스냅샷 쌍 조회. domain_code 지정 시 해당 도메인만."""
     before = get_snapshot(workspace_name, "before", db, domain_code=domain_code)
     after = get_snapshot(workspace_name, "after", db, domain_code=domain_code)
+    # stale after 방지: after가 before보다 먼저 찍힌 경우 이전 작업 주기의 잔류값
+    if before and after and after["id"] < before["id"]:
+        after = None
     return before, after
