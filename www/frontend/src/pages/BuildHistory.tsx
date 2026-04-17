@@ -333,7 +333,7 @@ export default function BuildHistory() {
     set빌드중(true)
     set빌드로그([])
     set분석결과목록([])
-    set빌드퍼센트(0)
+    set빌드퍼센트(5)  // 빌드 클릭 즉시 5% 표시 (빌드가 빠르면 polling 전에 완료될 수 있음)
     currentBuildIdRef.current = -1  // -1: 아직 ID 모름, 받기 전까지 완료 처리 무시
     // WebSocket 먼저 연결 후 빌드 시작 (빠른 빌드 로그 누락 방지)
     빌드웹소켓연결(currentDomain)
