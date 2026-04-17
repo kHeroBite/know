@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Row, Col,
-  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin, Statistic,
+  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin, Statistic, Tabs,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
   FilePptOutlined, MailOutlined, CheckCircleOutlined, DeleteFilled,
-  ExperimentOutlined,
+  ExperimentOutlined, SearchOutlined,
 } from '@ant-design/icons'
 import PageHeader from '../components/PageHeader'
 import {
@@ -55,6 +55,16 @@ export default function BackupManage() {
   const [형태소결과Lite, set형태소결과Lite] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
   const [형태소결과Full, set형태소결과Full] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
   const [형태소결과유사어, set형태소결과유사어] = useState<{head_word: string; tail_word: string}[] | null>(null)
+
+  // ─── 사전확인 모달 ─────────────────────────────────────────────
+  const [사전확인모달Open, set사전확인모달Open] = useState(false)
+  const [사전확인대상, set사전확인대상] = useState<Backup | null>(null)
+  const [사전탭, set사전탭] = useState<'udic' | 'cndic' | 'thesaurus'>('udic')
+  const [사전검색어, set사전검색어] = useState('')
+  const [사전데이터, set사전데이터] = useState<any[]>([])
+  const [사전총건수, set사전총건수] = useState(0)
+  const [사전페이지, set사전페이지] = useState(1)
+  const [사전로딩, set사전로딩] = useState(false)
 
   // ─── 백업 목록 ─────────────────────────────────────────────────
   const [backups, setBackups] = useState<Backup[]>([])
@@ -428,6 +438,34 @@ export default function BackupManage() {
     return matched ? matched.id : null
   }
 
+  // ─── 사전확인 ─────────────────────────────────────────────────
+  const load사전데이터 = async (backup: Backup, tab: 'udic' | 'cndic' | 'thesaurus', search: string, page: number) => {
+    set사전로딩(true)
+    try {
+      const res = await 클라이언트.get(`/api/backups/${backup.name}/dict/${tab}`, {
+        params: { search: search || undefined, page, size: 50 },
+      })
+      set사전데이터(res.data?.items || [])
+      set사전총건수(res.data?.total || 0)
+      set사전페이지(page)
+    } catch (e: any) {
+      message.error('사전 로드 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+    } finally {
+      set사전로딩(false)
+    }
+  }
+
+  const handleOpen사전확인 = (r: Backup) => {
+    set사전확인대상(r)
+    set사전탭('udic')
+    set사전검색어('')
+    set사전데이터([])
+    set사전총건수(0)
+    set사전페이지(1)
+    set사전확인모달Open(true)
+    load사전데이터(r, 'udic', '', 1)
+  }
+
   const handleOpenMorpheme = (r: Backup) => {
     const domainCode = getDomainCodeFromBackup(r)
     if (domainCode) {
@@ -458,6 +496,13 @@ export default function BackupManage() {
             title={hasDomain ? '형태소분석' : '도메인 정보 없음'}
           >
             형태소분석
+          </Button>
+          <Button
+            size="small"
+            icon={<SearchOutlined />}
+            onClick={() => handleOpen사전확인(r)}
+          >
+            사전확인
           </Button>
           <Button
             size="small"
@@ -843,6 +888,87 @@ export default function BackupManage() {
           <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
             등록된 연락처가 없습니다. 메일 관리에서 먼저 추가해주세요.
           </Text>
+        )}
+      </Modal>
+
+      {/* ── 사전확인 모달 ── */}
+      <Modal
+        title={`사전확인 — ${사전확인대상?.name || ''}`}
+        open={사전확인모달Open}
+        onCancel={() => set사전확인모달Open(false)}
+        footer={<Button onClick={() => set사전확인모달Open(false)}>닫기</Button>}
+        width={800}
+        destroyOnClose
+      >
+        <Tabs
+          activeKey={사전탭}
+          onChange={(key) => {
+            const tab = key as 'udic' | 'cndic' | 'thesaurus'
+            set사전탭(tab)
+            set사전검색어('')
+            set사전페이지(1)
+            if (사전확인대상) load사전데이터(사전확인대상, tab, '', 1)
+          }}
+          items={[
+            { key: 'udic', label: `사용자사전 (${사전탭 === 'udic' ? 사전총건수 : '?'})` },
+            { key: 'cndic', label: `복합명사사전 (${사전탭 === 'cndic' ? 사전총건수 : '?'})` },
+            { key: 'thesaurus', label: `유사어사전 (${사전탭 === 'thesaurus' ? 사전총건수 : '?'})` },
+          ]}
+        />
+        <Input.Search
+          placeholder="검색어 입력"
+          value={사전검색어}
+          onChange={e => set사전검색어(e.target.value)}
+          onSearch={(val) => {
+            set사전페이지(1)
+            if (사전확인대상) load사전데이터(사전확인대상, 사전탭, val, 1)
+          }}
+          allowClear
+          style={{ marginBottom: 12, maxWidth: 320 }}
+        />
+        {사전탭 === 'thesaurus' ? (
+          <Table
+            size="small"
+            loading={사전로딩}
+            dataSource={사전데이터}
+            rowKey={(r, i) => `${r._HEAD_WORD}_${r._TAIL_WORD}_${i}`}
+            columns={[
+              { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD', width: 160 },
+              { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD', width: 160 },
+              { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
+              { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
+            ]}
+            pagination={{
+              current: 사전페이지,
+              pageSize: 50,
+              total: 사전총건수,
+              showTotal: (t) => `총 ${t}건`,
+              onChange: (p) => {
+                if (사전확인대상) load사전데이터(사전확인대상, 사전탭, 사전검색어, p)
+              },
+            }}
+          />
+        ) : (
+          <Table
+            size="small"
+            loading={사전로딩}
+            dataSource={사전데이터}
+            rowKey={(r, i) => `${r._WORD}_${i}`}
+            columns={[
+              { title: '단어', dataIndex: '_WORD', key: '_WORD', width: 200 },
+              { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
+              { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
+            ]}
+            pagination={{
+              current: 사전페이지,
+              pageSize: 50,
+              total: 사전총건수,
+              showTotal: (t) => `총 ${t}건`,
+              onChange: (p) => {
+                if (사전확인대상) load사전데이터(사전확인대상, 사전탭, 사전검색어, p)
+              },
+            }}
+          />
         )}
       </Modal>
     </div>

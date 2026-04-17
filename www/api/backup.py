@@ -1,9 +1,10 @@
 """api/backup.py — 도메인 사전 백업 관리 엔드포인트"""
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -174,6 +175,48 @@ def email_backup_api(
         "share_token": share_token,
         **result,
     }
+
+
+@라우터.get("/{name}/dict/{dict_type}")
+def get_backup_dict(
+    name: str,
+    dict_type: str,
+    search: Optional[str] = Query(None, description="검색어 (부분 일치)"),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """백업 사전 검색 (읽기 전용).
+
+    dict_type: udic | cndic | thesaurus
+    """
+    type_map = {"udic": "db_UDIC.json", "cndic": "db_CNDIC.json", "thesaurus": "db_THESAURUS.json"}
+    if dict_type not in type_map:
+        raise HTTPException(status_code=400, detail=f"dict_type은 udic|cndic|thesaurus 중 하나여야 합니다")
+    json_path = Path(DICT_BACKUP_DIR) / name / type_map[dict_type]
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail=f"사전 파일이 없습니다: {type_map[dict_type]}")
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            items: List[dict] = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"사전 파일 읽기 실패: {e}")
+
+    if search:
+        kw = search.strip().lower()
+        if dict_type == "thesaurus":
+            items = [
+                r for r in items
+                if kw in (r.get("_HEAD_WORD") or "").lower()
+                or kw in (r.get("_TAIL_WORD") or "").lower()
+            ]
+        else:
+            items = [r for r in items if kw in (r.get("_WORD") or "").lower()]
+
+    total = len(items)
+    offset = (page - 1) * size
+    page_items = items[offset: offset + size]
+    return {"items": page_items, "total": total, "page": page, "size": size}
 
 
 @라우터.get("/{name}/data-tar")
