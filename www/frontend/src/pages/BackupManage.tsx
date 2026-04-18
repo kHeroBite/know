@@ -739,206 +739,213 @@ export default function BackupManage() {
           />
         </Card>
 
-        {/* ── 인라인 패널 (형태소분析 / 사전확인) ── */}
-        {activePanel && (
-          <>
-            <Divider />
-            <Card
+        {/* ── 형태소분析 Modal ── */}
+        <Modal
+          title={
+            <Space>
+              <ExperimentOutlined />
+              <span>{activePanel?.backup.name}</span>
+              <Tag color="orange" style={{ fontSize: 11 }}>형태소분析</Tag>
+            </Space>
+          }
+          open={!!activePanel && activePanel.mode === 'morpheme'}
+          onCancel={closePanel}
+          footer={<Button onClick={closePanel}>닫기</Button>}
+          width={1100}
+          destroyOnClose
+        >
+          {형태소준비중 ? (
+            <div style={{ textAlign: 'center', padding: 60 }}>
+              <Spin size="large" />
+              <div style={{ marginTop: 12, color: '#888' }}>jiana 사전 준비 중...</div>
+            </div>
+          ) : (
+            <>
+              <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+                <Input
+                  placeholder="分析할 키워드 입력"
+                  value={형태소입력}
+                  onChange={e => set형태소입력(e.target.value)}
+                  onPressEnter={형태소분析실행}
+                  allowClear
+                  style={{ maxWidth: 400 }}
+                />
+                <Button
+                  type="primary"
+                  icon={<ExperimentOutlined />}
+                  onClick={형태소분析실행}
+                  loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
+                  disabled={!형태소입력.trim()}
+                >分析</Button>
+              </Space.Compact>
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={8}>
+                  <Card title="Lite 형태소分析" size="small" style={{ minHeight: 200 }}>
+                    {형태소로딩Lite ? (
+                      <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                    ) : 형태소결과Lite ? (
+                      <div>
+                        <div style={{ marginBottom: 8 }}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                          <Text strong>{형태소결과Lite.keyword}</Text>
+                        </div>
+                        <div style={{ marginBottom: 8 }}>
+                          {형태소결과Lite.tokens.length > 0
+                            ? 형태소결과Lite.tokens.map((t, i) => (
+                                <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
+                              ))
+                            : <Text type="secondary">결과 없음</Text>
+                          }
+                        </div>
+                        {형태소결과Lite.result && (
+                          <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                            {형태소결과Lite.result}
+                          </pre>
+                        )}
+                      </div>
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                    )}
+                  </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card title="Full 형태소分析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+                    {형태소로딩Full ? (
+                      <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                    ) : 형태소결과Full ? (
+                      <div>
+                        <div style={{ marginBottom: 8 }}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                          <Text strong>{형태소결과Full.keyword}</Text>
+                        </div>
+                        <div style={{ marginBottom: 8 }}>
+                          {형태소결과Full.tokens.length > 0
+                            ? 형태소결과Full.tokens.map((t, i) => (
+                                <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
+                              ))
+                            : <Text type="secondary">결과 없음</Text>
+                          }
+                        </div>
+                        {형태소결과Full.result && (
+                          <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                            {형태소결과Full.result}
+                          </pre>
+                        )}
+                      </div>
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                    )}
+                  </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
+                    {형태소로딩유사어 ? (
+                      <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                    ) : 형태소결과유사어 ? (
+                      형태소결과유사어.length > 0 ? (
+                        <div>
+                          {형태소결과유사어.map((s, i) => (
+                            <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
+                              <Tag color="green">{s.head_word}</Tag>
+                              <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
+                      )
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            </>
+          )}
+        </Modal>
+
+        {/* ── 사전확인 Modal ── */}
+        <Modal
+          title={
+            <Space>
+              <SearchOutlined />
+              <span>{activePanel?.backup.name}</span>
+              <Tag color="blue" style={{ fontSize: 11 }}>사전확인</Tag>
+            </Space>
+          }
+          open={!!activePanel && activePanel.mode === 'dict'}
+          onCancel={closePanel}
+          footer={<Button onClick={closePanel}>닫기</Button>}
+          width={900}
+          destroyOnClose
+        >
+          <Tabs
+            activeKey={사전탭}
+            onChange={(key) => {
+              const tab = key as 'udic' | 'cndic' | 'thesaurus'
+              set사전탭(tab)
+              set사전검색어('')
+              set사전페이지(1)
+              if (activePanel) load사전데이터(activePanel.backup, tab, '', 1)
+            }}
+            items={[
+              { key: 'udic', label: `사용자사전 (${사전탭 === 'udic' ? 사전총건수 : '?'})` },
+              { key: 'cndic', label: `복합명사사전 (${사전탭 === 'cndic' ? 사전총건수 : '?'})` },
+              { key: 'thesaurus', label: `유사어사전 (${사전탭 === 'thesaurus' ? 사전총건수 : '?'})` },
+            ]}
+          />
+          <Input.Search
+            placeholder="검색어 입력"
+            value={사전검색어}
+            onChange={e => set사전검색어(e.target.value)}
+            onSearch={(val) => {
+              set사전페이지(1)
+              if (activePanel) load사전데이터(activePanel.backup, 사전탭, val, 1)
+            }}
+            allowClear
+            style={{ marginBottom: 12, maxWidth: 320 }}
+          />
+          {사전탭 === 'thesaurus' ? (
+            <Table
               size="small"
-              title={
-                <Space>
-                  {activePanel.mode === 'morpheme' ? <ExperimentOutlined /> : <SearchOutlined />}
-                  <span>{activePanel.backup.name}</span>
-                  <Tag color="orange" style={{ fontSize: 11 }}>
-                    {activePanel.mode === 'morpheme' ? '형태소분析' : '사전확인'}
-                  </Tag>
-                </Space>
-              }
-              extra={<Button size="small" onClick={closePanel}>닫기</Button>}
-              style={{ marginBottom: 16 }}
-            >
-              {activePanel.mode === 'morpheme' ? (
-                형태소준비중 ? (
-                  <div style={{ textAlign: 'center', padding: 40 }}>
-                    <Spin size="large" />
-                    <div style={{ marginTop: 12, color: '#888' }}>jiana 사전 준비 중...</div>
-                  </div>
-                ) : (
-                  <>
-                    <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
-                      <Input
-                        placeholder="분析할 키워드 입력"
-                        value={형태소입력}
-                        onChange={e => set형태소입력(e.target.value)}
-                        onPressEnter={형태소분析실행}
-                        allowClear
-                        style={{ maxWidth: 400 }}
-                      />
-                      <Button
-                        type="primary"
-                        icon={<ExperimentOutlined />}
-                        onClick={형태소분析실행}
-                        loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
-                        disabled={!형태소입력.trim()}
-                      >분析</Button>
-                    </Space.Compact>
-                    <Row gutter={[16, 16]}>
-                      <Col xs={24} md={8}>
-                        <Card title="Lite 형태소분析" size="small" style={{ minHeight: 200 }}>
-                          {형태소로딩Lite ? (
-                            <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                          ) : 형태소결과Lite ? (
-                            <div>
-                              <div style={{ marginBottom: 8 }}>
-                                <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
-                                <Text strong>{형태소결과Lite.keyword}</Text>
-                              </div>
-                              <div style={{ marginBottom: 8 }}>
-                                {형태소결과Lite.tokens.length > 0
-                                  ? 형태소결과Lite.tokens.map((t, i) => (
-                                      <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
-                                    ))
-                                  : <Text type="secondary">결과 없음</Text>
-                                }
-                              </div>
-                              {형태소결과Lite.result && (
-                                <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
-                                  {형태소결과Lite.result}
-                                </pre>
-                              )}
-                            </div>
-                          ) : (
-                            <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
-                          )}
-                        </Card>
-                      </Col>
-                      <Col xs={24} md={8}>
-                        <Card title="Full 형태소분析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
-                          {형태소로딩Full ? (
-                            <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                          ) : 형태소결과Full ? (
-                            <div>
-                              <div style={{ marginBottom: 8 }}>
-                                <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
-                                <Text strong>{형태소결과Full.keyword}</Text>
-                              </div>
-                              <div style={{ marginBottom: 8 }}>
-                                {형태소결과Full.tokens.length > 0
-                                  ? 형태소결과Full.tokens.map((t, i) => (
-                                      <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
-                                    ))
-                                  : <Text type="secondary">결과 없음</Text>
-                                }
-                              </div>
-                              {형태소결과Full.result && (
-                                <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
-                                  {형태소결과Full.result}
-                                </pre>
-                              )}
-                            </div>
-                          ) : (
-                            <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
-                          )}
-                        </Card>
-                      </Col>
-                      <Col xs={24} md={8}>
-                        <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
-                          {형태소로딩유사어 ? (
-                            <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                          ) : 형태소결과유사어 ? (
-                            형태소결과유사어.length > 0 ? (
-                              <div>
-                                {형태소결과유사어.map((s, i) => (
-                                  <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
-                                    <Tag color="green">{s.head_word}</Tag>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
-                            )
-                          ) : (
-                            <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분析하세요</Text>
-                          )}
-                        </Card>
-                      </Col>
-                    </Row>
-                  </>
-                )
-              ) : (
-                <>
-                  <Tabs
-                    activeKey={사전탭}
-                    onChange={(key) => {
-                      const tab = key as 'udic' | 'cndic' | 'thesaurus'
-                      set사전탭(tab)
-                      set사전검색어('')
-                      set사전페이지(1)
-                      load사전데이터(activePanel.backup, tab, '', 1)
-                    }}
-                    items={[
-                      { key: 'udic', label: `사용자사전 (${사전탭 === 'udic' ? 사전총건수 : '?'})` },
-                      { key: 'cndic', label: `복합명사사전 (${사전탭 === 'cndic' ? 사전총건수 : '?'})` },
-                      { key: 'thesaurus', label: `유사어사전 (${사전탭 === 'thesaurus' ? 사전총건수 : '?'})` },
-                    ]}
-                  />
-                  <Input.Search
-                    placeholder="검색어 입력"
-                    value={사전검색어}
-                    onChange={e => set사전검색어(e.target.value)}
-                    onSearch={(val) => {
-                      set사전페이지(1)
-                      load사전데이터(activePanel.backup, 사전탭, val, 1)
-                    }}
-                    allowClear
-                    style={{ marginBottom: 12, maxWidth: 320 }}
-                  />
-                  {사전탭 === 'thesaurus' ? (
-                    <Table
-                      size="small"
-                      loading={사전로딩}
-                      dataSource={사전데이터}
-                      rowKey={(r, i) => `${r._HEAD_WORD}_${r._TAIL_WORD}_${i}`}
-                      columns={[
-                        { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD', width: 160 },
-                        { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD', width: 160 },
-                        { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
-                        { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
-                      ]}
-                      pagination={{
-                        current: 사전페이지,
-                        pageSize: 50,
-                        total: 사전총건수,
-                        showTotal: (t) => `총 ${t}건`,
-                        onChange: (p) => { load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
-                      }}
-                    />
-                  ) : (
-                    <Table
-                      size="small"
-                      loading={사전로딩}
-                      dataSource={사전데이터}
-                      rowKey={(r, i) => `${r._WORD}_${i}`}
-                      columns={[
-                        { title: '단어', dataIndex: '_WORD', key: '_WORD', width: 200 },
-                        { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
-                        { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
-                      ]}
-                      pagination={{
-                        current: 사전페이지,
-                        pageSize: 50,
-                        total: 사전총건수,
-                        showTotal: (t) => `총 ${t}건`,
-                        onChange: (p) => { load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
-                      }}
-                    />
-                  )}
-                </>
-              )}
-            </Card>
-          </>
-        )}
+              loading={사전로딩}
+              dataSource={사전데이터}
+              rowKey={(r, i) => `${r._HEAD_WORD}_${r._TAIL_WORD}_${i}`}
+              columns={[
+                { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD', width: 160 },
+                { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD', width: 160 },
+                { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
+                { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
+              ]}
+              pagination={{
+                current: 사전페이지,
+                pageSize: 50,
+                total: 사전총건수,
+                showTotal: (t) => `총 ${t}건`,
+                onChange: (p) => { if (activePanel) load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
+              }}
+            />
+          ) : (
+            <Table
+              size="small"
+              loading={사전로딩}
+              dataSource={사전데이터}
+              rowKey={(r, i) => `${r._WORD}_${i}`}
+              columns={[
+                { title: '단어', dataIndex: '_WORD', key: '_WORD', width: 200 },
+                { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
+                { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
+              ]}
+              pagination={{
+                current: 사전페이지,
+                pageSize: 50,
+                total: 사전총건수,
+                showTotal: (t) => `총 ${t}건`,
+                onChange: (p) => { if (activePanel) load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
+              }}
+            />
+          )}
+        </Modal>
       </div>
     </div>
 

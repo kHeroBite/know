@@ -486,13 +486,13 @@ export default function DomainManage() {
                   <Space size={8}>
                     <Button icon={<BookOutlined />} type={선택됨 ? 'primary' : 'default'}
                       disabled={isBlocked}
-                      onClick={() => { set사전도메인(선택됨 ? null : dm.id); setDicKey(k => k + 1) }}
+                      onClick={() => { set사전도메인(dm.id); setDicKey(k => k + 1) }}
                     >사전 관리</Button>
                     <Button icon={<ExperimentOutlined />}
                       type={형태소도메인 === dm.id ? 'primary' : 'default'}
                       disabled={isBlocked}
                       onClick={() => {
-                        set형태소도메인(형태소도메인 === dm.id ? null : dm.id)
+                        set형태소도메인(dm.id)
                         set형태소입력('')
                         set형태소결과Lite(null)
                         set형태소결과Full(null)
@@ -526,131 +526,135 @@ export default function DomainManage() {
         </Row>
       </Card>
 
-      {/* ─── 사전 관리 영역 ─── */}
-      {사전도메인 && (
-        <>
-          <Divider />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Title level={5} style={{ margin: 0 }}><BookOutlined /> {사전도메인} 사전 관리</Title>
-            <Button icon={<ImportOutlined />} disabled={isBlocked} onClick={임포트모달열기}>파일에서 가져오기</Button>
-          </div>
-          <Row gutter={16} key={dicKey}>
-            <Col span={8}><DicColumn dicType="udic" 선택도메인={사전도메인} /></Col>
-            <Col span={8}><DicColumn dicType="cndic" 선택도메인={사전도메인} /></Col>
-            <Col span={8}><DicColumn dicType="thesaurus" 선택도메인={사전도메인} /></Col>
-          </Row>
-        </>
-      )}
+      {/* ─── 사전 관리 Modal ─── */}
+      <Modal
+        title={<span>📚 {사전도메인} 사전 관리</span>}
+        open={!!사전도메인}
+        onCancel={() => set사전도메인(null)}
+        footer={[
+          <Button key="import" icon={<ImportOutlined />} disabled={isBlocked} onClick={임포트모달열기}>파일에서 가져오기</Button>,
+          <Button key="close" onClick={() => set사전도메인(null)}>닫기</Button>,
+        ]}
+        width={1200}
+        destroyOnClose
+      >
+        <Row gutter={16} key={dicKey}>
+          <Col span={8}><DicColumn dicType="udic" 선택도메인={사전도메인!} /></Col>
+          <Col span={8}><DicColumn dicType="cndic" 선택도메인={사전도메인!} /></Col>
+          <Col span={8}><DicColumn dicType="thesaurus" 선택도메인={사전도메인!} /></Col>
+        </Row>
+      </Modal>
 
-      {/* ─── 형태소분석 영역 ─── */}
-      {형태소도메인 && (
-        <>
-          <Divider />
-          <Title level={5} style={{ margin: '0 0 12px' }}><ExperimentOutlined /> {형태소도메인} 형태소분석</Title>
-          <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
-            <Input
-              placeholder="분석할 키워드 입력"
-              value={형태소입력}
-              onChange={e => set형태소입력(e.target.value)}
-              onPressEnter={형태소분석실행}
-              allowClear
-              style={{ maxWidth: 400 }}
-            />
-            <Button
-              type="primary"
-              icon={<ExperimentOutlined />}
-              onClick={형태소분석실행}
-              loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
-              disabled={!형태소입력.trim()}
-            >분석</Button>
-          </Space.Compact>
-          <Row gutter={[16, 16]}>
-            {/* Lite 분석 */}
-            <Col xs={24} md={8}>
-              <Card title="Lite 형태소분석" size="small" style={{ minHeight: 200 }}>
-                {형태소로딩Lite ? (
-                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                ) : 형태소결과Lite ? (
+      {/* ─── 형태소분析 Modal ─── */}
+      <Modal
+        title={<span>🔬 {형태소도메인} 형태소분析</span>}
+        open={!!형태소도메인}
+        onCancel={() => { set형태소도메인(null); set형태소입력(''); set형태소결과Lite(null); set형태소결과Full(null); set유사어결과(null) }}
+        footer={<Button onClick={() => { set형태소도메인(null); set형태소입력(''); set형태소결과Lite(null); set형태소결과Full(null); set유사어결과(null) }}>닫기</Button>}
+        width={1100}
+        destroyOnClose
+      >
+        <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+          <Input
+            placeholder="분析할 키워드 입력"
+            value={형태소입력}
+            onChange={e => set형태소입력(e.target.value)}
+            onPressEnter={형태소분석실행}
+            allowClear
+            style={{ maxWidth: 400 }}
+          />
+          <Button
+            type="primary"
+            icon={<ExperimentOutlined />}
+            onClick={형태소분석실행}
+            loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
+            disabled={!형태소입력.trim()}
+          >분析</Button>
+        </Space.Compact>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={8}>
+            <Card title="Lite 형태소분析" size="small" style={{ minHeight: 200 }}>
+              {형태소로딩Lite ? (
+                <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+              ) : 형태소결과Lite ? (
+                <div>
+                  <div style={{ marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                    <Text strong>{형태소결과Lite.keyword}</Text>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    {형태소결과Lite.tokens.length > 0
+                      ? 형태소결과Lite.tokens.map((t, i) => (
+                          <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
+                        ))
+                      : <Text type="secondary">결과 없음</Text>
+                    }
+                  </div>
+                  {형태소결과Lite.result && (
+                    <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                      {형태소결과Lite.result}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+              )}
+            </Card>
+          </Col>
+          <Col xs={24} md={8}>
+            <Card title="Full 형태소分析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+              {형태소로딩Full ? (
+                <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+              ) : 형태소결과Full ? (
+                <div>
+                  <div style={{ marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
+                    <Text strong>{형태소결과Full.keyword}</Text>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    {형태소결과Full.tokens.length > 0
+                      ? 형태소결과Full.tokens.map((t, i) => (
+                          <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
+                        ))
+                      : <Text type="secondary">결과 없음</Text>
+                    }
+                  </div>
+                  {형태소결과Full.result && (
+                    <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
+                      {형태소결과Full.result}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+              )}
+            </Card>
+          </Col>
+          <Col xs={24} md={8}>
+            <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
+              {형태소로딩유사어 ? (
+                <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+              ) : 유사어결과 ? (
+                유사어결과.length > 0 ? (
                   <div>
-                    <div style={{ marginBottom: 8 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
-                      <Text strong>{형태소결과Lite.keyword}</Text>
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      {형태소결과Lite.tokens.length > 0
-                        ? 형태소결과Lite.tokens.map((t, i) => (
-                            <Tag key={i} color="blue" style={{ marginBottom: 4 }}>{t}</Tag>
-                          ))
-                        : <Text type="secondary">결과 없음</Text>
-                      }
-                    </div>
-                    {형태소결과Lite.result && (
-                      <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
-                        {형태소결과Lite.result}
-                      </pre>
-                    )}
+                    {유사어결과.map((s, i) => (
+                      <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
+                        <Tag color="green">{s.head_word}</Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
-                )}
-              </Card>
-            </Col>
-            {/* Full 분석 */}
-            <Col xs={24} md={8}>
-              <Card title="Full 형태소분석 (품사 포함)" size="small" style={{ minHeight: 200 }}>
-                {형태소로딩Full ? (
-                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                ) : 형태소결과Full ? (
-                  <div>
-                    <div style={{ marginBottom: 8 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>키워드: </Text>
-                      <Text strong>{형태소결과Full.keyword}</Text>
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      {형태소결과Full.tokens.length > 0
-                        ? 형태소결과Full.tokens.map((t, i) => (
-                            <Tag key={i} color="purple" style={{ marginBottom: 4 }}>{t}</Tag>
-                          ))
-                        : <Text type="secondary">결과 없음</Text>
-                      }
-                    </div>
-                    {형태소결과Full.result && (
-                      <pre style={{ fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto' }}>
-                        {형태소결과Full.result}
-                      </pre>
-                    )}
-                  </div>
-                ) : (
-                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
-                )}
-              </Card>
-            </Col>
-            {/* 유사어 확장 */}
-            <Col xs={24} md={8}>
-              <Card title="유사어 확장 (사전 기반)" size="small" style={{ minHeight: 200 }}>
-                {형태소로딩유사어 ? (
-                  <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                ) : 유사어결과 ? (
-                  유사어결과.length > 0 ? (
-                    <div>
-                      {유사어결과.map((s, i) => (
-                        <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
-                          <Tag color="green">{s.head_word}</Tag>
-                          <Text type="secondary" style={{ fontSize: 12 }}>→ {s.tail_word}</Text>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
-                  )
-                ) : (
-                  <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
-                )}
-              </Card>
-            </Col>
-          </Row>
-        </>
-      )}
+                  <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
+                )
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      </Modal>
+
 
       {/* ─── 이름 변경 모달 (display_name 전용 — 도메인 ID 고정) ─── */}
       <Modal title="도메인 이름 변경" open={!!이름변경대상}
