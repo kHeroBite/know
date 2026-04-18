@@ -1,13 +1,14 @@
 """analyze_morpheme API 엔드포인트"""
-from typing import Optional
+from typing import Optional, Dict
 import asyncio
 import json
 import os
 import shutil
+import threading
 import uuid
 from functools import partial
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth import get_current_user
@@ -21,6 +22,10 @@ from services.workspace_service import get_jiana_home_path
 
 BACKUP_DIR_PATH = "/home/know/apps/know-ops/backup"
 
+# session_id → tmp_root 매핑 (패널 열릴 때 1회 준비, 닫힐 때 cleanup)
+_backup_sessions: Dict[str, str] = {}
+_backup_sessions_lock = threading.Lock()
+
 
 class AnalyzeRequest(BaseModel):
     keyword: str
@@ -28,6 +33,12 @@ class AnalyzeRequest(BaseModel):
     workspace: Optional[str] = None
     skip_workspace: bool = False   # DomainManage: True
     backup_name: Optional[str] = None  # 백업 형태소분析 시 지정
+    session_id: Optional[str] = None   # prepare-backup으로 생성된 세션
+
+
+class PrepareBackupRequest(BaseModel):
+    backup_name: str
+    domain: str
 
 
 def _find_workspace_jiana_for_domain(domain: str) -> Optional[str]:
@@ -108,12 +119,43 @@ def _resolve_jiana_home(workspace: Optional[str], domain: Optional[str], skip_wo
     return None
 
 
+@라우터.post("/prepare-backup")
+async def prepare_backup(req: PrepareBackupRequest, _current: dict = Depends(get_current_user)):
+    """백업 jiana를 tmp에 1회 준비 후 session_id 반환. 이후 analyze 호출 시 session_id로 재사용."""
+    loop = asyncio.get_event_loop()
+    try:
+        jiana_home, tmp_root = await loop.run_in_executor(
+            None, partial(_prepare_backup_jiana, req.backup_name, req.domain)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    session_id = uuid.uuid4().hex
+    with _backup_sessions_lock:
+        _backup_sessions[session_id] = tmp_root
+    return {"session_id": session_id, "jiana_home": jiana_home}
+
+
+@라우터.delete("/release-backup/{session_id}")
+async def release_backup(session_id: str, _current: dict = Depends(get_current_user)):
+    """패널 닫힐 때 호출 — tmp_root 정리."""
+    with _backup_sessions_lock:
+        tmp_root = _backup_sessions.pop(session_id, None)
+    if tmp_root:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+    return {"ok": True}
+
+
 @라우터.post("/analyze")
 async def keyword_analyze(req: AnalyzeRequest, _current: dict = Depends(get_current_user)):
     """단일 키워드 analyze_morpheme (심플 — LiteTest)."""
     tmp_root = None
     try:
-        if req.backup_name:
+        if req.session_id:
+            with _backup_sessions_lock:
+                jiana_home = _backup_sessions.get(req.session_id)
+            if not jiana_home:
+                raise HTTPException(status_code=400, detail="세션이 만료되었습니다. 패널을 다시 열어주세요.")
+        elif req.backup_name:
             jiana_home, tmp_root = _prepare_backup_jiana(req.backup_name, req.domain)
         else:
             jiana_home = _resolve_jiana_home(req.workspace, req.domain, req.skip_workspace)
@@ -129,7 +171,12 @@ async def keyword_analyze_full(req: AnalyzeRequest, _current: dict = Depends(get
     """단일 키워드 형태소分析 (풀 — FullTest, 품사태그 포함)."""
     tmp_root = None
     try:
-        if req.backup_name:
+        if req.session_id:
+            with _backup_sessions_lock:
+                jiana_home = _backup_sessions.get(req.session_id)
+            if not jiana_home:
+                raise HTTPException(status_code=400, detail="세션이 만료되었습니다. 패널을 다시 열어주세요.")
+        elif req.backup_name:
             jiana_home, tmp_root = _prepare_backup_jiana(req.backup_name, req.domain)
         else:
             jiana_home = _resolve_jiana_home(req.workspace, req.domain, req.skip_workspace)
