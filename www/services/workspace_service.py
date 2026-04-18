@@ -415,7 +415,8 @@ def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로
             raise FileNotFoundError(f"백업 없음: {backup_name}")
 
         COPY_PROGRESS[ws_name]["message"] = "백업 파일 복사 중..."
-        # 파일 복사: backup/{data,txt_resrc,synonym.UTF-8} → ws/
+        # 백업에서 복원: 빌드 아티팩트(data/), 사전 원문(txt_resrc/), 유사어(synonym.UTF-8)만 복사.
+        # 나머지 도메인 파일은 JSON→테이블 방식으로 아래 사전 DB 로드 단계에서 복원.
         for item in ["data", "txt_resrc"]:
             src = backup_path / item
             if src.exists():
@@ -427,21 +428,32 @@ def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로
         if syn_src.exists():
             shutil.copy2(str(syn_src), str(Path(ws경로) / "synonym.UTF-8"))
 
-        COPY_PROGRESS[ws_name]["percent"] = 60
+        # 취소 체크 (shutil.copytree는 파일 단위 중단 불가 — copytree 완료 후 체크)
+        cancel_event = COPY_CANCEL.get(ws_name)
+        if cancel_event and cancel_event.is_set():
+            raise InterruptedError("사용자 취소")
+
+        COPY_PROGRESS[ws_name]["percent"] = 50
         COPY_PROGRESS[ws_name]["message"] = "jiana 복사 중..."
 
         # jiana 폴더 복사
+        jiana파일수 = _count_folder_files(jiana원본경로) if jiana원본경로 else 0
         if jiana원본경로:
             jiana대상 = os.path.join(ws경로, "jiana")
             os.makedirs(jiana대상, exist_ok=True)
-            _copy_folder_skip_built(jiana원본경로, jiana대상, ws_name, 60, 100)
+            result = _copy_folder_skip_built(jiana원본경로, jiana대상, ws_name, 0, jiana파일수 if jiana파일수 > 0 else 1)
+            if result == -1:
+                raise InterruptedError("사용자 취소")
+            # _copy_folder_skip_built가 0~100% 기준으로 쓰므로 50~95% 구간으로 재조정
+            raw_pct = COPY_PROGRESS[ws_name].get("percent", 100)
+            COPY_PROGRESS[ws_name]["percent"] = 50 + int(raw_pct * 45 / 100)
             for item in ["data", "txt_resrc"]:
                 src = os.path.join(ws경로, item)
                 if os.path.exists(src):
                     dst = os.path.join(jiana대상, item)
                     shutil.copytree(src, dst, dirs_exist_ok=True)
 
-        COPY_PROGRESS[ws_name]["percent"] = 90
+        COPY_PROGRESS[ws_name]["percent"] = 95
         COPY_PROGRESS[ws_name]["message"] = "백업 사전 DB 로드 중..."
 
         # 백업 JSON → WS 사전 테이블
@@ -505,6 +517,16 @@ def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("_copy_task_from_backup snapshot_before 실패 (무시): %s", e)
+    except InterruptedError:
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": 0, "status": "cancelled", "message": "사용자 취소", "elapsed": 경과}
+        _cleanup_workspace(ws경로)
+        상태 = _read_state()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "IDLE"
+            상태[ws_name]["domain"] = None
+            상태[ws_name]["connected_by"] = None
+            _write_state(상태)
     except Exception as e:
         경과 = round(time.time() - 시작시간, 1)
         COPY_PROGRESS[ws_name] = {"percent": 0, "status": "error", "message": str(e), "elapsed": 경과}
