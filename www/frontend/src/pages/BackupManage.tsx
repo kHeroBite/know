@@ -72,6 +72,8 @@ export default function BackupManage() {
   const [backups, setBackups] = useState<Backup[]>([])
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
   const [backupLoading, setBackupLoading] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   // ─── 공유 모달 ─────────────────────────────────────────────────
   const [shareModalOpen, setShareModalOpen] = useState(false)
@@ -216,7 +218,7 @@ export default function BackupManage() {
   }
 
   // ─── 형태소분석 실행 ───────────────────────────────────────
-  const 형태소분析실행 = async () => {
+  const 형태소분석실행 = async () => {
     const kw = 형태소입력.trim()
     if (!kw || !activePanel) return
     const domainCode = getDomainCodeFromBackup(activePanel.backup)
@@ -309,6 +311,32 @@ export default function BackupManage() {
     } catch (e: any) {
       message.error('백업 삭제 실패: ' + (e?.response?.data?.detail || e?.message || ''))
     }
+  }
+
+  // ─── 선택 항목 일괄 삭제 ─────────────────────────────────────
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true)
+    let successCount = 0
+    let failCount = 0
+    for (const name of selectedRowKeys) {
+      const record = filteredBackups.find(b => b.name === name)
+      const matched = domains.find(d =>
+        record?.workspace_name?.toLowerCase().includes(d.id.toLowerCase()) ||
+        record?.name?.toLowerCase().includes(d.id.toLowerCase())
+      )
+      const domainId = matched?.id || ''
+      try {
+        await backupAPI.deleteBackup(name, domainId)
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+    setBulkDeleting(false)
+    setSelectedRowKeys([])
+    if (successCount > 0) message.success(`${successCount}개 삭제 완료`)
+    if (failCount > 0) message.error(`${failCount}개 삭제 실패`)
+    await loadBackups()
   }
 
   // ─── PPT 다운로드 ──────────────────────────────────────────────
@@ -501,7 +529,7 @@ export default function BackupManage() {
   const load사전데이터 = async (backup: Backup, tab: 'udic' | 'cndic' | 'thesaurus', search: string, page: number) => {
     set사전로딩(true)
     try {
-      const res = await 클라이언트.get(`/api/backups/${backup.name}/dict/${tab}`, {
+      const res = await 클라이언트.get(`/backups/${backup.name}/dict/${tab}`, {
         params: { search: search || undefined, page, size: 50 },
       })
       set사전데이터(res.data?.items || [])
@@ -718,7 +746,25 @@ export default function BackupManage() {
         )}
 
         {/* ── 백업 목록 테이블 ── */}
-        <Card size="small" title="백업 목록">
+        <Card
+          size="small"
+          title="백업 목록"
+          extra={
+            selectedRowKeys.length > 0 && (
+              <Popconfirm
+                title={`선택한 백업 ${selectedRowKeys.length}개를 삭제하시겠습니까?`}
+                onConfirm={handleBulkDelete}
+                okText="삭제"
+                cancelText="취소"
+                okButtonProps={{ danger: true }}
+              >
+                <Button danger size="small" loading={bulkDeleting}>
+                  선택 삭제 ({selectedRowKeys.length}개)
+                </Button>
+              </Popconfirm>
+            )
+          }
+        >
           <Table
             size="small"
             columns={backupColumns}
@@ -727,6 +773,10 @@ export default function BackupManage() {
             loading={backupLoading}
             pagination={{ pageSize: 20, showSizeChanger: false }}
             locale={{ emptyText: '백업 없음' }}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys as string[]),
+            }}
             expandable={{
               expandedRowRender: renderActionRow,
               expandedRowKeys,
@@ -739,13 +789,13 @@ export default function BackupManage() {
           />
         </Card>
 
-        {/* ── 형태소분析 Modal ── */}
+        {/* ── 형태소분석 Modal ── */}
         <Modal
           title={
             <Space>
               <ExperimentOutlined />
               <span>{activePanel?.backup.name}</span>
-              <Tag color="orange" style={{ fontSize: 11 }}>형태소분析</Tag>
+              <Tag color="orange" style={{ fontSize: 11 }}>형태소분석</Tag>
             </Space>
           }
           open={!!activePanel && activePanel.mode === 'morpheme'}
@@ -763,24 +813,24 @@ export default function BackupManage() {
             <>
               <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
                 <Input
-                  placeholder="分析할 키워드 입력"
+                  placeholder="분석할 키워드 입력"
                   value={형태소입력}
                   onChange={e => set형태소입력(e.target.value)}
-                  onPressEnter={형태소분析실행}
+                  onPressEnter={형태소분석실행}
                   allowClear
                   style={{ maxWidth: 400 }}
                 />
                 <Button
                   type="primary"
                   icon={<ExperimentOutlined />}
-                  onClick={형태소분析실행}
+                  onClick={형태소분석실행}
                   loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
                   disabled={!형태소입력.trim()}
-                >分析</Button>
+                >분석</Button>
               </Space.Compact>
               <Row gutter={[16, 16]}>
                 <Col xs={24} md={8}>
-                  <Card title="Lite 형태소分析" size="small" style={{ minHeight: 200 }}>
+                  <Card title="Lite 형태소분석" size="small" style={{ minHeight: 200 }}>
                     {형태소로딩Lite ? (
                       <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
                     ) : 형태소결과Lite ? (
@@ -804,12 +854,12 @@ export default function BackupManage() {
                         )}
                       </div>
                     ) : (
-                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                     )}
                   </Card>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Card title="Full 형태소分析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+                  <Card title="Full 형태소분석 (품사 포함)" size="small" style={{ minHeight: 200 }}>
                     {형태소로딩Full ? (
                       <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
                     ) : 형태소결과Full ? (
@@ -833,7 +883,7 @@ export default function BackupManage() {
                         )}
                       </div>
                     ) : (
-                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                     )}
                   </Card>
                 </Col>
@@ -855,7 +905,7 @@ export default function BackupManage() {
                         <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
                       )
                     ) : (
-                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
                     )}
                   </Card>
                 </Col>
@@ -914,7 +964,6 @@ export default function BackupManage() {
               columns={[
                 { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD', width: 160 },
                 { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD', width: 160 },
-                { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
                 { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
               ]}
               pagination={{
@@ -933,7 +982,6 @@ export default function BackupManage() {
               rowKey={(r, i) => `${r._WORD}_${i}`}
               columns={[
                 { title: '단어', dataIndex: '_WORD', key: '_WORD', width: 200 },
-                { title: '메모', dataIndex: '_MEMO', key: '_MEMO', ellipsis: true },
                 { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
               ]}
               pagination={{
