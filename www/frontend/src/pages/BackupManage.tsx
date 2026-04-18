@@ -245,22 +245,6 @@ export default function BackupManage() {
     await Promise.all([litePromise, fullPromise, synPromise])
   }
 
-  // ─── 사전확인 데이터 로드 ────────────────────────────────
-  const load사전데이터 = async (backup: Backup, tab: 'udic' | 'cndic' | 'thesaurus', search: string, page: number) => {
-    set사전로딩(true)
-    try {
-      const res = await 클라이언트.get(`/api/backups/${backup.name}/dict/${tab}`, {
-        params: { search: search || undefined, page, size: 50 },
-      })
-      set사전데이터(res.data?.items || [])
-      set사전총건수(res.data?.total || 0)
-      set사전페이지(page)
-    } catch (e: any) {
-      message.error('사전 로드 실패: ' + (e?.response?.data?.detail || e?.message || ''))
-    } finally {
-      set사전로딩(false)
-    }
-  }
   // ─── 사이트 필터 적용 백업 목록 ────────────────────────────────
   const filteredBackups = backups.filter(b => {
     if (selectedSite === 'all') return true
