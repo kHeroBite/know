@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import shutil
+import uuid
 from functools import partial
 
 from fastapi import APIRouter, Depends
@@ -64,12 +65,8 @@ def _prepare_backup_jiana(backup_name: str, domain: str):
     if not os.path.isfile(os.path.join(domain_lib, "jiana1.5.jar")):
         raise ValueError(f"domain lib에 jiana1.5.jar 없음: {domain_lib}")
 
-    tmp_root = f"/tmp/know-morpheme-{backup_name}"
+    tmp_root = f"/tmp/know-morpheme-{backup_name}-{uuid.uuid4().hex[:8]}"
     tmp_jiana = tmp_root  # tmp_root 자체가 jiana_home
-
-    # 기존 임시 디렉토리 정리
-    if os.path.exists(tmp_root):
-        shutil.rmtree(tmp_root, ignore_errors=True)
 
     os.makedirs(tmp_root)
 

@@ -151,7 +151,7 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
         try:
             proc = subprocess.run(
                 [
-                    "java",
+                    f"{JAVA_HOME}/bin/java",
                     "-classpath", classpath,
                     "test.FullTest",
                     resource_path,
