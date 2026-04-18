@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { workspaceAPI } from '../api/workspace'
+import { backupAPI } from '../api/backup'
 import { formatDomain } from '../utils/displayFormat'
 import { listSites, type Site } from '../api/site'
 import { assignmentApi } from '../api/assignment'
@@ -122,6 +123,9 @@ export default function Workspace() {
   const [선택사이트, set선택사이트] = useState<string | null>(null)
   const [jiana버전목록, setJiana버전목록] = useState<string[]>([])
   const [선택jiana, set선택jiana] = useState<string>('')
+  const [연결소스, set연결소스] = useState<'site' | 'backup'>('site')
+  const [선택백업, set선택백업] = useState<string | null>(null)
+  const [백업목록, set백업목록] = useState<{name: string, domain: string, timestamp: string, dict_counts: any}[]>([])
   const [색상팝업WS, set색상팝업WS] = useState<string | null>(null)
   const [에러메시지, set에러메시지] = useState<Record<string, string>>({})
   const [작업진행률, set작업진행률] = useState<Record<string, number>>({})
@@ -230,7 +234,30 @@ export default function Workspace() {
   }
 
   const 연결확인핸들러 = async () => {
-    if (!연결팝업WS || !선택사이트) {
+    if (!연결팝업WS) return
+    const wsName = 연결팝업WS
+
+    if (연결소스 === 'backup') {
+      if (!선택백업) { message.warning('백업을 선택하세요'); return }
+      if (!선택jiana) { message.warning('jiana 버전을 선택하세요'); return }
+      const backup = 백업목록.find(b => b.name === 선택백업)
+      const domain = backup?.domain ?? ''
+      set연결팝업WS(null); set선택백업(null); set선택도메인(null)
+      await executeConnect(wsName, domain, 선택jiana, {
+        onDone: async () => {
+          message.success(`"${wsName}" 백업 연결 완료`)
+          set에러메시지(prev => { const n = { ...prev }; delete n[wsName + '_mode']; return n })
+          await 목록조회()
+        },
+        onError: async (err) => {
+          message.error(err || '연결 실패')
+          await 목록조회()
+        },
+      }, { label: `${wsName} 백업 연결 중` }, 선택백업)
+      return
+    }
+
+    if (!선택사이트) {
       message.warning('사이트를 선택하세요')
       return
     }
@@ -238,7 +265,6 @@ export default function Workspace() {
       message.warning('jiana 버전을 선택하세요')
       return
     }
-    const wsName = 연결팝업WS
     const siteCode = 선택사이트
     const jianaVer = 선택jiana
     const site = 사이트목록.find(s => s.site_code === siteCode)
@@ -594,10 +620,26 @@ export default function Workspace() {
                             size="small"
                             icon={<LinkOutlined />}
                             disabled={isInProgress || 목록.some(w => w.status === 'CONNECTING') || isBlocked}
-                            onClick={() => {
+                            onClick={async () => {
                               set연결팝업WS(ws.name)
                               set선택사이트(null)
                               set선택도메인(null)
+                              set연결소스('site')
+                              set선택백업(null)
+                              // 모든 도메인 백업 목록 로드
+                              try {
+                                const allDomains = 도메인목록.map(d => d.id).filter(Boolean)
+                                const allBackups: any[] = []
+                                await Promise.all(allDomains.map(async (dom: string) => {
+                                  try {
+                                    const res = await backupAPI.listBackups(dom)
+                                    const items = res.data?.backups ?? []
+                                    items.forEach((b: any) => allBackups.push({ ...b, domain: dom }))
+                                  } catch {}
+                                }))
+                                allBackups.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                                set백업목록(allBackups)
+                              } catch {}
                             }}
                             style={{ backgroundColor: ws.color || '#1a1a2e', borderColor: ws.color || '#1a1a2e', color: '#fff' }}
                           >
@@ -719,70 +761,127 @@ export default function Workspace() {
         </Row>
       </Spin>
 
-      {/* 사이트 연결 모달 */}
+      {/* 사이트/백업 연결 모달 */}
       <Modal
-        title={`사이트 연결 : ${연결팝업WS}`}
+        title={`워크스페이스 연결 : ${연결팝업WS}`}
         open={!!연결팝업WS}
         onOk={연결확인핸들러}
         onCancel={() => {
           set연결팝업WS(null)
           set선택사이트(null)
           set선택도메인(null)
+          set선택백업(null)
+          set연결소스('site')
         }}
         okText="연결"
         cancelText="취소"
-        okButtonProps={{ disabled: !선택사이트 || !선택jiana }}
+        okButtonProps={{
+          disabled: 연결소스 === 'site'
+            ? (!선택사이트 || !선택jiana)
+            : (!선택백업 || !선택jiana)
+        }}
       >
-        <Select
-          style={{ width: '100%', marginTop: 8 }}
-          placeholder="연결할 사이트 선택"
-          options={사이트목록.map(s => {
-            const 연결됨WS = 목록.find(ws => ws.domain === s.domain_code && ws.status === 'USED')
-            const 표시명 = `${s.site_code} (${s.name})`
-            return {
-              label: s.orphaned
-                ? `${표시명} (연결 끊김)`
-                : 연결됨WS
-                  ? `${표시명} (${연결됨WS.name}에 연결됨)`
-                  : 표시명,
-              value: s.site_code,
-              disabled: s.orphaned || !!연결됨WS,
-            }
-          })}
-          onChange={v => {
-            set선택사이트(v)
-            if (v) {
-              const site = 사이트목록.find(s => s.site_code === v)
-              if (site?.domain_code) {
-                set선택도메인(site.domain_code)
-                workspaceAPI.도메인jiana설정(site.domain_code).then(res => {
-                  const saved = res.data?.jiana_version
-                  if (saved && jiana버전목록.includes(saved)) {
-                    set선택jiana(saved)
-                  }
-                }).catch(() => {})
-              }
-            }
-          }}
-          value={선택사이트}
-        />
-        <div style={{ marginTop: 8, fontSize: 13 }}>
-          {선택도메인
-            ? <Text>도메인 : {formatDomain(선택도메인, 도메인목록.find(d => d.id?.toLowerCase() === 선택도메인?.toLowerCase())?.name)}</Text>
-            : <Text type="secondary">사이트를 먼저 선택하세요</Text>
-          }
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <Button
+            size="small"
+            type={연결소스 === 'site' ? 'primary' : 'default'}
+            onClick={() => { set연결소스('site'); set선택백업(null) }}
+          >사이트/도메인</Button>
+          <Button
+            size="small"
+            type={연결소스 === 'backup' ? 'primary' : 'default'}
+            onClick={() => { set연결소스('backup'); set선택사이트(null); set선택도메인(null) }}
+          >백업에서 복사</Button>
         </div>
-        {선택사이트 && (() => {
-          const site = 사이트목록.find(s => s.site_code === 선택사이트)
-          const 최근작업 = fmt날짜(site?.last_work_at)
-          return (
-            <div style={{ marginTop: 4 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                최근 작업: {최근작업 ?? '없음'}
-              </Text>
+
+        {연결소스 === 'site' ? (
+          <>
+            <Select
+              style={{ width: '100%' }}
+              placeholder="연결할 사이트 선택"
+              options={사이트목록.map(s => {
+                const 연결됨WS = 목록.find(ws => ws.domain === s.domain_code && ws.status === 'USED')
+                const 표시명 = `${s.site_code} (${s.name})`
+                return {
+                  label: s.orphaned
+                    ? `${표시명} (연결 끊김)`
+                    : 연결됨WS
+                      ? `${표시명} (${연결됨WS.name}에 연결됨)`
+                      : 표시명,
+                  value: s.site_code,
+                  disabled: s.orphaned || !!연결됨WS,
+                }
+              })}
+              onChange={v => {
+                set선택사이트(v)
+                if (v) {
+                  const site = 사이트목록.find(s => s.site_code === v)
+                  if (site?.domain_code) {
+                    set선택도메인(site.domain_code)
+                    workspaceAPI.도메인jiana설정(site.domain_code).then(res => {
+                      const saved = res.data?.jiana_version
+                      if (saved && jiana버전목록.includes(saved)) {
+                        set선택jiana(saved)
+                      }
+                    }).catch(() => {})
+                  }
+                }
+              }}
+              value={선택사이트}
+            />
+            <div style={{ marginTop: 8, fontSize: 13 }}>
+              {선택도메인
+                ? <Text>도메인 : {formatDomain(선택도메인, 도메인목록.find(d => d.id?.toLowerCase() === 선택도메인?.toLowerCase())?.name)}</Text>
+                : <Text type="secondary">사이트를 먼저 선택하세요</Text>
+              }
             </div>
-          )
-        })()}
+            {선택사이트 && (() => {
+              const site = 사이트목록.find(s => s.site_code === 선택사이트)
+              const 최근작업 = fmt날짜(site?.last_work_at)
+              return (
+                <div style={{ marginTop: 4 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>최근 작업: {최근작업 ?? '없음'}</Text>
+                </div>
+              )
+            })()}
+          </>
+        ) : (
+          <>
+            <Select
+              style={{ width: '100%' }}
+              placeholder="복사할 백업 선택"
+              showSearch
+              optionFilterProp="label"
+              options={백업목록.map(b => ({
+                label: `[${b.domain}] ${b.name} (udic: ${b.dict_counts?.udic ?? 0}건)`,
+                value: b.name,
+              }))}
+              onChange={v => {
+                set선택백업(v)
+                const b = 백업목록.find(x => x.name === v)
+                if (b?.domain) {
+                  workspaceAPI.도메인jiana설정(b.domain).then(res => {
+                    const saved = res.data?.jiana_version
+                    if (saved && jiana버전목록.includes(saved)) set선택jiana(saved)
+                  }).catch(() => {})
+                }
+              }}
+              value={선택백업}
+            />
+            {선택백업 && (() => {
+              const b = 백업목록.find(x => x.name === 선택백업)
+              return b ? (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
+                  도메인: {b.domain} | udic: {b.dict_counts?.udic ?? 0} | cndic: {b.dict_counts?.cndic ?? 0} | thesaurus: {b.dict_counts?.thesaurus ?? 0}
+                </div>
+              ) : null
+            })()}
+            <div style={{ marginTop: 8, fontSize: 12, color: '#faad14' }}>
+              ⚠ 백업 사전 데이터를 워크스페이스에 직접 로드합니다. 도메인 원본은 변경되지 않습니다.
+            </div>
+          </>
+        )}
+
         <Select
           style={{ width: '100%', marginTop: 12 }}
           placeholder="jiana 버전 선택"

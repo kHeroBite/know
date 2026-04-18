@@ -328,8 +328,8 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
         COPY_CANCEL.pop(ws_name, None)
 
 
-def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None, site_code: str | None = None) -> dict[str, Any]:
-    """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana) → 성공:USED / 실패:FAILED."""
+def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None, site_code: str | None = None, backup_name: str | None = None) -> dict[str, Any]:
+    """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana 또는 백업) → 성공:USED / 실패:FAILED."""
     # 대소문자 무시 매칭 — 실제 DOMAIN_DIR 폴더명으로 교체
     actual_domains = os.listdir(DOMAIN_DIR) if os.path.isdir(DOMAIN_DIR) else []
     matched = next((d for d in actual_domains if d.lower() == domain.lower()), None)
@@ -389,12 +389,131 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
     _write_state(상태)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
     COPY_CANCEL[ws_name] = threading.Event()
-    threading.Thread(
-        target=_copy_task,
-        args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
-        daemon=True,
-    ).start()
-    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code, "connected_at": _connected_at}
+    if backup_name:
+        threading.Thread(
+            target=_copy_task_from_backup,
+            args=(ws_name, domain, backup_name, ws경로, jiana원본경로),
+            daemon=True,
+        ).start()
+    else:
+        threading.Thread(
+            target=_copy_task,
+            args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
+            daemon=True,
+        ).start()
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code, "connected_at": _connected_at, "backup_name": backup_name}
+
+
+def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로: str, jiana원본경로: str | None = None) -> None:
+    """백그라운드: 백업 폴더에서 WS로 직접 복사 (도메인 테이블 미변경)."""
+    import time
+    from core.constants import DICT_BACKUP_DIR
+    시작시간 = time.time()
+    try:
+        backup_path = Path(DICT_BACKUP_DIR) / backup_name
+        if not backup_path.is_dir():
+            raise FileNotFoundError(f"백업 없음: {backup_name}")
+
+        COPY_PROGRESS[ws_name]["message"] = "백업 파일 복사 중..."
+        # 파일 복사: backup/{data,txt_resrc,synonym.UTF-8} → ws/
+        for item in ["data", "txt_resrc"]:
+            src = backup_path / item
+            if src.exists():
+                dst = Path(ws경로) / item
+                if dst.exists():
+                    shutil.rmtree(str(dst))
+                shutil.copytree(str(src), str(dst))
+        syn_src = backup_path / "synonym.UTF-8"
+        if syn_src.exists():
+            shutil.copy2(str(syn_src), str(Path(ws경로) / "synonym.UTF-8"))
+
+        COPY_PROGRESS[ws_name]["percent"] = 60
+        COPY_PROGRESS[ws_name]["message"] = "jiana 복사 중..."
+
+        # jiana 폴더 복사
+        if jiana원본경로:
+            jiana대상 = os.path.join(ws경로, "jiana")
+            os.makedirs(jiana대상, exist_ok=True)
+            _copy_folder_skip_built(jiana원본경로, jiana대상, ws_name, 60, 100)
+            for item in ["data", "txt_resrc"]:
+                src = os.path.join(ws경로, item)
+                if os.path.exists(src):
+                    dst = os.path.join(jiana대상, item)
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+
+        COPY_PROGRESS[ws_name]["percent"] = 90
+        COPY_PROGRESS[ws_name]["message"] = "백업 사전 DB 로드 중..."
+
+        # 백업 JSON → WS 사전 테이블
+        try:
+            import json as _json
+            from sqlalchemy import text as _sql_text
+            from models.dictionary import ws_create_dict_table, ws_dict_site_name, validate_site_name
+            from core.database import 엔진
+            ws_create_dict_table(ws_name, domain, 엔진)
+            ws_site = ws_dict_site_name(ws_name, domain)
+            validate_site_name(ws_site)
+            type_map = [
+                ("udic", "_UDIC"),
+                ("cndic", "_CNDIC"),
+                ("thesaurus", "_THESAURUS"),
+                ("category", "_CATEGORY"),
+            ]
+            total_rows = 0
+            with 엔진.connect() as conn:
+                trans = conn.begin()
+                try:
+                    for _, suffix in type_map:
+                        json_file = backup_path / f"db{suffix}.json"
+                        if not json_file.exists():
+                            continue
+                        data = _json.loads(json_file.read_text(encoding="utf-8"))
+                        ws_table = f"{ws_site}{suffix}"
+                        conn.execute(_sql_text(f"DELETE FROM {ws_table}"))
+                        if data:
+                            columns = list(data[0].keys())
+                            col_names = ", ".join(columns)
+                            placeholders = ", ".join([f":{c}" for c in columns])
+                            conn.execute(
+                                _sql_text(f"INSERT INTO {ws_table} ({col_names}) VALUES ({placeholders})"),
+                                data,
+                            )
+                            total_rows += len(data)
+                    trans.commit()
+                except Exception:
+                    trans.rollback()
+                    raise
+            COPY_PROGRESS[ws_name]["message"] = f"백업 사전 DB 로드 완료 ({total_rows}건)"
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("백업→WS 사전 DB 로드 실패 (무시): %s", e)
+
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": 100, "status": "done", "message": "", "elapsed": 경과, "file_count": 0}
+        상태 = _read_state()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "USED"
+            _write_state(상태)
+        try:
+            from services import snapshot_service
+            from core.database import SessionLocal
+            _sess = SessionLocal()
+            try:
+                snapshot_service.take_snapshot(ws_name, domain, "before", _sess)
+            finally:
+                _sess.close()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("_copy_task_from_backup snapshot_before 실패 (무시): %s", e)
+    except Exception as e:
+        경과 = round(time.time() - 시작시간, 1)
+        COPY_PROGRESS[ws_name] = {"percent": 0, "status": "error", "message": str(e), "elapsed": 경과}
+        상태 = _read_state()
+        if ws_name in 상태:
+            상태[ws_name]["status"] = "FAILED"
+            _write_state(상태)
+    finally:
+        COPY_CANCEL.pop(ws_name, None)
 
 
 def _cleanup_workspace(ws경로: str) -> None:
@@ -1079,6 +1198,15 @@ def finalize_complete(
     dict_counts_backup: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     backup_files: list[str] = []
 
+    # 0. DB 역방향 복사 먼저 (백업 전에 WS→DOMAIN 반영해야 백업에 WS 단어 포함됨)
+    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    try:
+        from models.dictionary import ws_reverse_copy_dict_data
+        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
+
     # 1. 백업 단계
     if not skip_backup:
         base_name = backup_folder.strip() if backup_folder else f"{domain}_{timestamp_str}"
@@ -1162,15 +1290,6 @@ def finalize_complete(
         src = ws_jiana_path / item
         if src.exists():
             shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
-
-    # 3. DB 역방향 복사
-    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
-    try:
-        from models.dictionary import ws_reverse_copy_dict_data
-        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
 
     # 4. snapshot_after 기록
     snapshot_after = None
@@ -1546,6 +1665,15 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
     dict_counts_backup: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
     backup_files: list[str] = []
 
+    # 6.0 DB 역방향 복사 먼저 (백업 전에 WS→DOMAIN 반영해야 백업에 WS 단어 포함됨)
+    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
+    try:
+        from models.dictionary import ws_reverse_copy_dict_data
+        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
+
     # 6.1 백업 단계
     if not skip_backup:
         base_name = f"{domain}_{timestamp_str}"
@@ -1634,15 +1762,6 @@ def complete_workspace(ws_name: str, domain: str, db, skip_backup: bool = False)
         src = ws_jiana_path / item
         if src.exists():
             shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
-
-    # DB 역방향 복사
-    db_copy_counts: dict[str, int] = {"udic": 0, "cndic": 0, "thesaurus": 0, "category": 0}
-    try:
-        from models.dictionary import ws_reverse_copy_dict_data
-        db_copy_counts = ws_reverse_copy_dict_data(ws_name, domain, db.get_bind())
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("ws_reverse_copy_dict_data 실패 (무시): %s", e)
 
     # 6.3 phase → complete
     phase_forward(ws_name, "complete")

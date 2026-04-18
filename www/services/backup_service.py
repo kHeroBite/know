@@ -205,6 +205,21 @@ def restore_backup(domain: str, backup_name: str, skip_backup: bool, db) -> dict
     """
     _check_build_not_running(db)
 
+    # WS가 이 도메인에 연결 중이면 차단 (도메인 테이블 덮어쓰면 WS와 불일치 발생)
+    try:
+        from services.workspace_service import _read_state
+        ws_상태 = _read_state()
+        for ws_name, ws_info in ws_상태.items():
+            if ws_info.get("domain", "").lower() == domain.lower() and ws_info.get("status") in ("USED", "CONNECTING"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"워크스페이스({ws_name})가 이 도메인에 연결 중입니다. 연결 해제 후 리스토어하세요.",
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     backup_path = Path(DICT_BACKUP_DIR) / backup_name
     if not backup_path.is_dir():
         raise HTTPException(

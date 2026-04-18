@@ -70,6 +70,7 @@ class 도메인연결요청(BaseModel):
     site_code: Optional[str] = None   # 신규 (site_code 기반 연결)
     domain: Optional[str] = None      # 기존 (하위 호환)
     jiana_version: Optional[str] = None
+    backup_name: Optional[str] = None  # 백업에서 복사 시 백업 폴더명
 
 
 class 색상변경요청(BaseModel):
@@ -365,7 +366,7 @@ def link_domain_handler(
                {"ws": name, "dom": domain.upper()})
     db.commit()
 
-    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code)
+    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code, backup_name=요청.backup_name)
 
 
 @라우터.post("/{name}/cancel-connect")

@@ -50,11 +50,14 @@ export const workspaceAPI = {
   워크스페이스삭제: (name: string) =>
     클라이언트.delete(`/workspaces/${name}`),
 
-  도메인연결: (wsName: string, domain: string, jianaVersion?: string) =>
-    클라이언트.post(`/workspaces/${wsName}/connect`, { domain, jiana_version: jianaVersion }),
+  도메인연결: (wsName: string, domain: string, jianaVersion?: string, backupName?: string) =>
+    클라이언트.post(`/workspaces/${wsName}/connect`, { domain, jiana_version: jianaVersion, backup_name: backupName }),
 
   사이트연결: (wsName: string, siteCode: string, jianaVersion: string) =>
     클라이언트.post(`/workspaces/${wsName}/connect`, { site_code: siteCode, jiana_version: jianaVersion }),
+
+  백업연결: (wsName: string, domain: string, backupName: string, jianaVersion?: string) =>
+    클라이언트.post(`/workspaces/${wsName}/connect`, { domain, backup_name: backupName, jiana_version: jianaVersion }),
 
   연결취소: (wsName: string) =>
     클라이언트.post(`/workspaces/${wsName}/cancel-connect`),

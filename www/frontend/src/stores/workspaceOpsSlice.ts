@@ -19,6 +19,7 @@ export interface WorkspaceOpsSlice {
     jianaVersion: string,
     callbacks?: TaskCallbacks,
     options?: { label?: string },
+    backupName?: string,
   ) => Promise<void>
 
   /** 연결 진행 중 취소 */
@@ -50,7 +51,7 @@ export function createWorkspaceOpsSlice(
   get: GetState,
 ): WorkspaceOpsSlice {
   return {
-    executeConnect: async (wsName, domain, jianaVersion, callbacks, options) => {
+    executeConnect: async (wsName, domain, jianaVersion, callbacks, options, backupName) => {
       const taskId = `ws-connect-${wsName}-${Date.now()}`
       const started = get()._startTask({
         id: taskId,
@@ -65,7 +66,7 @@ export function createWorkspaceOpsSlice(
       }
 
       try {
-        await workspaceAPI.도메인연결(wsName, domain, jianaVersion)
+        await workspaceAPI.도메인연결(wsName, domain, jianaVersion, backupName)
       } catch (e: any) {
         get()._finishTask(taskId, 'error')
         const detail = e?.response?.data?.detail || '연결 실패'
