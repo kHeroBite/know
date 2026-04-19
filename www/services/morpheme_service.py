@@ -18,7 +18,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
     """단일 키워드를 jiana Java 직접 호출로 analyze_morpheme.
 
     Args:
-        keyword: 분析할 키워드 문자열
+        keyword: 분석할 키워드 문자열
         domain: 도메인 (현재 미사용, 향후 사전 컨텍스트 연동용)
         jiana_home: jiana 홈 경로 (None이면 오류)
 
@@ -43,10 +43,20 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
         if os.path.isdir(os.path.join(candidate, "data")):
             jh_data_root = candidate
 
+    # workspace/*/jiana JAR은 EUC-KR 입출력, domain/*/lib JAR은 UTF-8 입출력
+    # jiana_home 경로에 "/workspace/" 또는 "-ws-" 마커(백업 형태소분析 시) 포함 여부로 판별
+    use_euckr = "/workspace/" in jh or "-ws-" in jh
+
     with tempfile.TemporaryDirectory(prefix="morph_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"
         output_file = Path(tmpdir) / "output.txt"
-        input_file.write_text(keyword.strip() + "\n", encoding="utf-8")
+        if use_euckr:
+            try:
+                input_file.write_bytes((keyword.strip() + "\n").encode("euc-kr", errors="replace"))
+            except Exception:
+                input_file.write_text(keyword.strip() + "\n", encoding="utf-8")
+        else:
+            input_file.write_text(keyword.strip() + "\n", encoding="utf-8")
 
         env = os.environ.copy()
         env["JAVA_HOME"] = JAVA_HOME
@@ -56,7 +66,6 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
             proc = subprocess.run(
                 [
                     f"{JAVA_HOME}/bin/java",
-                    "-Dfile.encoding=UTF-8",
                     "-classpath", classpath,
                     "test.LiteTest",
                     f"{jh_data_root}/",
@@ -65,7 +74,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
                     str(output_file),
                 ],
                 capture_output=True,
-                text=False,  # bytes 모드 — locale 독립적
+                text=False,
                 timeout=MORPHEME_TIMEOUT,
                 env=env,
                 cwd=jh,
@@ -76,15 +85,18 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
                 logger.warning("jiana 실패 (rc=%d): %s", proc.returncode, stderr_txt)
                 return {
                     "keyword": keyword,
-                    "result": f"분析 실패: {stderr_txt[:200]}",
+                    "result": f"분석 실패: {stderr_txt[:200]}",
                     "tokens": [],
                 }
 
-            # 결과 파일 읽기
+            # 결과 파일 읽기 — workspace JAR은 EUC-KR, domain JAR은 UTF-8 출력
             if output_file.exists():
-                result_text = output_file.read_text(encoding="utf-8", errors="replace").strip()
+                raw_bytes = output_file.read_bytes()
+                enc = "euc-kr" if use_euckr else "utf-8"
+                result_text = raw_bytes.decode(enc, errors="replace").strip()
             else:
-                result_text = proc.stdout.strip() if proc.stdout else ""
+                enc = "euc-kr" if use_euckr else "utf-8"
+                result_text = proc.stdout.decode(enc, errors="replace").strip() if proc.stdout else ""
 
             tokens = [line.strip() for line in result_text.split("\n") if line.strip()]
             return {
@@ -97,7 +109,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
             logger.error("analyze_morpheme 타임아웃 (%d초): %s", MORPHEME_TIMEOUT, keyword)
             return {
                 "keyword": keyword,
-                "result": f"분析 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
+                "result": f"분석 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
                 "tokens": [],
             }
         except FileNotFoundError:
@@ -111,7 +123,7 @@ def analyze_morpheme(keyword: str, domain: Optional[str] = None, jiana_home: Opt
             logger.exception("analyze_morpheme 예외: %s", e)
             return {
                 "keyword": keyword,
-                "result": f"분析 오류: {str(e)[:200]}",
+                "result": f"분석 오류: {str(e)[:200]}",
                 "tokens": [],
             }
 
@@ -143,6 +155,7 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
     with tempfile.TemporaryDirectory(prefix="morph_full_") as tmpdir:
         input_file = Path(tmpdir) / "input.txt"
         output_file = Path(tmpdir) / "output.txt"
+        # FullTest: JVM이 파일을 UTF-8로 읽고 UTF-8로 씀 → 입출력 모두 UTF-8 사용
         input_file.write_text(keyword.strip() + "\n", encoding="utf-8")
 
         env = os.environ.copy()
@@ -170,11 +183,12 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
                 logger.warning("FullTest 실패 (rc=%d): %s", proc.returncode, stderr_txt)
                 return {
                     "keyword": keyword,
-                    "result": f"분析 실패: {stderr_txt[:200]}",
+                    "result": f"분석 실패: {stderr_txt[:200]}",
                     "tokens": [],
                 }
 
             if output_file.exists():
+                # FullTest 출력은 UTF-8 (FileUtil.getFileWriter에 "utf8" 인코딩 고정)
                 result_text = output_file.read_text(encoding="utf-8", errors="replace").strip()
             else:
                 result_text = ""
@@ -190,7 +204,7 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
             logger.error("FullTest 타임아웃 (%d초): %s", MORPHEME_TIMEOUT, keyword)
             return {
                 "keyword": keyword,
-                "result": f"분析 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
+                "result": f"분석 타임아웃 ({MORPHEME_TIMEOUT}초 초과)",
                 "tokens": [],
             }
         except FileNotFoundError:
@@ -204,7 +218,7 @@ def analyze_morpheme_full(keyword: str, domain: Optional[str] = None, jiana_home
             logger.exception("FullTest 예외: %s", e)
             return {
                 "keyword": keyword,
-                "result": f"분析 오류: {str(e)[:200]}",
+                "result": f"분석 오류: {str(e)[:200]}",
                 "tokens": [],
             }
 
@@ -231,7 +245,7 @@ def _find_synonym_path(workspace: str) -> Optional[Path]:
 
 
 def _build_config(workspace: str, jiana_home: Optional[str] = None):
-    """know-ops 설정 객체 생성 (형태소分析래퍼용)."""
+    """know-ops 설정 객체 생성 (형태소분석래퍼용)."""
     _ensure_know_ops_path()
     from know.core.config import 설정
 
@@ -251,9 +265,9 @@ def _build_config(workspace: str, jiana_home: Optional[str] = None):
 
 
 def analyze_realtime(keyword: str, domain: str, workspace: str) -> dict:
-    """단일 키워드 실시간 LITE 分析 파이프라인.
+    """단일 키워드 실시간 LITE 분석 파이프라인.
 
-    1. LiteTest 형태소分析 (analyze_morpheme() 재사용)
+    1. LiteTest 형태소분석 (analyze_morpheme() 재사용)
     2. 결과변환 (형태소결과변환기 사용)
     3. check_synonyms (check_single_synonym() 사용)
 
@@ -273,7 +287,7 @@ def analyze_realtime(keyword: str, domain: str, workspace: str) -> dict:
     morph_result = analyze_morpheme(keyword, domain, jiana_home=jiana_home)
     raw_text = morph_result.get("result", "")
 
-    if not raw_text or raw_text.startswith("분析"):
+    if not raw_text or raw_text.startswith("분석"):
         return {"keyword": keyword, "analysis": raw_text}
 
     # Step 2: 결과변환 (임시파일 기반)
@@ -303,7 +317,7 @@ def analyze_realtime(keyword: str, domain: str, workspace: str) -> dict:
                 try:
                     config = _build_config(workspace, jiana_home)
                 except Exception as e:
-                    logger.warning("설정값 생성 실패, 유사어 형태소分析 스킵: %s", e)
+                    logger.warning("설정값 생성 실패, 유사어 형태소분석 스킵: %s", e)
                 analysis = check_single_synonym(keyword, transformed, syn_path, config)
             except Exception as e:
                 logger.warning("check_synonyms 실패, transform 결과 반환: %s", e)
@@ -312,9 +326,9 @@ def analyze_realtime(keyword: str, domain: str, workspace: str) -> dict:
 
 
 def analyze_realtime_full(keyword: str, domain: str, workspace: str) -> dict:
-    """단일 키워드 실시간 FULL 分析 파이프라인.
+    """단일 키워드 실시간 FULL 분석 파이프라인.
 
-    1. FullTest 형태소分析 (analyze_morpheme_full() 재사용)
+    1. FullTest 형태소분석 (analyze_morpheme_full() 재사용)
     2. 유사어사전 로드
     3. 유사어 정보 병합
 
@@ -331,11 +345,11 @@ def analyze_realtime_full(keyword: str, domain: str, workspace: str) -> dict:
         return {"keyword": keyword, "full_analysis": f"오류: {ws_jiana} 경로가 없습니다."}
     jiana_home = str(ws_jiana)
 
-    # Step 1: 풀형태소分析
+    # Step 1: 풀형태소분석
     morph_result = analyze_morpheme_full(keyword, domain, jiana_home=jiana_home)
     raw_text = morph_result.get("result", "")
 
-    if not raw_text or raw_text.startswith("분析"):
+    if not raw_text or raw_text.startswith("분석"):
         return {"keyword": keyword, "full_analysis": raw_text}
 
     # Step 2: 유사어 정보 병합

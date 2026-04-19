@@ -32,7 +32,7 @@ class AnalyzeRequest(BaseModel):
     domain: Optional[str] = None
     workspace: Optional[str] = None
     skip_workspace: bool = False   # DomainManage: True
-    backup_name: Optional[str] = None  # 백업 형태소분析 시 지정
+    backup_name: Optional[str] = None  # 백업 형태소분석 시 지정
     session_id: Optional[str] = None   # prepare-backup으로 생성된 세션
 
 
@@ -70,19 +70,28 @@ def _prepare_backup_jiana(backup_name: str, domain: str):
     """
     backup_path = os.path.join(BACKUP_DIR_PATH, backup_name)
 
-    # domain/{code}/ 에서 lib/ 경로 탐색 — JAR 소스로 사용
-    domain_path = os.path.join(DOMAIN_DIR, domain)
-    domain_lib = os.path.join(domain_path, "lib")
-    if not os.path.isfile(os.path.join(domain_lib, "jiana1.5.jar")):
-        raise ValueError(f"domain lib에 jiana1.5.jar 없음: {domain_lib}")
+    # lib 경로: USED workspace jiana lib 우선 → domain lib fallback
+    # workspace jiana1.5.jar이 EUC-KR 출력을 올바르게 지원함
+    lib_path = None
+    ws_jiana = _find_workspace_jiana_for_domain(domain)
+    if ws_jiana and os.path.isfile(os.path.join(ws_jiana, "lib", "jiana1.5.jar")):
+        lib_path = os.path.join(ws_jiana, "lib")
+    if not lib_path:
+        domain_path = os.path.join(DOMAIN_DIR, domain)
+        domain_lib = os.path.join(domain_path, "lib")
+        if not os.path.isfile(os.path.join(domain_lib, "jiana1.5.jar")):
+            raise ValueError(f"domain lib에 jiana1.5.jar 없음: {domain_lib}")
+        lib_path = domain_lib
 
-    tmp_root = f"/tmp/know-morpheme-{backup_name}-{uuid.uuid4().hex[:8]}"
+    # workspace lib 사용 시 경로에 "/workspace/" 마커 포함 → use_euckr=True 판별
+    euckr_marker = "-ws-" if lib_path and "/workspace/" in lib_path else "-"
+    tmp_root = f"/tmp/know-morpheme{euckr_marker}{backup_name}-{uuid.uuid4().hex[:8]}"
     tmp_jiana = tmp_root  # tmp_root 자체가 jiana_home
 
     os.makedirs(tmp_root)
 
-    # domain/lib/ → tmp/lib/ 복사 (JAR + 클래스파일 포함)
-    shutil.copytree(domain_lib, os.path.join(tmp_jiana, "lib"))
+    # lib/ → tmp/lib/ 복사 (JAR + 클래스파일 포함)
+    shutil.copytree(lib_path, os.path.join(tmp_jiana, "lib"))
 
     # 백업 data/를 tmp/data/로 복사 (LiteTest가 {jh}/data/ 직접 읽음)
     shutil.copytree(
@@ -168,7 +177,7 @@ async def keyword_analyze(req: AnalyzeRequest, _current: dict = Depends(get_curr
 
 @라우터.post("/analyze-full")
 async def keyword_analyze_full(req: AnalyzeRequest, _current: dict = Depends(get_current_user)):
-    """단일 키워드 형태소分析 (풀 — FullTest, 품사태그 포함)."""
+    """단일 키워드 형태소분석 (풀 — FullTest, 품사태그 포함)."""
     tmp_root = None
     try:
         if req.session_id:
@@ -189,13 +198,13 @@ async def keyword_analyze_full(req: AnalyzeRequest, _current: dict = Depends(get
 
 @라우터.post("/analyze-realtime")
 async def realtime_analyze(req: AnalyzeRequest, _current: dict = Depends(get_current_user)):
-    """단일 키워드 실시간 LITE 分析. JVM subprocess를 executor에서 실행해 이벤트루프 블로킹 방지."""
+    """단일 키워드 실시간 LITE 분석. JVM subprocess를 executor에서 실행해 이벤트루프 블로킹 방지."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, partial(analyze_realtime, req.keyword, req.domain or "", req.workspace or ""))
 
 
 @라우터.post("/analyze-full-realtime")
 async def realtime_analyze_full(req: AnalyzeRequest, _current: dict = Depends(get_current_user)):
-    """단일 키워드 실시간 FULL 分析. JVM subprocess를 executor에서 실행해 이벤트루프 블로킹 방지."""
+    """단일 키워드 실시간 FULL 분석. JVM subprocess를 executor에서 실행해 이벤트루프 블로킹 방지."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, partial(analyze_realtime_full, req.keyword, req.domain or "", req.workspace or ""))
