@@ -270,9 +270,9 @@ def freeze_service(db: Session, workspace: str, domain: str) -> dict:
 
 def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pending",
               page: int = 1, size: int = 50, assigned_to: Optional[str] = None,
-              mode: str = '') -> dict:
-    """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to)."""
-    logger.info(f"[REPROCESS_DEBUG] list_keywords 진입: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}")
+              mode: str = '', keyword_search: str = '') -> dict:
+    """키워드 list_tasks 조회 (페이지네이션 + 필터 + assigned_to + 키워드 검색)."""
+    logger.info(f"[REPROCESS_DEBUG] list_keywords 진입: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}, keyword_search='{keyword_search}'")
     tbl = _kw_table(workspace)
     ensure_kw_table(db, workspace)
 
@@ -295,6 +295,11 @@ def list_keywords(db: Session, workspace: str, domain: str, filter: str = "pendi
     if assigned_to:
         where += " AND assigned_to=:uid"
         params["uid"] = assigned_to
+
+    # 키워드 검색 — 할당된 전체 목록에서 서버 사이드 LIKE 검색
+    if keyword_search:
+        where += " AND keyword LIKE :kw_search"
+        params["kw_search"] = f"%{keyword_search}%"
 
     total = db.execute(text(f"SELECT COUNT(*) FROM {tbl} WHERE {where}"), params).scalar() or 0
 

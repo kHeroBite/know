@@ -41,9 +41,10 @@ def list_tasks(workspace: str = Query(...), domain: str = Query(...),
          filter: str = Query("pending"), page: int = Query(1), size: int = Query(50),
          assigned_to: Optional[str] = Query(None),
          mode: str = Query(default=''),
+         keyword_search: str = Query(default=''),
          db: Session = Depends(db_session), _: dict = Depends(get_current_user)):
-    logger.info(f"[REPROCESS_DEBUG] API GET /list: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}")
-    return assignment_service.list_keywords(db, workspace, domain, filter, page, size, assigned_to=assigned_to, mode=mode)
+    logger.info(f"[REPROCESS_DEBUG] API GET /list: workspace={workspace}, domain={domain}, filter={filter}, mode='{mode}', page={page}, assigned_to={assigned_to}, keyword_search='{keyword_search}'")
+    return assignment_service.list_keywords(db, workspace, domain, filter, page, size, assigned_to=assigned_to, mode=mode, keyword_search=keyword_search)
 
 @라우터.get("/last-read")
 def get_last_read_position(workspace: str = Query(...), domain: str = Query(...),

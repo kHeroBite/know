@@ -24,9 +24,9 @@ export interface AssignmentStats {
 export const assignmentApi = {
   프리징: (workspace: string, domain: string) =>
     클라이언트.post('/assignments/freeze', null, { params: { workspace, domain } }),
-  목록: (workspace: string, domain: string, filter: string, page: number, size: number, assigned_to?: string, mode?: string) => {
-    console.log('[REPROCESS_DEBUG] 목록 API 호출:', { workspace, domain, filter, page, size, assigned_to, mode })
-    return 클라이언트.get('/assignments/list', { params: { workspace, domain, filter, page, size, ...(assigned_to ? { assigned_to } : {}), ...(mode ? { mode } : {}) } })
+  목록: (workspace: string, domain: string, filter: string, page: number, size: number, assigned_to?: string, mode?: string, keyword_search?: string) => {
+    console.log('[REPROCESS_DEBUG] 목록 API 호출:', { workspace, domain, filter, page, size, assigned_to, mode, keyword_search })
+    return 클라이언트.get('/assignments/list', { params: { workspace, domain, filter, page, size, ...(assigned_to ? { assigned_to } : {}), ...(mode ? { mode } : {}), ...(keyword_search ? { keyword_search } : {}) } })
   },
   통계: (workspace: string, domain: string, mode?: string) => {
     console.log('[REPROCESS_DEBUG] 통계 API 호출:', { workspace, domain, mode })

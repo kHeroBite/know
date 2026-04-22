@@ -68,6 +68,8 @@ export default function KnowledgeWork() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadingPrev, setLoadingPrev] = useState(false)
   const [키워드필터, set키워드필터] = useState('')
+  const [키워드검색중, set키워드검색중] = useState(false)
+  const 키워드검색타이머 = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [minPage, setMinPage] = useState(1)
   const [maxPage, setMaxPage] = useState(1)
   const [selected, setSelected] = useState<KeywordItem | null>(null)
@@ -198,7 +200,7 @@ export default function KnowledgeWork() {
 
       // 2. 해당 페이지 로드
       const { data } = await assignmentApi.목록(
-        selectedWorkspace, selectedDomain, 'assigned', startPage, PAGE_SIZE, user.user_id,
+        selectedWorkspace, selectedDomain, 'assigned', startPage, PAGE_SIZE, user.user_id, undefined, '',
       )
       setItems(data.items || [])
       setTotal(data.total || 0)
@@ -252,8 +254,40 @@ export default function KnowledgeWork() {
     }
   }, [selectedWorkspace, selectedDomain, user])
 
+  // ─── 키워드 검색 (서버 사이드 — 전체 할당 목록에서 검색) ──
+  const 키워드검색실행 = useCallback(async (searchText: string) => {
+    if (!selectedWorkspace || !selectedDomain || !user) return
+    set키워드검색중(true)
+    try {
+      const { data } = await assignmentApi.목록(
+        selectedWorkspace, selectedDomain, 'assigned', 1, PAGE_SIZE, user.user_id, undefined, searchText,
+      )
+      setItems(data.items || [])
+      setTotal(data.total || 0)
+      setMinPage(1)
+      setMaxPage(1)
+      setSelected(null)
+    } catch { /* 무시 */ } finally {
+      set키워드검색중(false)
+    }
+  }, [selectedWorkspace, selectedDomain, user])
+
+  const 키워드필터변경 = useCallback((value: string) => {
+    set키워드필터(value)
+    if (키워드검색타이머.current) clearTimeout(키워드검색타이머.current)
+    if (value === '') {
+      // 검색어 비우면 전체 목록 복원
+      목록초기화()
+    } else {
+      키워드검색타이머.current = setTimeout(() => {
+        키워드검색실행(value)
+      }, 300)
+    }
+  }, [키워드검색실행, 목록초기화])
+
   const 다음페이지로드 = useCallback(async () => {
     if (loadingMore || loading) return
+    if (키워드필터) return  // 검색 중에는 페이지네이션 비활성
     if (items.length >= total) return
     const nextPage = maxPage + 1
     setLoadingMore(true)
@@ -272,7 +306,7 @@ export default function KnowledgeWork() {
   }, [loadingMore, loading, items.length, total, maxPage, selectedWorkspace, selectedDomain, user])
 
   const 이전페이지로드 = useCallback(async () => {
-    if (loadingPrev || loading || minPage <= 1) return
+    if (loadingPrev || loading || minPage <= 1 || 키워드필터) return
     const prevPage = minPage - 1
     const prevScrollHeight = listRef.current?.scrollHeight || 0
     setLoadingPrev(true)
@@ -391,8 +425,8 @@ export default function KnowledgeWork() {
     }
   }, [selected, 키워드필터])
 
-  // ─── 필터링된 키워드 목록 (검색 + 네비게이션) ─────────────
-  const filteredItems = 키워드필터 ? items.filter(r => r.keyword.includes(키워드필터)) : items
+  // ─── 필터링된 키워드 목록 (서버 사이드 검색 — 로컬 필터 없음) ───
+  const filteredItems = items
 
   // ─── 토큰 ───────────────────────────────────────────────────
 
@@ -1207,15 +1241,15 @@ export default function KnowledgeWork() {
             <div style={{ padding: '4px 8px', flexShrink: 0 }}>
               <Input
                 ref={keywordSearchRef as any}
-                placeholder="키워드 검색..." value={키워드필터} onChange={e => set키워드필터(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); set키워드필터(''); (e.target as HTMLElement).blur() } }}
+                placeholder="키워드 검색 (전체 목록)..." value={키워드필터} onChange={e => 키워드필터변경(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); 키워드필터변경(''); (e.target as HTMLElement).blur() } }}
                 allowClear size="small" style={{ width: '100%' }}
+                suffix={키워드검색중 ? <span style={{ fontSize: 10, color: '#999' }}>검색 중...</span> : undefined}
               />
             </div>
             {/* 전체 선택 체크박스 */}
             {(() => {
-              const filtered = items.filter(r => !키워드필터 || r.keyword.includes(키워드필터))
-              const filteredIds = filtered.map(i => i.id)
+              const filteredIds = items.map(i => i.id)
               const allChecked = filteredIds.length > 0 && filteredIds.every(id => bulkSelectedKeys.includes(id))
               const indeterminate = filteredIds.some(id => bulkSelectedKeys.includes(id)) && !allChecked
               return (
@@ -1244,7 +1278,7 @@ export default function KnowledgeWork() {
               )}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-              ) : items.filter(r => !키워드필터 || r.keyword.includes(키워드필터)).map((record) => (
+              ) : items.map((record) => (
                 <div
                   key={record.id}
                   ref={(el) => { itemRefs.current[record.id] = el }}
