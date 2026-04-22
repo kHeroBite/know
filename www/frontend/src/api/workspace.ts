@@ -180,13 +180,14 @@ export const workspaceAPI = {
       `/workspaces/${encodeURIComponent(ws)}/prepare-complete`, { domain }
     ),
 
-  finalizeComplete: (ws: string, opts: { domain?: string; backup_folder?: string; skip_backup?: boolean; site_id?: number | null }) =>
+  finalizeComplete: (ws: string, opts: { domain?: string; backup_folder?: string; skip_backup?: boolean; skip_copy_domain?: boolean; site_id?: number | null }) =>
     클라이언트.post<{ phase: string; backup_folder: string | null; snapshot_after: Record<string, number>; finished_at: string }>(
       `/workspaces/${encodeURIComponent(ws)}/finalize-complete`,
       {
         domain: opts.domain,
         ...(opts.backup_folder !== undefined ? { backup_folder: opts.backup_folder } : {}),
         skip_backup: opts.skip_backup ?? false,
+        skip_copy_domain: opts.skip_copy_domain ?? false,
         ...(opts.site_id !== undefined && opts.site_id !== null ? { site_id: opts.site_id } : {}),
       }
     ),

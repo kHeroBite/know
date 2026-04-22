@@ -85,6 +85,8 @@ export default function WorkComplete() {
 
   const [siteCode, setSiteCode] = useState<string | null>(null)
   const [siteName, setSiteName] = useState<string | null>(null)
+  const [backupSourceName, setBackupSourceName] = useState<string | null>(null)
+  const [doCopyDomain, setDoCopyDomain] = useState(true)
   const [doBackup, setDoBackup] = useState(true)
   const [backupSuffix, setBackupSuffix] = useState('')
   const [finalizing, setFinalizing] = useState(false)
@@ -124,6 +126,10 @@ export default function WorkComplete() {
       setParticipants(partRes.data?.participants || [])
       // 현재 워크스페이스의 site_code 추출 (없으면 사이트 목록에서 domain_code 역매핑)
       const wsInfo = (wsList.data || []).find((w: any) => w.name === selectedWorkspace)
+      // 백업 소스 연결 여부 감지 — 백업 연결 시 도메인 복사 기본 OFF
+      const srcBackup = wsInfo?.backup_name || null
+      setBackupSourceName(srcBackup)
+      setDoCopyDomain(!srcBackup)
       let sc = wsInfo?.site_code || null
       let sn: string | null = null
       if (!sc && selectedDomain) {
@@ -263,6 +269,7 @@ export default function WorkComplete() {
             domain: selectedDomain || undefined,
             backup_folder: doBackup ? fullBackupFolder : undefined,
             skip_backup: !doBackup,
+            skip_copy_domain: !doCopyDomain,
             site_id: null,
           })
           if (finalTimerRef.current) clearInterval(finalTimerRef.current)
@@ -531,6 +538,21 @@ export default function WorkComplete() {
           <Col xs={24} lg={12}>
             <Card size="small" title="도메인 백업" style={{ marginBottom: 16 }}>
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                {backupSourceName && (
+                  <div style={{ padding: '6px 10px', background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 4, fontSize: 12 }}>
+                    📦 백업 소스 연결: <Text strong>{backupSourceName}</Text>
+                  </div>
+                )}
+                <div>
+                  <Checkbox checked={doCopyDomain} onChange={e => setDoCopyDomain(e.target.checked)}>
+                    도메인에 적용 (WS → 도메인 역방향 복사){!backupSourceName && <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>(권장)</Text>}
+                  </Checkbox>
+                  {backupSourceName && !doCopyDomain && (
+                    <div style={{ marginTop: 4, marginLeft: 24, fontSize: 11, color: '#fa8c16' }}>
+                      ⚠ 도메인 원본이 업데이트되지 않습니다.
+                    </div>
+                  )}
+                </div>
                 <div>
                   <Checkbox checked={doBackup} onChange={e => setDoBackup(e.target.checked)}>
                     백업 생성 (권장)

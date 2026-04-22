@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Row, Col,
-  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin, Statistic, Tabs,
+  Form, message, Modal, Tag, Typography, Popconfirm, Divider, Spin, Statistic,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
@@ -33,6 +33,78 @@ interface Domain {
   name: string | null
 }
 
+// ─── BackupDicColumn (읽기전용 사전 컬럼) ──────────────────────────
+type BackupDicType = 'udic' | 'cndic' | 'thesaurus'
+interface BackupDicColProps { dicType: BackupDicType; backup: { name: string } }
+
+function BackupDicColumn({ dicType, backup }: BackupDicColProps) {
+  const [데이터, set데이터] = useState<any[]>([])
+  const [검색어, set검색어] = useState('')
+  const [로딩, set로딩] = useState(false)
+  const [총건수, set총건수] = useState(0)
+  const [현재페이지, set현재페이지] = useState(1)
+
+  const title = dicType === 'udic' ? '사용자사전' : dicType === 'cndic' ? '복합명사사전' : '유사어사전'
+
+  const 로드 = useCallback(async (search: string, page: number) => {
+    set로딩(true)
+    try {
+      const res = await 클라이언트.get(`/backups/${backup.name}/dict/${dicType}`, {
+        params: { search: search || undefined, page, size: 50 },
+      })
+      set데이터(res.data?.items || [])
+      set총건수(res.data?.total || 0)
+      set현재페이지(page)
+    } catch (e: any) {
+      message.error(`${title} 로드 실패`)
+    } finally {
+      set로딩(false)
+    }
+  }, [backup.name, dicType])
+
+  useEffect(() => { 로드('', 1) }, [로드])
+
+  const columns = dicType === 'thesaurus'
+    ? [
+        { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD' },
+        { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD' },
+      ]
+    : [
+        { title: '단어', dataIndex: '_WORD', key: '_WORD' },
+      ]
+
+  return (
+    <Card title={`${title} (${총건수.toLocaleString()}건)`} size="small">
+      <Input
+        placeholder="검색..."
+        value={검색어}
+        onChange={e => { set검색어(e.target.value); 로드(e.target.value, 1) }}
+        allowClear
+        size="small"
+        prefix={<SearchOutlined />}
+        style={{ marginBottom: 8 }}
+      />
+      <Table
+        dataSource={데이터}
+        columns={columns}
+        rowKey={(r: any, i: any) => dicType === 'thesaurus' ? `${r._HEAD_WORD}-${r._TAIL_WORD}-${i}` : `${r._WORD}-${i}`}
+        loading={로딩}
+        size="small"
+        scroll={{ y: 400 }}
+        pagination={{
+          current: 현재페이지,
+          pageSize: 50,
+          total: 총건수,
+          showTotal: (t) => `총 ${t.toLocaleString()}건`,
+          showSizeChanger: false,
+          size: 'small',
+          onChange: (p) => 로드(검색어, p),
+        }}
+      />
+    </Card>
+  )
+}
+
 export default function BackupManage() {
   // ─── 메일 연락처 ───────────────────────────────────────────────
   const [contacts, setContacts] = useState<EmailContact[]>([])
@@ -60,13 +132,8 @@ export default function BackupManage() {
   const [형태소결과Full, set형태소결과Full] = useState<{keyword: string; result: string; tokens: string[]} | null>(null)
   const [형태소결과유사어, set형태소결과유사어] = useState<{head_word: string; tail_word: string}[] | null>(null)
 
-  // 사전확인 상태
-  const [사전탭, set사전탭] = useState<'udic' | 'cndic' | 'thesaurus'>('udic')
-  const [사전검색어, set사전검색어] = useState('')
-  const [사전데이터, set사전데이터] = useState<any[]>([])
-  const [사전총건수, set사전총건수] = useState(0)
-  const [사전페이지, set사전페이지] = useState(1)
-  const [사전로딩, set사전로딩] = useState(false)
+  // 사전확인 상태 (3컬럼 각자 관리 — 상위 상태 불필요)
+  const [사전키, set사전키] = useState(0)
 
   // ─── 백업 목록 ─────────────────────────────────────────────────
   const [backups, setBackups] = useState<Backup[]>([])
@@ -199,13 +266,8 @@ export default function BackupManage() {
         set형태소준비중(false)
       }
     } else {
-      // dict 모드
-      set사전탭('udic')
-      set사전검색어('')
-      set사전데이터([])
-      set사전총건수(0)
-      set사전페이지(1)
-      load사전데이터(backup, 'udic', '', 1)
+      // dict 모드 — 3컬럼 컴포넌트가 자체 로드
+      set사전키(k => k + 1)
     }
   }
 
@@ -475,26 +537,35 @@ export default function BackupManage() {
     },
     {
       title: 'WS', dataIndex: 'workspace_name', key: 'workspace_name', width: 100, ellipsis: true,
-      render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">-</Text>,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 8 } : {},
+      render: (v: string | null, r: Backup) => {
+        if (expandedRowKeys.includes(r.name)) return renderActionRow(r)
+        return v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : <Text type="secondary">-</Text>
+      },
     },
     {
       title: '백업명', dataIndex: 'name', key: 'name', ellipsis: true,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
     },
     {
       title: '생성일', dataIndex: 'timestamp', key: 'timestamp', width: 100,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (v: string) => <Text style={{ fontSize: 12 }}>{formatDate(v)}</Text>,
     },
     {
       title: '사용자사전', key: 'udic', width: 100, align: 'right' as const,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.udic ?? '-'}</Text>,
     },
     {
       title: '복합명사사전', key: 'cndic', width: 110, align: 'right' as const,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.cndic ?? '-'}</Text>,
     },
     {
       title: '유사어사전', key: 'thesaurus', width: 100, align: 'right' as const,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (_: any, r: Backup) => <Text style={{ fontSize: 12 }}>{r.dict_counts?.thesaurus ?? '-'}</Text>,
     },
     {
@@ -503,6 +574,7 @@ export default function BackupManage() {
       key: 'size_mb',
       width: 80,
       align: 'right' as const,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (v: number) => <Text style={{ fontSize: 12 }}>{v != null ? `${v.toFixed(1)}MB` : '-'}</Text>,
     },
     {
@@ -510,6 +582,7 @@ export default function BackupManage() {
       dataIndex: 'jiana_version',
       key: 'jiana_version',
       width: 80,
+      onCell: (r: Backup) => expandedRowKeys.includes(r.name) ? { colSpan: 0 } : {},
       render: (v: string | null | undefined) => v
         ? <Tag style={{ fontSize: 11 }}>{v}</Tag>
         : <Text type="secondary" style={{ fontSize: 11 }}>-</Text>,
@@ -525,22 +598,7 @@ export default function BackupManage() {
     return matched ? matched.id : null
   }
 
-  // ─── 사전확인 ─────────────────────────────────────────────────
-  const load사전데이터 = async (backup: Backup, tab: 'udic' | 'cndic' | 'thesaurus', search: string, page: number) => {
-    set사전로딩(true)
-    try {
-      const res = await 클라이언트.get(`/backups/${backup.name}/dict/${tab}`, {
-        params: { search: search || undefined, page, size: 50 },
-      })
-      set사전데이터(res.data?.items || [])
-      set사전총건수(res.data?.total || 0)
-      set사전페이지(page)
-    } catch (e: any) {
-      message.error('사전 로드 실패: ' + (e?.response?.data?.detail || e?.message || ''))
-    } finally {
-      set사전로딩(false)
-    }
-  }
+
 
 
   const renderActionRow = (r: Backup) => {
@@ -550,7 +608,7 @@ export default function BackupManage() {
     const hasDomain = !!getDomainCodeFromBackup(r)
 
     return (
-      <div style={{ padding: '4px 0' }}>
+      <div style={{ padding: 0 }}>
         <Space size={4}>
           <Button
             size="small"
@@ -565,7 +623,7 @@ export default function BackupManage() {
             size="small"
             type={activePanel?.backup.name === r.name && activePanel?.mode === 'dict' ? 'primary' : 'default'}
             icon={<SearchOutlined />}
-            onClick={() => openPanel(r, 'dict')}
+            onClick={(e) => { e.stopPropagation(); openPanel(r, 'dict') }}
           >
             사전확인
           </Button>
@@ -573,7 +631,7 @@ export default function BackupManage() {
             size="small"
             icon={<CheckCircleOutlined />}
             disabled={!hasShareUrl}
-            onClick={() => { if (r.share_url) window.open(r.share_url, '_blank') }}
+            onClick={(e) => { e.stopPropagation(); if (r.share_url) window.open(r.share_url, '_blank') }}
             title={hasShareUrl ? '완료 리포트 열기' : '공유 링크 없음'}
           >
             완료리포트
@@ -582,7 +640,7 @@ export default function BackupManage() {
             size="small"
             icon={<ShareAltOutlined />}
             disabled={!r.workspace_name}
-            onClick={() => openShareModal(r)}
+            onClick={(e) => { e.stopPropagation(); openShareModal(r) }}
           >
             공유
           </Button>
@@ -590,7 +648,7 @@ export default function BackupManage() {
             size="small"
             icon={<FilePptOutlined />}
             disabled={!r.workspace_name}
-            onClick={() => handleDownloadPpt(r)}
+            onClick={(e) => { e.stopPropagation(); handleDownloadPpt(r) }}
           >
             PPT
           </Button>
@@ -598,7 +656,7 @@ export default function BackupManage() {
             size="small"
             icon={<MailOutlined />}
             disabled={!canEmail}
-            onClick={() => openEmailModal(r)}
+            onClick={(e) => { e.stopPropagation(); openEmailModal(r) }}
             title={canEmail ? '메일 발송' : '공유 링크와 리포트가 모두 필요합니다'}
           >
             메일
@@ -778,26 +836,20 @@ export default function BackupManage() {
               onChange: (keys) => setSelectedRowKeys(keys as string[]),
             }}
             expandable={{
-              expandedRowRender: renderActionRow,
               expandedRowKeys,
               onExpand: (expanded, record) => {
                 setExpandedRowKeys(expanded ? [record.name] : [])
               },
               expandRowByClick: true,
               rowExpandable: () => true,
+              expandIcon: () => null,
             }}
           />
         </Card>
 
         {/* ── 형태소분석 Modal ── */}
         <Modal
-          title={
-            <Space>
-              <ExperimentOutlined />
-              <span>{activePanel?.backup.name}</span>
-              <Tag color="orange" style={{ fontSize: 11 }}>형태소분석</Tag>
-            </Space>
-          }
+          title={<span>🔬 {activePanel?.backup.name} 형태소분석</span>}
           open={!!activePanel && activePanel.mode === 'morpheme'}
           onCancel={closePanel}
           footer={<Button onClick={closePanel}>닫기</Button>}
@@ -916,82 +968,19 @@ export default function BackupManage() {
 
         {/* ── 사전확인 Modal ── */}
         <Modal
-          title={
-            <Space>
-              <SearchOutlined />
-              <span>{activePanel?.backup.name}</span>
-              <Tag color="blue" style={{ fontSize: 11 }}>사전확인</Tag>
-            </Space>
-          }
+          title={<span>📚 {activePanel?.backup.name} 사전확인</span>}
           open={!!activePanel && activePanel.mode === 'dict'}
           onCancel={closePanel}
           footer={<Button onClick={closePanel}>닫기</Button>}
-          width={900}
+          width={1300}
           destroyOnClose
         >
-          <Tabs
-            activeKey={사전탭}
-            onChange={(key) => {
-              const tab = key as 'udic' | 'cndic' | 'thesaurus'
-              set사전탭(tab)
-              set사전검색어('')
-              set사전페이지(1)
-              if (activePanel) load사전데이터(activePanel.backup, tab, '', 1)
-            }}
-            items={[
-              { key: 'udic', label: `사용자사전 (${사전탭 === 'udic' ? 사전총건수 : '?'})` },
-              { key: 'cndic', label: `복합명사사전 (${사전탭 === 'cndic' ? 사전총건수 : '?'})` },
-              { key: 'thesaurus', label: `유사어사전 (${사전탭 === 'thesaurus' ? 사전총건수 : '?'})` },
-            ]}
-          />
-          <Input.Search
-            placeholder="검색어 입력"
-            value={사전검색어}
-            onChange={e => set사전검색어(e.target.value)}
-            onSearch={(val) => {
-              set사전페이지(1)
-              if (activePanel) load사전데이터(activePanel.backup, 사전탭, val, 1)
-            }}
-            allowClear
-            style={{ marginBottom: 12, maxWidth: 320 }}
-          />
-          {사전탭 === 'thesaurus' ? (
-            <Table
-              size="small"
-              loading={사전로딩}
-              dataSource={사전데이터}
-              rowKey={(r, i) => `${r._HEAD_WORD}_${r._TAIL_WORD}_${i}`}
-              columns={[
-                { title: '표제어', dataIndex: '_HEAD_WORD', key: '_HEAD_WORD', width: 160 },
-                { title: '관련어', dataIndex: '_TAIL_WORD', key: '_TAIL_WORD', width: 160 },
-                { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
-              ]}
-              pagination={{
-                current: 사전페이지,
-                pageSize: 50,
-                total: 사전총건수,
-                showTotal: (t) => `총 ${t}건`,
-                onChange: (p) => { if (activePanel) load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
-              }}
-            />
-          ) : (
-            <Table
-              size="small"
-              loading={사전로딩}
-              dataSource={사전데이터}
-              rowKey={(r, i) => `${r._WORD}_${i}`}
-              columns={[
-                { title: '단어', dataIndex: '_WORD', key: '_WORD', width: 200 },
-                { title: '수정일', dataIndex: '_UPDATED', key: '_UPDATED', width: 110, render: (v: string) => v?.split('T')[0] || v || '-' },
-              ]}
-              pagination={{
-                current: 사전페이지,
-                pageSize: 50,
-                total: 사전총건수,
-                showTotal: (t) => `총 ${t}건`,
-                onChange: (p) => { if (activePanel) load사전데이터(activePanel.backup, 사전탭, 사전검색어, p) },
-              }}
-            />
+          {activePanel?.mode === 'dict' && activePanel.backup && (
+            <Row gutter={16} key={사전키}>
+              <Col span={8}><BackupDicColumn dicType="udic" backup={activePanel.backup} /></Col>
+              <Col span={8}><BackupDicColumn dicType="cndic" backup={activePanel.backup} /></Col>
+              <Col span={8}><BackupDicColumn dicType="thesaurus" backup={activePanel.backup} /></Col>
+            </Row>
           )}
         </Modal>
       </div>

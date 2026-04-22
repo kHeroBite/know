@@ -168,13 +168,13 @@ def verify_dict(keywords: list, domain: str, jiana_home: str | None = None) -> d
             if len(parts) == 2 and parts[1].isdigit():
                 단어, 코드 = parts[0], parts[1]
                 if 단어 == kw:
-                    # 원본 == 분析어 (단일어로 분析됨)
+                    # 원본 == 분석어 (단일어로 분석됨)
                     if 코드 == "3":
                         ukall.append(kw)  # 미등록어
                     else:
                         skipped.append(kw)  # 정상 단일어
                 else:
-                    # 원본과 다른 단일 토큰 (부분 분析)
+                    # 원본과 다른 단일 토큰 (부분 분석)
                     if kw not in cnlist:
                         missing.append({"keyword": kw, "analysis": tokens[0]})
                     else:

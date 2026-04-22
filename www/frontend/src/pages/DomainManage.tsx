@@ -53,7 +53,6 @@ function 사전컬럼(dicType: DicType) {
     }
     return [
       { title: '단어', dataIndex: 'word', key: 'word', ellipsis: true },
-      { title: '메모', dataIndex: 'memo', key: 'memo', ellipsis: true },
       { title: '', key: 'action', width: 50, render: (_: unknown, r: any) => 삭제버튼(r) },
     ]
   }
@@ -136,7 +135,6 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
     }
     return (<>
       <Form.Item name="word" label="단어" rules={[{ required: true }]}><Input /></Form.Item>
-      <Form.Item name="memo" label="메모"><Input /></Form.Item>
     </>)
   }
 
@@ -545,9 +543,9 @@ export default function DomainManage() {
         </Row>
       </Modal>
 
-      {/* ─── 형태소분析 Modal ─── */}
+      {/* ─── 형태소분석 Modal ─── */}
       <Modal
-        title={<span>🔬 {형태소도메인} 형태소분析</span>}
+        title={<span>🔬 {형태소도메인} 형태소분석</span>}
         open={!!형태소도메인}
         onCancel={() => { set형태소도메인(null); set형태소입력(''); set형태소결과Lite(null); set형태소결과Full(null); set유사어결과(null) }}
         footer={<Button onClick={() => { set형태소도메인(null); set형태소입력(''); set형태소결과Lite(null); set형태소결과Full(null); set유사어결과(null) }}>닫기</Button>}
@@ -556,7 +554,7 @@ export default function DomainManage() {
       >
         <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
           <Input
-            placeholder="분析할 키워드 입력"
+            placeholder="분석할 키워드 입력"
             value={형태소입력}
             onChange={e => set형태소입력(e.target.value)}
             onPressEnter={형태소분석실행}
@@ -569,11 +567,11 @@ export default function DomainManage() {
             onClick={형태소분석실행}
             loading={형태소로딩Lite || 형태소로딩Full || 형태소로딩유사어}
             disabled={!형태소입력.trim()}
-          >분析</Button>
+          >분석</Button>
         </Space.Compact>
         <Row gutter={[16, 16]}>
           <Col xs={24} md={8}>
-            <Card title="Lite 형태소분析" size="small" style={{ minHeight: 200 }}>
+            <Card title="Lite 형태소분석" size="small" style={{ minHeight: 200 }}>
               {형태소로딩Lite ? (
                 <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
               ) : 형태소결과Lite ? (
@@ -597,12 +595,12 @@ export default function DomainManage() {
                   )}
                 </div>
               ) : (
-                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
               )}
             </Card>
           </Col>
           <Col xs={24} md={8}>
-            <Card title="Full 형태소分析 (품사 포함)" size="small" style={{ minHeight: 200 }}>
+            <Card title="Full 형태소분석 (품사 포함)" size="small" style={{ minHeight: 200 }}>
               {형태소로딩Full ? (
                 <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
               ) : 형태소결과Full ? (
@@ -626,7 +624,7 @@ export default function DomainManage() {
                   )}
                 </div>
               ) : (
-                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
               )}
             </Card>
           </Col>
@@ -648,7 +646,7 @@ export default function DomainManage() {
                   <Text type="secondary" style={{ fontSize: 12 }}>유사어 없음 (사전에 등록된 항목 없음)</Text>
                 )
               ) : (
-                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 分析하세요</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>키워드를 입력 후 분석하세요</Text>
               )}
             </Card>
           </Col>

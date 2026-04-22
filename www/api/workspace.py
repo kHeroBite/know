@@ -611,6 +611,7 @@ class FinalizeCompleteRequest(BaseModel):
     skip_backup: bool = False
     backup_folder: Optional[str] = None
     site_id: Optional[int] = None
+    skip_copy_domain: bool = False
 
 
 @라우터.post("/{name}/prepare-complete")
@@ -644,6 +645,7 @@ def finalize_complete_api(
         skip_backup=body.skip_backup,
         backup_folder=body.backup_folder,
         site_id=body.site_id,
+        skip_copy_domain=body.skip_copy_domain,
     )
     return {"status": "ok", **result}
 
