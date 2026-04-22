@@ -122,6 +122,7 @@ def list_workspaces_service() -> list[dict[str, Any]]:
                 "connected_by": ws상태.get("connected_by"),
                 "color": ws상태.get("color"),
                 "site_code": ws상태.get("site_code"),
+                "backup_name": ws상태.get("backup_name"),
             })
     return 결과
 
@@ -277,7 +278,6 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
 
         # 사전 DB 복사 (도메인 → 워크스페이스)
         COPY_PROGRESS[ws_name]["message"] = "사전 DB 복사 중..."
-        COPY_PROGRESS[ws_name]["percent"] = 95
         try:
             from models.dictionary import ws_create_dict_table, ws_copy_dict_data
             from core.database import 엔진
@@ -385,6 +385,7 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         "status": "CONNECTING", "domain": domain, "connected_by": connected_by,
         "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code,
         "connected_at": _connected_at,
+        "backup_name": backup_name,
     }
     _write_state(상태)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
@@ -1188,6 +1189,7 @@ def finalize_complete(
     skip_backup: bool = False,
     backup_folder: str | None = None,
     site_id: int | None = None,
+    skip_copy_domain: bool = False,
 ) -> dict:
     """완료 2단계 — 실제 백업 + 역방향 복사 + snapshot_after + phase complete → finished.
 
@@ -1293,25 +1295,26 @@ def finalize_complete(
             import logging
             logging.getLogger(__name__).warning("metadata.json 기록 실패: %s", e)
 
-    # 2. 역방향 파일 복사
+    # 2. 역방향 파일 복사 (skip_copy_domain=True 이면 건너뜀)
     copied_files: list[str] = []
-    for item in ["data", "txt_resrc"]:
-        src = ws_path / item
-        if src.exists():
-            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
-            copied_files.append(item)
-    ws_syn = ws_path / "synonym.UTF-8"
-    if ws_syn.exists():
-        shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
-        copied_files.append("synonym.UTF-8")
+    if not skip_copy_domain:
+        for item in ["data", "txt_resrc"]:
+            src = ws_path / item
+            if src.exists():
+                shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+                copied_files.append(item)
+        ws_syn = ws_path / "synonym.UTF-8"
+        if ws_syn.exists():
+            shutil.copy2(str(ws_syn), str(domain_path / "synonym.UTF-8"))
+            copied_files.append("synonym.UTF-8")
 
-    # 2-1. workspace/jiana/{data,txt_resrc} → domain/{data,txt_resrc} overlay
-    # (사전빌드된 user.ks + *.dcd가 도메인에 반영되어야 재연결 시 사전 유지)
-    ws_jiana_path = ws_path / "jiana"
-    for item in ["data", "txt_resrc"]:
-        src = ws_jiana_path / item
-        if src.exists():
-            shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
+        # 2-1. workspace/jiana/{data,txt_resrc} → domain/{data,txt_resrc} overlay
+        # (사전빌드된 user.ks + *.dcd가 도메인에 반영되어야 재연결 시 사전 유지)
+        ws_jiana_path = ws_path / "jiana"
+        for item in ["data", "txt_resrc"]:
+            src = ws_jiana_path / item
+            if src.exists():
+                shutil.copytree(str(src), str(domain_path / item), dirs_exist_ok=True)
 
     # 4. snapshot_after 기록
     snapshot_after = None
@@ -1481,34 +1484,23 @@ def cleanup_dangling_sessions(conn, user_id: str, _sql_text) -> int:
     """이전 로그인 세션 중 logout/force_exit 없이 끝난 세션을 force_exit로 정리.
     Returns: 정리된 세션 수
     """
-    # 해당 사용자의 마지막 이벤트가 logout/force_exit가 아닌 세션 ID 목록
-    dangling = conn.execute(_sql_text("""
-        SELECT id, workspace, domain
-        FROM user_session_log t1
+    # 사용자의 마지막 이벤트 1건만 조회 (인덱스 활용)
+    last = conn.execute(_sql_text("""
+        SELECT id, workspace, domain, event
+        FROM user_session_log
         WHERE user_id = :uid
-          AND event NOT IN ('logout', 'force_exit')
-          AND NOT EXISTS (
-            SELECT 1 FROM user_session_log t2
-            WHERE t2.user_id = t1.user_id
-              AND t2.created_at > t1.created_at
-              AND t2.event IN ('logout', 'force_exit')
-          )
-          AND event = (
-            SELECT event FROM user_session_log t3
-            WHERE t3.user_id = t1.user_id
-            ORDER BY t3.created_at DESC
-            LIMIT 1
-          )
-    """), {"uid": user_id}).mappings().all()
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    """), {"uid": user_id}).mappings().fetchone()
 
-    count = 0
-    for row in dangling:
-        conn.execute(_sql_text("""
-            INSERT INTO user_session_log (workspace, domain, user_id, event, menu)
-            VALUES (:ws, :dom, :uid, 'force_exit', NULL)
-        """), {"ws": row["workspace"], "dom": row["domain"], "uid": user_id})
-        count += 1
-    return count
+    if not last or last["event"] in ("logout", "force_exit"):
+        return 0
+
+    conn.execute(_sql_text("""
+        INSERT INTO user_session_log (workspace, domain, user_id, event, menu)
+        VALUES (:ws, :dom, :uid, 'force_exit', NULL)
+    """), {"ws": last["workspace"], "dom": last["domain"], "uid": user_id})
+    return 1
 
 
 def session_event_service(workspace: str, domain: str, user_id: str, event: str, menu: str | None = None) -> dict:

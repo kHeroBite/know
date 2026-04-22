@@ -71,6 +71,7 @@ interface 워크스페이스항목 {
   site_code: string | null
   connected_by: string | null
   color: string | null
+  backup_name: string | null
 }
 
 function buildProgressLabel(wsName: string, domain: string | null, siteCode: string | null, sites: Site[], domains: {id: string, name: string | null}[], action: string): string {
@@ -440,47 +441,6 @@ export default function Workspace() {
         }
       />
 
-      {isSuper && (
-        <Card style={{ marginBottom: 16, animation: 'wsCardFadeIn 0.3s ease' }}>
-          <Space direction="vertical" size={10}>
-            <Space>
-              <Input
-                placeholder="워크스페이스 이름"
-                value={새이름}
-                onChange={e => set새이름(e.target.value)}
-                onPressEnter={생성핸들러}
-                style={{ width: 200 }}
-              />
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={생성핸들러}
-                loading={생성중}
-                disabled={isBlocked}
-              >
-                생성
-              </Button>
-            </Space>
-            {/* 색상 선택 (생성 시) — ColorPicker */}
-            <Space size={8} align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>색상:</Text>
-              <ColorPicker
-                value={새색상 || '#1a1a2e'}
-                onChange={(color) => set새색상(color.toHexString())}
-                presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
-                size="small"
-              />
-              {새색상 && (
-                <div style={{
-                  width: 20, height: 20, borderRadius: 4,
-                  background: 새색상, border: '1px solid #d9d9d9',
-                }} />
-              )}
-            </Space>
-          </Space>
-        </Card>
-      )}
-
       <Spin spinning={로딩}>
         <Row gutter={[16, 16]}>
           {목록.map(ws => {
@@ -582,6 +542,15 @@ export default function Workspace() {
                       </Text>
                     )}
                   </div>
+
+                  {/* 백업 출처 표시 */}
+                  {ws.backup_name && ws.status === 'USED' && (
+                    <div style={{ marginBottom: 8 }}>
+                      <Text style={{ fontSize: 11, color: isSelected ? 'rgba(255,255,255,0.75)' : '#fa8c16' }}>
+                        📦 백업: {ws.backup_name}
+                      </Text>
+                    </div>
+                  )}
 
                   {/* 작업 진행률 (USED 상태이고 도메인 있을 때) */}
                   {ws.status === 'USED' && ws.domain && 작업진행률[ws.name] !== undefined && (
@@ -761,6 +730,47 @@ export default function Workspace() {
         </Row>
       </Spin>
 
+      {isSuper && (
+        <Card style={{ marginTop: 16, animation: 'wsCardFadeIn 0.3s ease' }}>
+          <Space direction="vertical" size={10}>
+            <Space>
+              <Input
+                placeholder="워크스페이스 이름"
+                value={새이름}
+                onChange={e => set새이름(e.target.value)}
+                onPressEnter={생성핸들러}
+                style={{ width: 200 }}
+              />
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={생성핸들러}
+                loading={생성중}
+                disabled={isBlocked}
+              >
+                생성
+              </Button>
+            </Space>
+            {/* 색상 선택 (생성 시) — ColorPicker */}
+            <Space size={8} align="center">
+              <Text type="secondary" style={{ fontSize: 12 }}>색상:</Text>
+              <ColorPicker
+                value={새색상 || '#1a1a2e'}
+                onChange={(color) => set새색상(color.toHexString())}
+                presets={[{ label: '추천 색상', colors: 프리셋색상 }]}
+                size="small"
+              />
+              {새색상 && (
+                <div style={{
+                  width: 20, height: 20, borderRadius: 4,
+                  background: 새색상, border: '1px solid #d9d9d9',
+                }} />
+              )}
+            </Space>
+          </Space>
+        </Card>
+      )}
+
       {/* 사이트/백업 연결 모달 */}
       <Modal
         title={`워크스페이스 연결 : ${연결팝업WS}`}
@@ -853,7 +863,7 @@ export default function Workspace() {
               showSearch
               optionFilterProp="label"
               options={백업목록.map(b => ({
-                label: `[${b.domain}] ${b.name} (udic: ${b.dict_counts?.udic ?? 0}건)`,
+                label: `[${b.domain}] ${b.name}`,
                 value: b.name,
               }))}
               onChange={v => {
