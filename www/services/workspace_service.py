@@ -518,6 +518,29 @@ def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("_copy_task_from_backup snapshot_before 실패 (무시): %s", e)
+
+        # 백업 복원 후 자동 사전빌드 — WS DB 사전이 최신 상태로 jiana에 반영되도록
+        try:
+            import threading
+            from core.database import SessionLocal as _SL
+            from services.build_service import ws_export_dict_file
+            from pipeline.build_wrapper import run_build
+
+            def _auto_build():
+                _db = _SL()
+                try:
+                    ws_export_dict_file(_db, ws_name, domain, get_jiana_home_path(ws_name))
+                    run_build(domain=domain, build_history_id=None, jiana_home=get_jiana_home_path(ws_name), workspace=ws_name)
+                except Exception as _e:
+                    import logging
+                    logging.getLogger(__name__).warning("백업복원 자동 사전빌드 실패 (무시): %s", _e)
+                finally:
+                    _db.close()
+
+            threading.Thread(target=_auto_build, daemon=True).start()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("백업복원 자동 사전빌드 시작 실패 (무시): %s", e)
     except InterruptedError:
         경과 = round(time.time() - 시작시간, 1)
         COPY_PROGRESS[ws_name] = {"percent": 0, "status": "cancelled", "message": "사용자 취소", "elapsed": 경과}
