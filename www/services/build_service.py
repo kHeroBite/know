@@ -29,31 +29,92 @@ def ws_export_dict_file(db, workspace: str, domain: str, jiana_home: str) -> dic
     결과 = {}
 
     # UDIC → user.ks
+    # 기본 jiana의 user.ks(베이스 사전)를 base로 하고 WS DB 단어를 추가한다.
+    # WS jiana는 백업/복사로 생성되므로 베이스 사전이 이미 포함되어 있을 수 있지만,
+    # export 시 완전 덮어쓰면 베이스 사전이 유실되므로 DEFAULT_JIANA_HOME 기준으로 병합한다.
     udic_path = os.path.join(jiana_home, "txt_resrc", "udic", "user.ks")
     os.makedirs(os.path.dirname(udic_path), exist_ok=True)
     try:
         rows = db.execute(text(f"SELECT _WORD FROM {site}_UDIC ORDER BY _WORD")).scalars().all()
-        with open(udic_path, "w", encoding="utf-8-sig") as f:  # BOM 포함
-            for word in rows:
-                if word and word.strip():
-                    f.write(word.strip() + "\n")
-        결과["udic"] = len(rows)
-        logger.info("사전 export: %s_UDIC → %s (%d건)", site, udic_path, len(rows))
+        ws_words = {w.strip() for w in rows if w and w.strip()}
+
+        # 기본 jiana user.ks 로드 (베이스 사전 보존)
+        # 기본 jiana user.ks는 UTF-8(BOM 포함 가능). 전체를 EUC-KR로 통일해야 ant dic이 올바르게 읽음.
+        base_word_set: set[str] = set()
+        base_ks = os.path.join(DEFAULT_JIANA_HOME, "txt_resrc", "udic", "user.ks")
+        if os.path.exists(base_ks):
+            with open(base_ks, "rb") as bf:
+                raw = bf.read()
+            # BOM 제거
+            if raw.startswith(b"\xef\xbb\xbf"):
+                raw = raw[3:]
+            # UTF-8 또는 EUC-KR로 디코딩 시도
+            try:
+                decoded_base = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded_base = raw.decode("euc-kr", errors="replace")
+            for line in decoded_base.split("\n"):
+                w = line.strip()
+                if w:
+                    base_word_set.add(w)
+            logger.info("베이스 user.ks 로드: %s (%d단어)", base_ks, len(base_word_set))
+
+        # WS 전용 신규 단어 (베이스에 없는 것만)
+        new_ws_words = sorted(ws_words - base_word_set)
+        all_words = sorted(base_word_set | ws_words)
+
+        # RegistUniUserDic은 UTF-8 BOM 파일을 읽으므로 BOM 포함 UTF-8로 저장
+        with open(udic_path, "wb") as f:
+            f.write(b"\xef\xbb\xbf")  # UTF-8 BOM
+            for word in all_words:
+                f.write((word + "\n").encode("utf-8"))
+
+        결과["udic"] = len(ws_words)
+        결과["udic_base"] = len(base_word_set)
+        결과["udic_new"] = len(new_ws_words)
+        logger.info("사전 export: %s_UDIC → %s (베이스 %d건 + WS신규 %d건, 전체 %d건)", site, udic_path, len(base_word_set), len(new_ws_words), len(all_words))
     except Exception as e:
         logger.warning("UDIC export 실패: %s", e)
         결과["udic_error"] = str(e)
 
     # CNDIC → cnlist.ks
+    # 기본 jiana cnlist.ks(베이스)를 포함하고 WS DB 단어를 병합하여 UTF-8로 저장
     cndic_path = os.path.join(jiana_home, "txt_resrc", "cndic", "cnlist.ks")
     os.makedirs(os.path.dirname(cndic_path), exist_ok=True)
     try:
         rows = db.execute(text(f"SELECT _WORD FROM {site}_CNDIC ORDER BY _WORD")).scalars().all()
-        with open(cndic_path, "w", encoding="utf-8") as f:
-            for word in rows:
-                if word and word.strip():
-                    f.write(word.strip() + "\n")
-        결과["cndic"] = len(rows)
-        logger.info("사전 export: %s_CNDIC → %s (%d건)", site, cndic_path, len(rows))
+        ws_cn_words = {w.strip() for w in rows if w and w.strip()}
+
+        # 기본 jiana cnlist.ks 로드 (베이스 사전 보존)
+        base_cn_set: set[str] = set()
+        base_cn_ks = os.path.join(DEFAULT_JIANA_HOME, "txt_resrc", "cndic", "cnlist.ks")
+        if os.path.exists(base_cn_ks):
+            with open(base_cn_ks, "rb") as bf:
+                raw = bf.read()
+            if raw.startswith(b"\xef\xbb\xbf"):
+                raw = raw[3:]
+            try:
+                decoded = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded = raw.decode("euc-kr", errors="replace")
+            for line in decoded.split("\n"):
+                w = line.strip()
+                if w:
+                    base_cn_set.add(w)
+            logger.info("베이스 cnlist.ks 로드: %s (%d단어)", base_cn_ks, len(base_cn_set))
+
+        all_cn_words = sorted(base_cn_set | ws_cn_words)
+        new_cn_words = sorted(ws_cn_words - base_cn_set)
+
+        with open(cndic_path, "wb") as f:
+            f.write(b"\xef\xbb\xbf")  # UTF-8 BOM (RegistUniUserDic 형식 통일)
+            for word in all_cn_words:
+                f.write((word + "\n").encode("utf-8"))
+
+        결과["cndic"] = len(ws_cn_words)
+        결과["cndic_base"] = len(base_cn_set)
+        결과["cndic_new"] = len(new_cn_words)
+        logger.info("사전 export: %s_CNDIC → %s (베이스 %d건 + WS신규 %d건, 전체 %d건)", site, cndic_path, len(base_cn_set), len(new_cn_words), len(all_cn_words))
     except Exception as e:
         logger.warning("CNDIC export 실패: %s", e)
         결과["cndic_error"] = str(e)
