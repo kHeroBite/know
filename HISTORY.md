@@ -1,5 +1,23 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-23 — 데이터전처리 2컬럼 분리 + 작업실 Jiana사전편집 메뉴
+
+### 데이터전처리 로그기반/데이터기반 분리
+- 기존 단일 전처리 페이지를 2컬럼으로 분리
+- 좌: 로그기반(인기검색어/실패검색어), 우: 데이터기반(색인 DQDOC)
+- OR 조건: 하나라도 업로드되면 각 컬럼 독립 실행 가능
+- 신규 API: /preprocess/data-files/{folder}, /preprocess/data-run, WS /ws/preprocess-data/{run_id}
+- 데이터기반 실행 로직은 skeleton 구현 (추후 사이트별 스크립트 연결 필요)
+
+### 작업실 Jiana 사전편집 메뉴
+- 기존 사용자/복합명사/유사어사전 탭 옆에 "Jiana파일" 탭 추가
+- grammar/sdic 사전 타입 선택 + 파일 목록 표시
+- 파일 클릭 → 분석결과 영역 오버레이로 텍스트 편집
+- 저장: .bak 백업 후 inner 경로(workspace/{ws}/jiana/txt_resrc/) 직접 저장
+- 신규 API: /jiana-dict/types, /jiana-dict/{type}/files, /jiana-dict/{type}/file/{name}
+
+---
+
 ## [2026-04-16] 백업관리 독립 메뉴 분리 + 메일관리 카드 + WorkComplete 버튼 재구성 (o4)
 
 > **작업 요약**: 백업관리(/backup-manage) 독립 메뉴 분리(사이트관리 아래), 백업관리 페이지 신규 구현(메일관리 카드 + 도메인/사이트 필터 콤보박스 + 백업 목록), WorkComplete 버튼 순서 재구성(완료리포트/공유/파워포인트/메일), PPT 다운로드 `window.open` → axios blob fetch 전환, email_contacts 모델/API 신규 추가.

@@ -20,6 +20,7 @@ import ThesaurusRecommendModal from '../components/workspace/ThesaurusRecommendM
 import LLMPromptModal from '../components/workspace/LLMPromptModal'
 import CompleteModal from '../components/workspace/CompleteModal'
 import DicTab, { DicType } from '../components/workspace/DicTab'
+import JianaDictPanel from '../components/workspace/JianaDictPanel'
 import MorphemeTab from '../components/workspace/MorphemeTab'
 import { 기본핫키맵, encodeKeyEvent, displayKey, displayTabKey, KbdKey } from '../utils/keyboard'
 import { getTypoVariants } from '../utils/hangul'
@@ -98,6 +99,14 @@ export default function KnowledgeWork() {
   // 하단 탭
   const [activeTab, setActiveTab] = useState('morpheme')
   const [dicRefreshKey, setDicRefreshKey] = useState(0)
+
+  // Jiana 사전 파일 편집 오버레이
+  const [dictEditOverlay, setDictEditOverlay] = useState<{
+    visible: boolean
+    dictType: string
+    filename: string
+    content: string
+  }>({ visible: false, dictType: '', filename: '', content: '' })
   const [thesaurusSearch, setThesaurusSearch] = useState('')
   const [udicSearch, setUdicSearch] = useState('')
   const [cndicSearch, setCndicSearch] = useState('')
@@ -1099,6 +1108,25 @@ export default function KnowledgeWork() {
 
   // ─── 일괄 작업 ──────────────────────────────────────────────
 
+  // Jiana 사전 파일 저장
+  const handleDictSave = useCallback(async () => {
+    if (!selectedWorkspace || !dictEditOverlay.dictType || !dictEditOverlay.filename) return
+    try {
+      await 클라이언트.put(
+        `/api/jiana-dict/${dictEditOverlay.dictType}/file/${dictEditOverlay.filename}`,
+        {
+          workspace_id: selectedWorkspace,
+          domain: selectedDomain,
+          content: dictEditOverlay.content,
+        }
+      )
+      message.success(`${dictEditOverlay.filename} 저장 완료`)
+      setDictEditOverlay(prev => ({ ...prev, visible: false }))
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || 'Jiana 사전 저장 실패')
+    }
+  }, [selectedWorkspace, selectedDomain, dictEditOverlay])
+
   const bulkRegisterKeywords = useCallback(async (keywords: string[], dicType: string) => {
     if (!selectedWorkspace || !selectedDomain) return
     try {
@@ -1551,11 +1579,28 @@ export default function KnowledgeWork() {
 
           <Card
             size="small"
-            style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px' } }}
           >
+            {/* Jiana 사전 파일 편집 오버레이 */}
+            {dictEditOverlay.visible && (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'white', padding: 12, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
+                </div>
+                <Input.TextArea
+                  value={dictEditOverlay.content}
+                  onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
+                  style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
+                />
+                <Space style={{ marginTop: 8 }}>
+                  <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
+                  <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
+                </Space>
+              </div>
+            )}
             <Tabs
-              activeKey={['udic', 'cndic', 'thesaurus'].includes(activeTab) ? activeTab : 'udic'}
+              activeKey={['udic', 'cndic', 'thesaurus', 'jiana-dict'].includes(activeTab) ? activeTab : 'udic'}
               onChange={(key) => {
                 setActiveTab(key)
                 if (key === 'udic') setUdicFocusTrigger(prev => prev + 1)
@@ -1577,6 +1622,23 @@ export default function KnowledgeWork() {
                   key: 'thesaurus',
                   label: <span>유사어사전 <KbdKey>{displayTabKey(derivedHotkeys.tabThesaurus)}</KbdKey></span>,
                   children: <DicTab dicType="thesaurus" domain={selectedDomain ?? ''} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} onModalClose={() => setIsCenterFocused(true)} />,
+                },
+                {
+                  key: 'jiana-dict',
+                  label: <span>Jiana파일</span>,
+                  children: selectedWorkspace ? (
+                    <JianaDictPanel
+                      workspaceId={selectedWorkspace}
+                      domain={selectedDomain ?? undefined}
+                      onFileSelect={(dictType, filename, content) => {
+                        setDictEditOverlay({ visible: true, dictType, filename, content })
+                      }}
+                    />
+                  ) : (
+                    <div style={{ padding: 16, textAlign: 'center', color: '#999', fontSize: 12 }}>
+                      워크스페이스를 연결하면 Jiana 사전 파일을 편집할 수 있습니다.
+                    </div>
+                  ),
                 },
               ]}
             />

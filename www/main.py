@@ -20,6 +20,7 @@ from api.knowledge import 라우터 as 지식작업라우터
 from api.build import 라우터 as 빌드라우터
 from api.realtime import 라우터 as 실시간라우터
 from api.phase1 import 라우터 as phase1라우터, ws라우터 as phase1_ws라우터
+from api.phase1_data import 라우터 as phase1_data라우터, ws라우터 as phase1_data_ws라우터
 from api.workspace import 라우터 as 워크스페이스라우터, 도메인관리라우터, 시스템설정라우터, 세션이벤트라우터
 from api.backup import 라우터 as 백업라우터
 from api.account import 라우터 as 계정라우터
@@ -35,6 +36,7 @@ from api.site import 라우터 as 사이트라우터
 from api.reports import 라우터 as 리포트라우터
 from api.share import 라우터 as 공유라우터
 from api.email_contacts import 라우터 as 이메일연락처라우터
+from api.jiana_dict import 라우터 as jiana사전라우터
 
 
 logging.basicConfig(
@@ -55,19 +57,20 @@ _접근로그.setLevel(logging.INFO)
 async def _lifespan(app: FastAPI):
     """서버 기동 시 마이그레이션 + phase 자동 추론."""
     from sqlalchemy import text
-    마이그레이션경로 = os.path.join(os.path.dirname(__file__), "migrations", "002_user_work_phase.sql")
-    try:
-        with open(마이그레이션경로, "r", encoding="utf-8") as f:
-            sql문 = f.read()
-        with 엔진.connect() as conn:
-            for 문장 in sql문.split(";"):
-                sql_라인 = [l for l in 문장.splitlines() if l.strip() and not l.strip().startswith("--")]
-                정제된_sql = " ".join(sql_라인).strip()
-                if 정제된_sql:
-                    conn.execute(text(정제된_sql))
-            conn.commit()
-    except Exception as e:
-        print(f"[migration 002] 실패: {e}")
+    for 마이그_번호, 마이그_파일 in [("002", "002_user_work_phase.sql"), ("003", "003_phase1_data_tables.sql")]:
+        마이그레이션경로 = os.path.join(os.path.dirname(__file__), "migrations", 마이그_파일)
+        try:
+            with open(마이그레이션경로, "r", encoding="utf-8") as f:
+                sql문 = f.read()
+            with 엔진.connect() as conn:
+                for 문장 in sql문.split(";"):
+                    sql_라인 = [l for l in 문장.splitlines() if l.strip() and not l.strip().startswith("--")]
+                    정제된_sql = " ".join(sql_라인).strip()
+                    if 정제된_sql:
+                        conn.execute(text(정제된_sql))
+                conn.commit()
+        except Exception as e:
+            print(f"[migration {마이그_번호}] 실패: {e}")
     try:
         from services.workspace_service import _auto_migrate_phase
         db = 세션팩토리()
@@ -128,6 +131,8 @@ else:
 앱.include_router(실시간라우터)
 앱.include_router(phase1라우터, prefix="/api", tags=["phase1"])
 앱.include_router(phase1_ws라우터)  # Phase1 WS는 prefix 없이
+앱.include_router(phase1_data라우터, prefix="/api", tags=["phase1-data"])
+앱.include_router(phase1_data_ws라우터)  # Phase1 Data WS는 prefix 없이
 앱.include_router(워크스페이스라우터, prefix="/api", tags=["워크스페이스"])
 앱.include_router(도메인관리라우터, prefix="/api", tags=["도메인관리"])
 앱.include_router(시스템설정라우터, prefix="/api", tags=["시스템설정"])
@@ -146,6 +151,7 @@ else:
 앱.include_router(리포트라우터)
 앱.include_router(공유라우터)
 앱.include_router(이메일연락처라우터, prefix="/api", tags=["이메일연락처"])
+앱.include_router(jiana사전라우터)
 
 
 # ── 전역 예외 핸들러 ──────────────────────────────────────

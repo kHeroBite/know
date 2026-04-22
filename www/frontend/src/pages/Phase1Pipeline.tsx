@@ -5,9 +5,12 @@ import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
 import LogPanel from '../components/phase1/LogPanel'
+import DataFilePanel from '../components/phase1/DataFilePanel'
+import DataControlPanel from '../components/phase1/DataControlPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
+import { usePhase1DataWebSocket } from '../hooks/usePhase1DataWebSocket'
 import { phase1API } from '../api/phase1'
-import { assignmentApi } from '../api/assignment'
+import { phase1DataAPI, type DataFolder } from '../api/phase1Data'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import 클라이언트 from '../api/client'
 import PageHeader from '../components/PageHeader'
@@ -15,15 +18,11 @@ import PageHeader from '../components/PageHeader'
 const { Title } = Typography
 
 export default function Phase1Pipeline() {
+  // ── 로그기반 상태 ──
   const [runId, setRunId] = useState<string | null>(null)
   const [runStartStep, setRunStartStep] = useState(1)
   const ws = usePhase1WebSocket(runId, runStartStep)
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
-  const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
-  const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
-  const [hasFiles, setHasFiles] = useState(false)
+  const [hasLogFiles, setHasLogFiles] = useState(false)
   const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
   const [rankEnabled, setRankEnabled] = useState(true)
   const [rankValue, setRankValue] = useState(150000)
@@ -34,6 +33,22 @@ export default function Phase1Pipeline() {
   const [combineMode, setCombineMode] = useState<'and' | 'or'>('and')
   const [sortBy, setSortBy] = useState<'count' | 'rank'>('count')
   const [freezeStatus, setFreezeStatus] = useState<'idle' | 'running'>('idle')
+  const [fileTabs, setFileTabs] = useState<Record<string, string>>({})
+  const [activeViewTab, setActiveViewTab] = useState<string | null>(null)
+  const [stepElapsed, setStepElapsed] = useState<Record<number, number>>({})
+  const [stepOutputs, setStepOutputs] = useState<Record<number, string>>({})
+
+  // ── 데이터기반 상태 ──
+  const [dataRunId, setDataRunId] = useState<string | null>(null)
+  const dataWs = usePhase1DataWebSocket(dataRunId)
+  const [dataFolder, setDataFolder] = useState<DataFolder>('galleria')
+  const [dataFilesCount, setDataFilesCount] = useState<Record<DataFolder, number>>({
+    galleria: 0, hmall: 0, thd: 0, ssf: 0,
+  })
+
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
 
   const 프리징핸들러 = async () => {
     if (!selectedWorkspace || !selectedDomain) return
@@ -48,23 +63,23 @@ export default function Phase1Pipeline() {
     }
   }
 
-  // 파일 존재 여부 체크
+  // ── 로그기반: 파일 존재 여부 체크 ──
   useEffect(() => {
     const checkFiles = async () => {
-      if (!selectedWorkspace) { setHasFiles(false); return }
+      if (!selectedWorkspace) { setHasLogFiles(false); return }
       try {
         const [pop, fail] = await Promise.all([
           phase1API.파일목록('popular', selectedWorkspace),
           phase1API.파일목록('fails', selectedWorkspace),
         ])
         const total = (pop.data.files?.length || 0) + (fail.data.files?.length || 0)
-        setHasFiles(total > 0)
-      } catch { setHasFiles(false) }
+        setHasLogFiles(total > 0)
+      } catch { setHasLogFiles(false) }
     }
     checkFiles()
   }, [selectedWorkspace])
 
-  // 단계별 결과 파일 존재 여부 확인
+  // ── 로그기반: 단계별 결과 파일 존재 여부 ──
   useEffect(() => {
     const checkStepStatus = async () => {
       if (!selectedWorkspace) { setFileStatus({}); return }
@@ -76,11 +91,7 @@ export default function Phase1Pipeline() {
     checkStepStatus()
   }, [selectedWorkspace, ws.isCompleted])
 
-  // 단계별 경과시간 + output 경로 집계 (이전 run 정보 보존)
-  const [stepElapsed, setStepElapsed] = useState<Record<number, number>>({})
-  const [stepOutputs, setStepOutputs] = useState<Record<number, string>>({})
-
-  // 단계별 실시간 진행률 (WebSocket logs의 percent 필드 활용)
+  // ── 로그기반: 단계별 경과시간 + output 경로 집계 ──
   const stepPercents = useMemo(() => {
     const result: Record<number, number> = {}
     for (const entry of ws.logs) {
@@ -90,12 +101,12 @@ export default function Phase1Pipeline() {
     }
     return result
   }, [ws.logs])
+
   useEffect(() => {
     for (const entry of ws.logs) {
       if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
         setStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
       }
-      // executor.py 메시지 형식: "추출 complete: /path/file.txt (3643건, ...)" (status='running' row)
       if (entry.message && entry.step_num >= 1) {
         const m = entry.message.match(/complete:\s*(\/[^\s(]+)\s*(\([^)]+\))?/)
         if (m) {
@@ -106,7 +117,7 @@ export default function Phase1Pipeline() {
     }
   }, [ws.logs])
 
-  // 워크스페이스 변경 시 전처리 관련 상태 초기화
+  // ── 워크스페이스 변경 시 상태 초기화 ──
   useEffect(() => {
     setRunId(null)
     setFileTabs({})
@@ -114,9 +125,10 @@ export default function Phase1Pipeline() {
     setFileStatus({})
     setStepElapsed({})
     setStepOutputs({})
+    setDataRunId(null)
   }, [selectedWorkspace])
 
-  // 이전단계 복귀 시 reset=1 파라미터 감지 → 상태 초기화
+  // ── reset=1 파라미터 감지 ──
   useEffect(() => {
     if (searchParams.get('reset') === '1') {
       setRunId(null)
@@ -125,10 +137,12 @@ export default function Phase1Pipeline() {
       setFileStatus({})
       setStepElapsed({})
       setStepOutputs({})
+      setDataRunId(null)
       setSearchParams({})
     }
   }, [searchParams])
 
+  // ── 이전 로그기반 run 복원 ──
   useEffect(() => {
     const 이전실행로드 = async () => {
       try {
@@ -139,6 +153,17 @@ export default function Phase1Pipeline() {
       } catch { /* ignore */ }
     }
     이전실행로드()
+  }, [selectedWorkspace])
+
+  // ── 이전 데이터기반 run 복원 ──
+  useEffect(() => {
+    const 이전데이터실행로드 = async () => {
+      try {
+        const { data } = await phase1DataAPI.최근실행(selectedWorkspace ?? '', dataFolder)
+        if (data.run_id) setDataRunId(data.run_id)
+      } catch { /* ignore */ }
+    }
+    이전데이터실행로드()
   }, [selectedWorkspace])
 
   const 실행핸들러 = async (params: {
@@ -186,7 +211,6 @@ export default function Phase1Pipeline() {
       } as any)
       setRunStartStep(params.start_step)
       setRunId(data.run_id)
-      // 1단계부터 시작 시 파일 탭 + 단계 결과 초기화, 개별실행 시 기존 탭 유지
       if (params.start_step === 1) {
         setFileTabs({})
         setActiveViewTab(null)
@@ -196,6 +220,16 @@ export default function Phase1Pipeline() {
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
+    }
+  }
+
+  // ── 데이터기반 실행 ──
+  const 데이터실행핸들러 = async () => {
+    try {
+      const { data } = await phase1DataAPI.실행(dataFolder, selectedWorkspace ?? '')
+      setDataRunId(data.run_id)
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '데이터 전처리 실행 실패')
     }
   }
 
@@ -227,7 +261,6 @@ export default function Phase1Pipeline() {
   }
 
   const 파일보기 = async (rawOutput: string) => {
-    // output에서 경로만 추출 (건수 정보 제거)
     const filePath = rawOutput.split(' (')[0].trim()
     const tabKey = filePath.split('/').pop() || filePath
     try {
@@ -241,7 +274,6 @@ export default function Phase1Pipeline() {
 
   // 파일 존재 기반으로 stepStatuses 보정
   const 유효단계상태 = useMemo(() => {
-    // 실행 중이면 WebSocket 실시간 상태 + 이전 단계 자동 완료 처리
     if (runId !== null && !ws.isCompleted) {
       const statuses = { ...ws.stepStatuses }
       const runningEntry = Object.entries(statuses).find(([, s]) => s === 'running')
@@ -254,7 +286,6 @@ export default function Phase1Pipeline() {
       return statuses
     }
 
-    // 실행 중이 아닐 때만 fileStatus로 검증
     const fileToStep: Record<string, number> = { keywords: 1, refine: 2 }
     const result = { ...ws.stepStatuses }
     if (Object.keys(fileStatus).length > 0) {
@@ -268,6 +299,8 @@ export default function Phase1Pipeline() {
   }, [ws.stepStatuses, ws.isCompleted, runId, fileStatus])
 
   const 실행중 = runId !== null && !ws.isCompleted
+  const 데이터실행중 = dataRunId !== null && !dataWs.isCompleted
+  const 데이터파일있음 = dataFilesCount[dataFolder] > 0
 
   if (!selectedWorkspace) {
     return <Result status="warning" title="워크스페이스와 도메인을 먼저 선택하세요." />
@@ -283,20 +316,21 @@ export default function Phase1Pipeline() {
         onNext={다음단계핸들러}
       />
 
-      <Card title="파일관리" style={{ marginBottom: 16 }}>
-        <Row gutter={16}>
-          <Col xs={24} lg={12}>
-            <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
-          </Col>
-          <Col xs={24} lg={12}>
-            <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
-          </Col>
-        </Row>
-      </Card>
+      <Row gutter={16}>
+        {/* ── 왼쪽: 로그 기반 전처리 ── */}
+        <Col xs={24} lg={12}>
+          <Card title="로그 기반 전처리" style={{ marginBottom: 16 }}>
+            <Row gutter={16} style={{ marginBottom: 0 }}>
+              <Col xs={24} lg={12}>
+                <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
+              </Col>
+              <Col xs={24} lg={12}>
+                <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
+              </Col>
+            </Row>
+          </Card>
 
-      <Card bodyStyle={{ padding: 0 }}>
-        <Row gutter={0}>
-          <Col xs={24} lg={11} style={{ borderRight: '1px solid #f0f0f0' }}>
+          <Card bodyStyle={{ padding: 0 }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
               {실행중 ? (
@@ -341,12 +375,13 @@ export default function Phase1Pipeline() {
                 freezeLoading={freezeStatus === 'running'}
               />
             </div>
-          </Col>
-          <Col xs={24} lg={13}>
+          </Card>
+
+          <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
               <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
             </div>
-            <div style={{ padding: 16, minHeight: 450 }}>
+            <div style={{ padding: 16, minHeight: 300 }}>
               <LogPanel
                 logs={ws.logs}
                 fileTabs={fileTabs}
@@ -355,11 +390,35 @@ export default function Phase1Pipeline() {
                 isRunning={실행중}
               />
             </div>
-          </Col>
-        </Row>
-      </Card>
+          </Card>
+        </Col>
 
+        {/* ── 오른쪽: 데이터 기반 전처리 ── */}
+        <Col xs={24} lg={12}>
+          <Card title="데이터 기반 전처리" style={{ marginBottom: 16 }}>
+            <DataFilePanel
+              workspace={selectedWorkspace ?? undefined}
+              onFolderChange={setDataFolder}
+              onFilesChange={(folder, count) => {
+                setDataFilesCount(prev => ({ ...prev, [folder]: count }))
+              }}
+            />
+          </Card>
 
+          <Card bodyStyle={{ padding: 16 }}>
+            <DataControlPanel
+              folder={dataFolder}
+              workspace={selectedWorkspace ?? undefined}
+              onRun={데이터실행핸들러}
+              isRunning={데이터실행중}
+              isCompleted={dataWs.isCompleted}
+              logs={dataWs.logs}
+              runId={dataRunId}
+              hasFiles={데이터파일있음}
+            />
+          </Card>
+        </Col>
+      </Row>
     </div>
   )
 }

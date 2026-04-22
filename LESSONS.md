@@ -791,3 +791,22 @@ elif os.path.isdir(path):
 
 **Level**: 2 (세션 전환 시마다 재발 가능)
 
+---
+
+## 2026-04-23 — 데이터전처리 분리 + 사전편집 메뉴
+
+### 교훈 1: jiana inner 경로 편집 시 clobber 위험
+- 상황: workspace/{ws}/jiana/txt_resrc/ (inner) 편집 후 disconnect→reconnect 시 outer가 inner를 덮어씀
+- 대응: 편집 내용이 재연결 시 소실될 수 있음을 UI에서 경고 표시 필요 (향후 과제)
+- 원칙: inner 직접 편집은 임시 적용용, 영구 반영은 outer 수정 + 재연결 필요
+
+### 교훈 2: stash에 다른 세션 무단 수정 파일 잔류
+- 상황: oclean-quarantine 스태시에 다른 세션 수정 파일이 남아 있었음
+- 대응: odev 시작 전 git stash list 확인 후 타 세션 잔류 파일 여부 점검
+- 원칙: 세션 격리 불변식 — 다른 세션 소스 수정 절대 금지 (CLAUDE.md 준수)
+
+### 교훈 3: 데이터기반 전처리 skeleton 구현
+- 상황: 사이트별 실제 파이프라인 스크립트(extquery.pl 등) 경로 미확인으로 skeleton 구현
+- 대응: 추후 실제 스크립트 경로 확인 후 phase1_data_service.py에 연결 필요
+- 위치: www/services/phase1_data_service.py run_data_service() 함수
+
