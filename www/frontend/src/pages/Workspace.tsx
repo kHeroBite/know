@@ -452,7 +452,7 @@ export default function Workspace() {
 
             return (
               <Col xs={24} sm={12} key={ws.name}>
-                <Card style={getCardStyle(ws)} styles={{ body: { padding: 16 } }}>
+                <Card style={{ minHeight: 200, ...getCardStyle(ws) }} styles={{ body: { padding: 16 } }}>
                   {/* 복사 진행률 오버레이 */}
                   {isInProgress && (
                     <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
