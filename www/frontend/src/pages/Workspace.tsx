@@ -543,11 +543,11 @@ export default function Workspace() {
                     )}
                   </div>
 
-                  {/* 백업 출처 표시 */}
-                  {ws.backup_name && ws.status === 'USED' && (
-                    <div style={{ marginBottom: 8 }}>
+                  {/* 백업 출처 표시 — 항상 동일 높이 확보 */}
+                  {ws.status === 'USED' && (
+                    <div style={{ marginBottom: 8, visibility: ws.backup_name ? 'visible' : 'hidden' }}>
                       <Text style={{ fontSize: 11, color: isSelected ? 'rgba(255,255,255,0.75)' : '#fa8c16' }}>
-                        📦 백업: {ws.backup_name}
+                        📦 백업: {ws.backup_name ?? ''}
                       </Text>
                     </div>
                   )}
