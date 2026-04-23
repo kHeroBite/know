@@ -1600,7 +1600,7 @@ export default function KnowledgeWork() {
               </div>
             )}
             <Tabs
-              activeKey={['udic', 'cndic', 'thesaurus', 'jiana-dict'].includes(activeTab) ? activeTab : 'udic'}
+              activeKey={['udic', 'cndic', 'thesaurus', 'jiana-grammar', 'jiana-sdic'].includes(activeTab) ? activeTab : 'udic'}
               onChange={(key) => {
                 setActiveTab(key)
                 if (key === 'udic') setUdicFocusTrigger(prev => prev + 1)
@@ -1624,12 +1624,31 @@ export default function KnowledgeWork() {
                   children: <DicTab dicType="thesaurus" domain={selectedDomain ?? ''} workspace={selectedWorkspace || undefined} refreshKey={dicRefreshKey} externalSearch={thesaurusSearch} autoFocusTrigger={thesaurusFocusTrigger} thesaurusExternalOpen={thesaurusExternalOpen} onModalClose={() => setIsCenterFocused(true)} />,
                 },
                 {
-                  key: 'jiana-dict',
-                  label: <span>Jiana파일</span>,
+                  key: 'jiana-grammar',
+                  label: <span>기분석사전</span>,
                   children: selectedWorkspace ? (
                     <JianaDictPanel
                       workspaceId={selectedWorkspace}
                       domain={selectedDomain ?? undefined}
+                      fixedDictType="grammar"
+                      onFileSelect={(dictType, filename, content) => {
+                        setDictEditOverlay({ visible: true, dictType, filename, content })
+                      }}
+                    />
+                  ) : (
+                    <div style={{ padding: 16, textAlign: 'center', color: '#999', fontSize: 12 }}>
+                      워크스페이스를 연결하면 Jiana 사전 파일을 편집할 수 있습니다.
+                    </div>
+                  ),
+                },
+                {
+                  key: 'jiana-sdic',
+                  label: <span>형태소사전</span>,
+                  children: selectedWorkspace ? (
+                    <JianaDictPanel
+                      workspaceId={selectedWorkspace}
+                      domain={selectedDomain ?? undefined}
+                      fixedDictType="sdic"
                       onFileSelect={(dictType, filename, content) => {
                         setDictEditOverlay({ visible: true, dictType, filename, content })
                       }}

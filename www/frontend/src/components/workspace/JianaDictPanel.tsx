@@ -16,14 +16,15 @@ interface DictFileInfo {
 interface JianaDictPanelProps {
   workspaceId: string
   domain?: string
+  fixedDictType?: string
   onFileSelect: (dictType: string, filename: string, content: string) => void
 }
 
 // ─── 컴포넌트 ────────────────────────────────────────────────────
 
-export default function JianaDictPanel({ workspaceId, domain, onFileSelect }: JianaDictPanelProps) {
+export default function JianaDictPanel({ workspaceId, domain, fixedDictType, onFileSelect }: JianaDictPanelProps) {
   const [dictTypes, setDictTypes] = useState<string[]>([])
-  const [selectedType, setSelectedType] = useState<string>('')
+  const [selectedType, setSelectedType] = useState<string>(fixedDictType ?? '')
   const [files, setFiles] = useState<DictFileInfo[]>([])
   const [loadingTypes, setLoadingTypes] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
@@ -32,6 +33,10 @@ export default function JianaDictPanel({ workspaceId, domain, onFileSelect }: Ji
   // ── 사전 타입 목록 로드 ──────────────────────────────────────
   const loadTypes = useCallback(async () => {
     if (!workspaceId) return
+    if (fixedDictType) {
+      setSelectedType(fixedDictType)
+      return
+    }
     setLoadingTypes(true)
     try {
       const res = await 클라이언트.get('/api/jiana-dict/types', {
@@ -47,7 +52,7 @@ export default function JianaDictPanel({ workspaceId, domain, onFileSelect }: Ji
     } finally {
       setLoadingTypes(false)
     }
-  }, [workspaceId, domain, selectedType])
+  }, [workspaceId, domain, fixedDictType, selectedType])
 
   // ── 파일 목록 로드 ──────────────────────────────────────────
   const loadFiles = useCallback(async () => {
@@ -97,22 +102,27 @@ export default function JianaDictPanel({ workspaceId, domain, onFileSelect }: Ji
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 8 }}>
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Text strong style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Jiana 사전</Text>
-        <Select
-          size="small"
-          style={{ flex: 1 }}
-          value={selectedType || undefined}
-          placeholder="타입 선택"
-          loading={loadingTypes}
-          onChange={(v) => setSelectedType(v)}
-          options={dictTypes.map(t => ({ value: t, label: t }))}
-        />
+        {!fixedDictType && (
+          <>
+            <Text strong style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Jiana 사전</Text>
+            <Select
+              size="small"
+              style={{ flex: 1 }}
+              value={selectedType || undefined}
+              placeholder="타입 선택"
+              loading={loadingTypes}
+              onChange={(v) => setSelectedType(v)}
+              options={dictTypes.map(t => ({ value: t, label: t }))}
+            />
+          </>
+        )}
         <Button
           size="small"
           icon={<ReloadOutlined />}
           onClick={loadFiles}
           loading={loadingFiles}
           title="새로고침"
+          style={fixedDictType ? { marginLeft: 'auto' } : {}}
         />
       </div>
 
