@@ -347,6 +347,7 @@ export default function Phase1Pipeline() {
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as 'log' | 'data')}
         type="card"
+        destroyInactiveTabPane
         style={{ padding: '0 0' }}
         items={[
           {

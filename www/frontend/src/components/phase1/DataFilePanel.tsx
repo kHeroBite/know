@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, DragEvent } from 'react'
-import { Table, Card, Button, Upload, Typography, Popconfirm, Progress, Checkbox, Space, Select, message } from 'antd'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Table, Card, Button, Typography, Popconfirm, Progress, Checkbox, Space, Select, message } from 'antd'
 import { InboxOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
-import type { UploadProps } from 'antd'
 import { phase1DataAPI, type DataFolder } from '../../api/phase1Data'
 
 const { Text } = Typography
-const { Dragger } = Upload
 
 interface FileItem {
   name: string
@@ -34,7 +32,6 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
   const [업로드진행률, set업로드진행률] = useState(0)
   const [드래그오버, set드래그오버] = useState(false)
   const [선택항목, set선택항목] = useState<string[]>([])
-
   const 목록조회 = useCallback(async (folder?: DataFolder) => {
     const 대상폴더 = folder ?? 선택폴더
     set로딩(true)
@@ -101,31 +98,12 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
     }
   }, [선택폴더, workspace])
 
-  const draggerProps: UploadProps = {
-    name: 'file',
-    multiple: false,
-    showUploadList: false,
-    beforeUpload: (file) => {
-      if (file.size > 500 * 1024 * 1024) {
-        message.error('파일 크기 500MB 초과')
-        return Upload.LIST_IGNORE
-      }
-      return false
-    },
-    onChange: async (info) => {
-      const file = info.file.originFileObj || (info.file as unknown as File)
-      if (!file || !(file instanceof File)) return
-      파일업로드처리(file)
-    },
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    파일업로드처리(file)
+    e.target.value = ''
   }
-
-  const 드래그오버핸들러 = useCallback((e: DragEvent) => { e.preventDefault(); e.stopPropagation(); set드래그오버(true) }, [])
-  const 드래그떠남핸들러 = useCallback((e: DragEvent) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }, [])
-  const 드롭핸들러 = useCallback((e: DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); set드래그오버(false)
-    const files = e.dataTransfer?.files
-    if (files && files.length > 0) 파일업로드처리(files[0])
-  }, [파일업로드처리])
 
   const 전체선택 = 선택항목.length === 파일목록.length && 파일목록.length > 0
 
@@ -189,11 +167,45 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
         </div>
       }
     >
-      <Dragger {...draggerProps} style={{ marginBottom: 16 }} disabled={업로딩}>
-        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-        <p className="ant-upload-text">파일을 드래그하거나 클릭하여 업로드</p>
-        <p className="ant-upload-hint">텍스트 형식 파일 (최대 500MB)</p>
-      </Dragger>
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(true) }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }}
+        onDrop={(e) => {
+          e.preventDefault(); e.stopPropagation(); set드래그오버(false)
+          const file = e.dataTransfer?.files?.[0]
+          if (file) 파일업로드처리(file)
+        }}
+        style={{
+          position: 'relative',
+          marginBottom: 16,
+          padding: '16px 0',
+          border: `1px dashed ${드래그오버 ? '#4f46e5' : '#d9d9d9'}`,
+          borderRadius: 8,
+          background: 드래그오버 ? '#f5f3ff' : '#fafafa',
+          textAlign: 'center',
+          cursor: 업로딩 ? 'not-allowed' : 'pointer',
+          transition: 'border-color 0.3s, background 0.3s',
+          opacity: 업로딩 ? 0.5 : 1,
+        }}
+      >
+        <input
+          type="file"
+          onChange={handleFileInputChange}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0,
+            cursor: 업로딩 ? 'not-allowed' : 'pointer',
+            zIndex: 1,
+          }}
+          disabled={업로딩}
+        />
+        <p style={{ fontSize: 32, color: '#40a9ff', marginBottom: 8, pointerEvents: 'none' }}><InboxOutlined /></p>
+        <p style={{ margin: '0 0 4px', color: 'rgba(0,0,0,0.88)', pointerEvents: 'none' }}>파일을 드래그하거나 클릭하여 업로드</p>
+        <p style={{ margin: 0, color: 'rgba(0,0,0,0.45)', fontSize: 12, pointerEvents: 'none' }}>텍스트 형식 파일 (최대 500MB)</p>
+      </div>
 
       {업로딩 && (
         <Progress
@@ -224,9 +236,13 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
       </div>
 
       <div
-        onDragOver={드래그오버핸들러}
-        onDragLeave={드래그떠남핸들러}
-        onDrop={드롭핸들러}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(true) }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }}
+        onDrop={(e) => {
+          e.preventDefault(); e.stopPropagation(); set드래그오버(false)
+          const file = e.dataTransfer?.files?.[0]
+          if (file) 파일업로드처리(file)
+        }}
         style={{
           border: 드래그오버 ? '2px dashed #4f46e5' : '2px dashed transparent',
           borderRadius: 8,
