@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Select, List, Spin, Button, Typography, Space, Empty, Tag } from 'antd'
 import { FileTextOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons'
 import 클라이언트 from '../../api/client'
@@ -12,6 +12,10 @@ interface DictFileInfo {
   size: number
   mtime: number
 }
+
+// ─── 파일 목록 캐시 (30초 TTL) ───────────────────────────────────
+const _fileListCache = new Map<string, { files: DictFileInfo[]; ts: number }>()
+const FILE_LIST_CACHE_TTL = 30_000
 
 interface JianaDictPanelProps {
   workspaceId: string
@@ -29,25 +33,35 @@ export default function JianaDictPanel({ workspaceId, domain, fixedDictType, onF
   const [loadingTypes, setLoadingTypes] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [openingFile, setOpeningFile] = useState<string>('')
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
 
-  // ── 파일 목록 로드 ──────────────────────────────────────────
-  const loadFilesForType = useCallback(async (type: string) => {
+  // ── 파일 목록 로드 (캐시 적용) ───────────────────────────────
+  const loadFilesForType = useCallback(async (type: string, forceRefresh = false) => {
     if (!workspaceId || !type) return
+    const cacheKey = `${workspaceId}:${type}`
+    const cached = _fileListCache.get(cacheKey)
+    if (!forceRefresh && cached && Date.now() - cached.ts < FILE_LIST_CACHE_TTL) {
+      setFiles(cached.files)
+      return
+    }
     setLoadingFiles(true)
     try {
       const res = await 클라이언트.get(`/jiana-dict/${type}/files`, {
         params: { workspace_id: workspaceId, ...(domain ? { domain } : {}) },
       })
-      setFiles(res.data?.files ?? [])
+      const fileList: DictFileInfo[] = res.data?.files ?? []
+      _fileListCache.set(cacheKey, { files: fileList, ts: Date.now() })
+      if (mountedRef.current) setFiles(fileList)
     } catch {
-      setFiles([])
+      if (mountedRef.current) setFiles([])
     } finally {
-      setLoadingFiles(false)
+      if (mountedRef.current) setLoadingFiles(false)
     }
   }, [workspaceId, domain])
 
   const loadFiles = useCallback(async () => {
-    await loadFilesForType(fixedDictType ?? selectedType)
+    await loadFilesForType(fixedDictType ?? selectedType, true)
   }, [loadFilesForType, fixedDictType, selectedType])
 
   // ── 사전 타입 목록 로드 ──────────────────────────────────────

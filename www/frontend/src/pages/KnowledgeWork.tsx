@@ -1355,6 +1355,23 @@ export default function KnowledgeWork() {
 
         {/* 중앙열: 분석결과 + 사전탭 */}
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
+          {/* Jiana 사전 파일 편집 오버레이 — 파일 클릭(선택) 시 중앙열 전체를 덮음 */}
+          {dictEditOverlay.visible && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'white', padding: 12, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', borderRadius: 8 }}>
+              <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
+              </div>
+              <Input.TextArea
+                value={dictEditOverlay.content}
+                onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
+                style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
+              />
+              <Space style={{ marginTop: 8 }}>
+                <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
+                <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
+              </Space>
+            </div>
+          )}
           <Card
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
@@ -1582,23 +1599,6 @@ export default function KnowledgeWork() {
             style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px' } }}
           >
-            {/* Jiana 사전 파일 편집 오버레이 */}
-            {dictEditOverlay.visible && (
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'white', padding: 12, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
-                </div>
-                <Input.TextArea
-                  value={dictEditOverlay.content}
-                  onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
-                  style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
-                />
-                <Space style={{ marginTop: 8 }}>
-                  <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
-                  <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
-                </Space>
-              </div>
-            )}
             <Tabs
               activeKey={['udic', 'cndic', 'thesaurus', 'jiana-grammar', 'jiana-sdic'].includes(activeTab) ? activeTab : 'udic'}
               onChange={(key) => {
@@ -1663,56 +1663,6 @@ export default function KnowledgeWork() {
             />
           </Card>
 
-          {/* Jiana 사전 전체화면 오버레이 — 기분석/형태소 탭 활성 시 중앙열 전체를 덮음 */}
-          {(activeTab === 'jiana-grammar' || activeTab === 'jiana-sdic') && (
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 10,
-              background: '#fff',
-              display: 'flex', flexDirection: 'column',
-              border: '1px solid #f0f0f0', borderRadius: 8,
-              overflow: 'hidden',
-            }}>
-              <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>
-                  {activeTab === 'jiana-grammar' ? '기분석사전' : '형태소사전'}
-                </span>
-                <span style={{ fontSize: 11, color: '#999' }}>{activeTab === 'jiana-grammar' ? 'grammar' : 'sdic'}</span>
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px' }}>
-                {selectedWorkspace ? (
-                  <JianaDictPanel
-                    workspaceId={selectedWorkspace}
-                    domain={selectedDomain ?? undefined}
-                    fixedDictType={activeTab === 'jiana-grammar' ? 'grammar' : 'sdic'}
-                    onFileSelect={(dictType, filename, content) => {
-                      setDictEditOverlay({ visible: true, dictType, filename, content })
-                    }}
-                  />
-                ) : (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#999', fontSize: 12 }}>
-                    워크스페이스를 연결하면 Jiana 사전 파일을 편집할 수 있습니다.
-                  </div>
-                )}
-              </div>
-              {/* 파일 편집 오버레이 */}
-              {dictEditOverlay.visible && (
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, background: 'white', padding: 12, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
-                  </div>
-                  <Input.TextArea
-                    value={dictEditOverlay.content}
-                    onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
-                    style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
-                  />
-                  <Space style={{ marginTop: 8 }}>
-                    <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
-                    <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
-                  </Space>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* 우측열: 키워드분석/AI분석(탭) + 작업이력 */}
