@@ -1113,7 +1113,7 @@ export default function KnowledgeWork() {
     if (!selectedWorkspace || !dictEditOverlay.dictType || !dictEditOverlay.filename) return
     try {
       await 클라이언트.put(
-        `/api/jiana-dict/${dictEditOverlay.dictType}/file/${dictEditOverlay.filename}`,
+        `/jiana-dict/${dictEditOverlay.dictType}/file/${dictEditOverlay.filename}`,
         {
           workspace_id: selectedWorkspace,
           domain: selectedDomain,

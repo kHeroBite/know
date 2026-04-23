@@ -30,16 +30,37 @@ export default function JianaDictPanel({ workspaceId, domain, fixedDictType, onF
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [openingFile, setOpeningFile] = useState<string>('')
 
+  // ── 파일 목록 로드 ──────────────────────────────────────────
+  const loadFilesForType = useCallback(async (type: string) => {
+    if (!workspaceId || !type) return
+    setLoadingFiles(true)
+    try {
+      const res = await 클라이언트.get(`/jiana-dict/${type}/files`, {
+        params: { workspace_id: workspaceId, ...(domain ? { domain } : {}) },
+      })
+      setFiles(res.data?.files ?? [])
+    } catch {
+      setFiles([])
+    } finally {
+      setLoadingFiles(false)
+    }
+  }, [workspaceId, domain])
+
+  const loadFiles = useCallback(async () => {
+    await loadFilesForType(fixedDictType ?? selectedType)
+  }, [loadFilesForType, fixedDictType, selectedType])
+
   // ── 사전 타입 목록 로드 ──────────────────────────────────────
   const loadTypes = useCallback(async () => {
     if (!workspaceId) return
     if (fixedDictType) {
       setSelectedType(fixedDictType)
+      await loadFilesForType(fixedDictType)
       return
     }
     setLoadingTypes(true)
     try {
-      const res = await 클라이언트.get('/api/jiana-dict/types', {
+      const res = await 클라이언트.get('/jiana-dict/types', {
         params: { workspace_id: workspaceId, ...(domain ? { domain } : {}) },
       })
       const types: string[] = res.data?.types ?? []
@@ -52,42 +73,29 @@ export default function JianaDictPanel({ workspaceId, domain, fixedDictType, onF
     } finally {
       setLoadingTypes(false)
     }
-  }, [workspaceId, domain, fixedDictType, selectedType])
-
-  // ── 파일 목록 로드 ──────────────────────────────────────────
-  const loadFiles = useCallback(async () => {
-    if (!workspaceId || !selectedType) return
-    setLoadingFiles(true)
-    try {
-      const res = await 클라이언트.get(`/api/jiana-dict/${selectedType}/files`, {
-        params: { workspace_id: workspaceId, ...(domain ? { domain } : {}) },
-      })
-      setFiles(res.data?.files ?? [])
-    } catch {
-      setFiles([])
-    } finally {
-      setLoadingFiles(false)
-    }
-  }, [workspaceId, selectedType, domain])
+  }, [workspaceId, domain, fixedDictType, loadFilesForType, selectedType])
 
   useEffect(() => { loadTypes() }, [workspaceId, domain]) // eslint-disable-line
-  useEffect(() => { if (selectedType) loadFiles() }, [selectedType, workspaceId]) // eslint-disable-line
+  useEffect(() => {
+    if (selectedType && !fixedDictType) loadFilesForType(selectedType)
+  }, [selectedType, workspaceId]) // eslint-disable-line
 
   // ── 파일 열기 ──────────────────────────────────────────────
   const handleOpenFile = useCallback(async (filename: string) => {
-    if (!workspaceId || !selectedType) return
+    const type = fixedDictType ?? selectedType
+    if (!workspaceId || !type) return
     setOpeningFile(filename)
     try {
-      const res = await 클라이언트.get(`/api/jiana-dict/${selectedType}/file/${filename}`, {
+      const res = await 클라이언트.get(`/jiana-dict/${type}/file/${filename}`, {
         params: { workspace_id: workspaceId, ...(domain ? { domain } : {}) },
       })
-      onFileSelect(selectedType, filename, res.data?.content ?? '')
+      onFileSelect(type, filename, res.data?.content ?? '')
     } catch {
       // 에러는 상위에서 처리
     } finally {
       setOpeningFile('')
     }
-  }, [workspaceId, selectedType, domain, onFileSelect])
+  }, [workspaceId, fixedDictType, selectedType, domain, onFileSelect])
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes}B`
