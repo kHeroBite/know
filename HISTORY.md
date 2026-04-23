@@ -1350,6 +1350,23 @@
 
 ---
 
+## [2026-04-23] phase1 데이터기반 SSH 실행 연결 + Jiana dual-write 추가
+
+> **작업 요약**: phase1_data_service.py skeleton → SITE_CONFIG(galleria/hmall/thd/ssf) 기반 실제 SSH/SCP 실행으로 구현 완료. jiana_dict_service.py write_dict_file()에 inner+outer 동시 저장(dual-write)을 추가하여 reconnect 시 clobber 방지.
+
+### 변경 파일
+- **www/services/phase1_data_service.py**:
+  - `SITE_CONFIG` dict 추가: galleria/hmall/thd/ssf 각 사이트별 서버 정보(host, user, key, script_path, remote_data_dir, local_scp_dir)
+  - `run_data_service(site, workspace)` 실제 구현: SSH로 원격 스크립트 실행 + SCP로 결과 파일 다운로드
+- **www/services/jiana_dict_service.py**:
+  - `write_dict_file()` dual-write 추가: inner 경로(jiana/txt_resrc/) + outer 경로(txt_resrc/) 동시 저장
+
+### 배경
+- phase1_data_service.py는 skeleton 상태로 실제 SSH 연결 로직 미구현이었음
+- jiana_dict_service.py는 inner 경로만 저장하여 WS reconnect 시 outer 파일이 덮어써 수정 내용 소실 위험
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.

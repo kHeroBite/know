@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -18,6 +19,8 @@ from fastapi import HTTPException, status
 
 from core.constants import WORKSPACE_DIR
 from services.workspace_service import _read_state
+
+logger = logging.getLogger(__name__)
 
 # 허용 사전 타입
 ALLOWED_DICT_TYPES = {"grammar", "sdic"}
@@ -167,6 +170,18 @@ def write_dict_file(
     # 저장 (원본 인코딩 유지)
     with open(full_path, "w", encoding=encoding, newline="") as f:
         f.write(content)
+
+    # [dual-write] outer 경로에도 동일 내용 저장 (clobber 방지)
+    # disconnect→reconnect 시 outer가 inner를 덮어쓰므로 outer도 최신 유지
+    outer_path = None
+    try:
+        outer_dir = os.path.join(WORKSPACE_DIR, ws_name, "txt_resrc", dict_type)
+        outer_path = os.path.join(outer_dir, filename)
+        os.makedirs(outer_dir, exist_ok=True)
+        with open(outer_path, "w", encoding=encoding, newline="") as f:
+            f.write(content)
+    except Exception as _e:
+        logger.warning("jiana_dict dual-write outer 실패 (무시): %s — %s", outer_path, _e)
 
     return {
         "filename": filename,

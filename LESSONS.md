@@ -805,8 +805,32 @@ elif os.path.isdir(path):
 - 대응: odev 시작 전 git stash list 확인 후 타 세션 잔류 파일 여부 점검
 - 원칙: 세션 격리 불변식 — 다른 세션 소스 수정 절대 금지 (CLAUDE.md 준수)
 
-### 교훈 3: 데이터기반 전처리 skeleton 구현
+### 교훈 3: 데이터기반 전처리 skeleton 구현 ✅ 해소 (2026-04-23)
 - 상황: 사이트별 실제 파이프라인 스크립트(extquery.pl 등) 경로 미확인으로 skeleton 구현
-- 대응: 추후 실제 스크립트 경로 확인 후 phase1_data_service.py에 연결 필요
+- 대응: ✅ phase1_data_service.py에 SITE_CONFIG(galleria/hmall/thd/ssf) + SSH/SCP 실행 실제 구현 완료
 - 위치: www/services/phase1_data_service.py run_data_service() 함수
+
+---
+
+## 2026-04-23 — phase1 SSH 연결 + Jiana dual-write
+
+### L-060: 사이트별 파이프라인 스크립트 연결 시 서버 경로 사전 탐색 필수 (2026-04-23)
+
+**문제**: skeleton 구현 단계에서 서버 스크립트(extquery.pl 등)의 경로/glob 패턴을 SSH로 사전 확인하지 않아 실제 연결이 다음 세션으로 지연됨.
+
+**원인**: 서버 파일 구조는 스크립트 내부를 직접 읽어야 glob 패턴(backup/, insert_bak01/ 등) 파악 가능. 사전 확인 없이 skeleton 작성 시 경로 오류 가능성 높음.
+
+**재발방지**: skeleton 구현 시 서버 스크립트 위치 주석으로 미리 기록 권장. 실제 연결 전 SSH로 스크립트 경로 확인.
+
+**Level**: 1 (1회, 낮음)
+
+### L-061: inner/outer 이중 경로 구조에서 편집 시 dual-write 필수 (2026-04-23)
+
+**문제**: jiana outer(txt_resrc/) → inner(jiana/txt_resrc/) 복사 구조에서 inner만 편집 시, disconnect→reconnect 때 outer가 inner를 덮어써 수정 내용 소실(clobber) 위험.
+
+**원인**: write_dict_file()이 inner 경로만 저장하여 재연결 시 outer 파일로 덮어씌워짐.
+
+**재발방지**: inner/outer 이중 경로 구조 편집 시 항상 dual-write(inner+outer 동시 저장). jiana_dict_service.py에 dual-write 구현 완료.
+
+**Level**: 2 (재발 가능 — 유사 구조 존재 시 동일 패턴 위험)
 
