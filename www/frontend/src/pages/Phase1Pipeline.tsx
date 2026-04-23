@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Row, Col, Card, Button, message, Typography, Result } from 'antd'
+import { Card, Button, message, Typography, Result, Tabs } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
@@ -15,6 +15,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 import 클라이언트 from '../api/client'
 import PageHeader from '../components/PageHeader'
 
+const { Row, Col } = { Row: 'div', Col: 'div' } as any
 const { Title } = Typography
 
 export default function Phase1Pipeline() {
@@ -45,6 +46,9 @@ export default function Phase1Pipeline() {
   const [dataFilesCount, setDataFilesCount] = useState<Record<DataFolder, number>>({
     galleria: 0, hmall: 0, thd: 0, ssf: 0,
   })
+
+  // ── 탭 선택 상태 ──
+  const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
 
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -140,6 +144,12 @@ export default function Phase1Pipeline() {
       setDataRunId(null)
       setSearchParams({})
     }
+    // ── tab 파라미터 감지 (WorkComplete 재시작 시) ──
+    const tabParam = searchParams.get('tab')
+    if (tabParam === 'data' || tabParam === 'log') {
+      setActiveTab(tabParam)
+      setSearchParams({})
+    }
   }, [searchParams])
 
   // ── 이전 로그기반 run 복원 ──
@@ -218,6 +228,10 @@ export default function Phase1Pipeline() {
         setStepElapsed({})
         setStepOutputs({})
       }
+      // 로그기반 실행 시작 → method 저장
+      if (selectedWorkspace) {
+        localStorage.setItem(`preprocess_method_${selectedWorkspace}`, 'log')
+      }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '실행 시작 실패')
     }
@@ -228,6 +242,10 @@ export default function Phase1Pipeline() {
     try {
       const { data } = await phase1DataAPI.실행(dataFolder, selectedWorkspace ?? '')
       setDataRunId(data.run_id)
+      // 데이터기반 실행 시작 → method 저장
+      if (selectedWorkspace) {
+        localStorage.setItem(`preprocess_method_${selectedWorkspace}`, 'data')
+      }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '데이터 전처리 실행 실패')
     }
@@ -302,6 +320,15 @@ export default function Phase1Pipeline() {
   const 데이터실행중 = dataRunId !== null && !dataWs.isCompleted
   const 데이터파일있음 = dataFilesCount[dataFolder] > 0
 
+  // 배타적 선택: 한 방식이 시작되면 다른 탭 비활성화
+  const 로그탭비활성 = dataRunId !== null  // 데이터기반 시작됨 → 로그탭 잠금
+  const 데이터탭비활성 = runId !== null     // 로그기반 시작됨 → 데이터탭 잠금
+
+  // 다음단계 조건: 로그기반 6단계 완료 OR 데이터기반 완료
+  const 로그기반완료 = 유효단계상태[6] === 'completed' && !실행중
+  const 데이터기반완료 = dataWs.isCompleted && !데이터실행중
+  const 다음단계가능 = 로그기반완료 || 데이터기반완료
+
   if (!selectedWorkspace) {
     return <Result status="warning" title="워크스페이스와 도메인을 먼저 선택하세요." />
   }
@@ -310,115 +337,132 @@ export default function Phase1Pipeline() {
     <div style={{ padding: '0 0 24px' }}>
       <PageHeader
         title="데이터 전처리"
-        showNext={유효단계상태[6] === 'completed' && !실행중}
+        showNext={다음단계가능}
         nextLabel="다음단계로 (데이터할당)"
         nextLoading={nextLoading}
         onNext={다음단계핸들러}
       />
 
-      <Row gutter={16}>
-        {/* ── 왼쪽: 로그 기반 전처리 ── */}
-        <Col xs={24} lg={12}>
-          <Card title="로그 기반 전처리" style={{ marginBottom: 16 }}>
-            <Row gutter={16} style={{ marginBottom: 0 }}>
-              <Col xs={24} lg={12}>
-                <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
-              </Col>
-              <Col xs={24} lg={12}>
-                <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
-              </Col>
-            </Row>
-          </Card>
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as 'log' | 'data')}
+        type="card"
+        style={{ padding: '0 0' }}
+        items={[
+          {
+            key: 'log',
+            label: '로그기반 전처리',
+            disabled: 로그탭비활성,
+            children: (
+              <div>
+                <Card style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <div style={{ flex: 1 }}>
+                      <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
+                    </div>
+                  </div>
+                </Card>
 
-          <Card bodyStyle={{ padding: 0 }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
-              {실행중 ? (
-                <Button danger size="small" icon={<PauseCircleOutlined />} onClick={중지핸들러}>
-                  중지
-                </Button>
-              ) : (
-                <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 6 })}>
-                  전체 실행 (1→6)
-                </Button>
-              )}
-            </div>
-            <div style={{ padding: 16 }}>
-              <ControlPanel
-                folder="popular"
-                onRun={실행핸들러}
-                onStop={중지핸들러}
-                onViewFile={파일보기}
-                isRunning={실행중}
-                stepStatuses={유효단계상태}
-                stepElapsed={stepElapsed}
-                stepOutputs={stepOutputs}
-                stepPercents={stepPercents}
-                rankEnabled={rankEnabled}
-                rankValue={rankValue}
-                rankPreset={rankPreset}
-                countEnabled={countEnabled}
-                countValue={countValue}
-                countPreset={countPreset}
-                combineMode={combineMode}
-                sortBy={sortBy}
-                onRankEnabledChange={setRankEnabled}
-                onRankValueChange={setRankValue}
-                onRankPresetChange={setRankPreset}
-                onCountEnabledChange={setCountEnabled}
-                onCountValueChange={setCountValue}
-                onCountPresetChange={setCountPreset}
-                onCombineModeChange={setCombineMode}
-                onSortByChange={setSortBy}
-                onFreeze={프리징핸들러}
-                freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
-                freezeLoading={freezeStatus === 'running'}
-              />
-            </div>
-          </Card>
+                <Card bodyStyle={{ padding: 0 }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
+                    {실행중 ? (
+                      <Button danger size="small" icon={<PauseCircleOutlined />} onClick={중지핸들러}>
+                        중지
+                      </Button>
+                    ) : (
+                      <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 6 })}>
+                        전체 실행 (1→6)
+                      </Button>
+                    )}
+                  </div>
+                  <div style={{ padding: 16 }}>
+                    <ControlPanel
+                      folder="popular"
+                      onRun={실행핸들러}
+                      onStop={중지핸들러}
+                      onViewFile={파일보기}
+                      isRunning={실행중}
+                      stepStatuses={유효단계상태}
+                      stepElapsed={stepElapsed}
+                      stepOutputs={stepOutputs}
+                      stepPercents={stepPercents}
+                      rankEnabled={rankEnabled}
+                      rankValue={rankValue}
+                      rankPreset={rankPreset}
+                      countEnabled={countEnabled}
+                      countValue={countValue}
+                      countPreset={countPreset}
+                      combineMode={combineMode}
+                      sortBy={sortBy}
+                      onRankEnabledChange={setRankEnabled}
+                      onRankValueChange={setRankValue}
+                      onRankPresetChange={setRankPreset}
+                      onCountEnabledChange={setCountEnabled}
+                      onCountValueChange={setCountValue}
+                      onCountPresetChange={setCountPreset}
+                      onCombineModeChange={setCombineMode}
+                      onSortByChange={setSortBy}
+                      onFreeze={프리징핸들러}
+                      freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
+                      freezeLoading={freezeStatus === 'running'}
+                    />
+                  </div>
+                </Card>
 
-          <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-              <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
-            </div>
-            <div style={{ padding: 16, minHeight: 300 }}>
-              <LogPanel
-                logs={ws.logs}
-                fileTabs={fileTabs}
-                activeViewTab={activeViewTab}
-                onTabChange={setActiveViewTab}
-                isRunning={실행중}
-              />
-            </div>
-          </Card>
-        </Col>
+                <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+                    <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
+                  </div>
+                  <div style={{ padding: 16, minHeight: 300 }}>
+                    <LogPanel
+                      logs={ws.logs}
+                      fileTabs={fileTabs}
+                      activeViewTab={activeViewTab}
+                      onTabChange={setActiveViewTab}
+                      isRunning={실행중}
+                    />
+                  </div>
+                </Card>
+              </div>
+            ),
+          },
+          {
+            key: 'data',
+            label: '데이터기반 전처리',
+            disabled: 데이터탭비활성,
+            children: (
+              <div>
+                <Card style={{ marginBottom: 16 }}>
+                  <DataFilePanel
+                    workspace={selectedWorkspace ?? undefined}
+                    onFolderChange={setDataFolder}
+                    onFilesChange={(folder, count) => {
+                      setDataFilesCount(prev => ({ ...prev, [folder]: count }))
+                    }}
+                  />
+                </Card>
 
-        {/* ── 오른쪽: 데이터 기반 전처리 ── */}
-        <Col xs={24} lg={12}>
-          <Card title="데이터 기반 전처리" style={{ marginBottom: 16 }}>
-            <DataFilePanel
-              workspace={selectedWorkspace ?? undefined}
-              onFolderChange={setDataFolder}
-              onFilesChange={(folder, count) => {
-                setDataFilesCount(prev => ({ ...prev, [folder]: count }))
-              }}
-            />
-          </Card>
-
-          <Card bodyStyle={{ padding: 16 }}>
-            <DataControlPanel
-              folder={dataFolder}
-              workspace={selectedWorkspace ?? undefined}
-              onRun={데이터실행핸들러}
-              isRunning={데이터실행중}
-              isCompleted={dataWs.isCompleted}
-              logs={dataWs.logs}
-              runId={dataRunId}
-              hasFiles={데이터파일있음}
-            />
-          </Card>
-        </Col>
-      </Row>
+                <Card bodyStyle={{ padding: 16 }}>
+                  <DataControlPanel
+                    folder={dataFolder}
+                    workspace={selectedWorkspace ?? undefined}
+                    onRun={데이터실행핸들러}
+                    isRunning={데이터실행중}
+                    isCompleted={dataWs.isCompleted}
+                    logs={dataWs.logs}
+                    runId={dataRunId}
+                    hasFiles={데이터파일있음}
+                  />
+                </Card>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

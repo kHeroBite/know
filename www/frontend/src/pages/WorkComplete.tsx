@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
+import { phase1API } from '../api/phase1'
 
 import { backupAPI, getEmailContacts, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
@@ -397,6 +398,30 @@ export default function WorkComplete() {
     }
   }
 
+  const handleRestartWithOtherMethod = async () => {
+    if (!selectedWorkspace) return
+    const prevMethod = localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log'
+    const nextMethod = prevMethod === 'log' ? 'data' : 'log'
+    Modal.confirm({
+      title: `${nextMethod === 'data' ? '데이터기반' : '로그기반'} 전처리로 재시작`,
+      content: '이전 전처리 결과물이 모두 삭제되고 전처리 단계부터 다시 시작됩니다. 계속하시겠습니까?',
+      okText: '재시작',
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          // 전처리 결과 파일 삭제
+          await phase1API.결과파일삭제(selectedWorkspace)
+          // phase → preprocess 복귀
+          await useWorkspaceStore.getState().revertPhase('preprocess')
+          // 전처리 페이지로 이동 (반대 탭 pre-select)
+          navigate(`/preprocess?tab=${nextMethod}`)
+        } catch (e: any) {
+          message.error('재시작 실패: ' + (e?.response?.data?.detail || e?.message || ''))
+        }
+      },
+    })
+  }
+
   const dictRows = useMemo(() => {
     const before = snapshot?.snapshot_before || snapshot?.before || {}
     const after = snapshot?.snapshot_after || snapshot?.after || {}
@@ -631,31 +656,54 @@ export default function WorkComplete() {
         </Card>
       )}
 
-      {isComplete && (
-        <>
-          <Alert
-            type="error"
-            showIcon
-            icon={<ExclamationCircleFilled style={{ color: '#ff4d4f' }} />}
-            message={<strong>⚠️ 완료 처리 후에는 절대 되돌릴 수 없습니다</strong>}
-            description="최종 완료 처리 시 모든 작업 이력이 확정되며, 어떠한 경우에도 이전 단계로 돌아갈 수 없습니다. 백업 폴더 경로, 사전 개수 등을 반드시 확인 후 완료 버튼을 누르세요."
-            style={{ marginTop: 16, borderColor: '#ff4d4f' }}
-            action={
-              <Button
-                type="primary"
-                danger
-                icon={<CheckCircleOutlined />}
-                size="large"
-                loading={finalizing}
-                onClick={handleFinalize}
-                disabled={doBackup && !backupSuffix.trim()}
-              >
-                모든 작업 완료
-              </Button>
-            }
-          />
-        </>
-      )}
+      {isComplete && (() => {
+        const prevMethod = selectedWorkspace
+          ? (localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log')
+          : 'log'
+        const otherMethodLabel = prevMethod === 'log' ? '데이터기반' : '로그기반'
+        return (
+          <>
+            <Card
+              size="small"
+              style={{ marginTop: 16, borderColor: '#faad14', background: '#fffbe6' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <Text style={{ color: '#614700' }}>
+                  다른 방식으로 다시 전처리하려면 아래 버튼을 클릭하세요. 이전 전처리 결과가 삭제됩니다.
+                </Text>
+                <Button
+                  onClick={handleRestartWithOtherMethod}
+                  style={{ borderColor: '#faad14', color: '#614700', background: '#fff7e6' }}
+                >
+                  {otherMethodLabel}으로 전처리 재시작
+                </Button>
+              </div>
+            </Card>
+
+            <Alert
+              type="error"
+              showIcon
+              icon={<ExclamationCircleFilled style={{ color: '#ff4d4f' }} />}
+              message={<strong>⚠️ 완료 처리 후에는 절대 되돌릴 수 없습니다</strong>}
+              description="최종 완료 처리 시 모든 작업 이력이 확정되며, 어떠한 경우에도 이전 단계로 돌아갈 수 없습니다. 백업 폴더 경로, 사전 개수 등을 반드시 확인 후 완료 버튼을 누르세요."
+              style={{ marginTop: 16, borderColor: '#ff4d4f' }}
+              action={
+                <Button
+                  type="primary"
+                  danger
+                  icon={<CheckCircleOutlined />}
+                  size="large"
+                  loading={finalizing}
+                  onClick={handleFinalize}
+                  disabled={doBackup && !backupSuffix.trim()}
+                >
+                  모든 작업 완료
+                </Button>
+              }
+            />
+          </>
+        )
+      })()}
 
       {isFinished && (
         <>

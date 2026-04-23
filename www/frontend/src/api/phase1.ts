@@ -40,4 +40,7 @@ export const phase1API = {
 
   단계상태: (workspace?: string) =>
     클라이언트.get('/preprocess/step-status', { params: { workspace: workspace || '' } }),
+
+  결과파일삭제: (workspace: string) =>
+    클라이언트.post('/preprocess/cleanup-results', null, { params: { workspace } }),
 }

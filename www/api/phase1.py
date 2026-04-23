@@ -160,6 +160,44 @@ async def get_recent_execution(workspace: str = Query("")):
         db.close()
 
 
+@라우터.post("/preprocess/cleanup-results")
+async def cleanup_preprocess_results(workspace: str = Query("")):
+    """전처리 결과 파일 삭제 (재시작 전 초기화)."""
+    import shutil
+    from core.constants import WORKSPACE_BASE
+    from core.database import 세션팩토리
+    from services.workspace_service import _read_state
+    from sqlalchemy import text
+
+    if not workspace:
+        raise ValidationError("workspace 파라미터 필요")
+
+    work_dir = os.path.join(WORKSPACE_BASE, workspace, "build", "work")
+    deleted = []
+    for fname in ["keywords.txt", "refine.txt", "analyzed.txt", "transform.txt", "synonym.txt"]:
+        fpath = os.path.join(work_dir, fname)
+        if os.path.isfile(fpath):
+            os.remove(fpath)
+            deleted.append(fname)
+
+    # DB phase1_runs / phase1_logs 도 정리
+    상태 = _read_state()
+    domain = 상태.get(workspace, {}).get("domain")
+    if domain:
+        db = 세션팩토리()
+        try:
+            db.execute(text(
+                "DELETE FROM phase1_logs WHERE run_id IN "
+                "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
+            ), {"dom": domain})
+            db.execute(text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": domain})
+            db.commit()
+        finally:
+            db.close()
+
+    return {"deleted": deleted, "workspace": workspace}
+
+
 @ws라우터.websocket("/ws/preprocess/{run_id}")
 async def phase1_ws(websocket: WebSocket, run_id: str):
     await websocket.accept()
