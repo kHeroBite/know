@@ -265,6 +265,10 @@ export default function Phase1Pipeline() {
       if (currentPhase === 'preprocess') {
         await useWorkspaceStore.getState().advancePhase('work')
       }
+      // 현재 활성 탭의 method를 localStorage에 저장 → 데이터할당에서 참조
+      if (selectedWorkspace) {
+        localStorage.setItem(`preprocess_method_${selectedWorkspace}`, activeTab === 'log' ? 'log' : 'data')
+      }
       navigate('/assignment')
     } catch (e: any) {
       message.error(e.response?.data?.detail || '단계 전이 실패')
@@ -320,14 +324,11 @@ export default function Phase1Pipeline() {
   const 데이터실행중 = dataRunId !== null && !dataWs.isCompleted
   const 데이터파일있음 = dataFilesCount[dataFolder] > 0
 
-  // 배타적 선택: 한 방식이 시작되면 다른 탭 비활성화
-  const 로그탭비활성 = dataRunId !== null  // 데이터기반 시작됨 → 로그탭 잠금
-  const 데이터탭비활성 = runId !== null     // 로그기반 시작됨 → 데이터탭 잠금
 
-  // 다음단계 조건: 로그기반 6단계 완료 OR 데이터기반 완료
+  // 다음단계 조건: 현재 활성 탭 기준으로만 판단
   const 로그기반완료 = 유효단계상태[6] === 'completed' && !실행중
   const 데이터기반완료 = dataWs.isCompleted && !데이터실행중
-  const 다음단계가능 = 로그기반완료 || 데이터기반완료
+  const 다음단계가능 = activeTab === 'log' ? 로그기반완료 : 데이터기반완료
 
   if (!selectedWorkspace) {
     return <Result status="warning" title="워크스페이스와 도메인을 먼저 선택하세요." />
@@ -353,7 +354,6 @@ export default function Phase1Pipeline() {
           {
             key: 'log',
             label: '로그기반 전처리',
-            disabled: 로그탭비활성,
             children: (
               <div>
                 <Card style={{ marginBottom: 16 }}>
@@ -434,7 +434,6 @@ export default function Phase1Pipeline() {
           {
             key: 'data',
             label: '데이터기반 전처리',
-            disabled: 데이터탭비활성,
             children: (
               <div>
                 <Card style={{ marginBottom: 16 }}>
