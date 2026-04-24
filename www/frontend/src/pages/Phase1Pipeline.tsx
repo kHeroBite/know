@@ -367,67 +367,69 @@ export default function Phase1Pipeline() {
                   </div>
                 </Card>
 
-                <Card bodyStyle={{ padding: 0 }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
-                    {실행중 ? (
-                      <Button danger size="small" icon={<PauseCircleOutlined />} onClick={중지핸들러}>
-                        중지
-                      </Button>
-                    ) : (
-                      <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 6 })}>
-                        전체 실행 (1→6)
-                      </Button>
-                    )}
-                  </div>
-                  <div style={{ padding: 16 }}>
-                    <ControlPanel
-                      folder="popular"
-                      onRun={실행핸들러}
-                      onStop={중지핸들러}
-                      onViewFile={파일보기}
-                      isRunning={실행중}
-                      stepStatuses={유효단계상태}
-                      stepElapsed={stepElapsed}
-                      stepOutputs={stepOutputs}
-                      stepPercents={stepPercents}
-                      rankEnabled={rankEnabled}
-                      rankValue={rankValue}
-                      rankPreset={rankPreset}
-                      countEnabled={countEnabled}
-                      countValue={countValue}
-                      countPreset={countPreset}
-                      combineMode={combineMode}
-                      sortBy={sortBy}
-                      onRankEnabledChange={setRankEnabled}
-                      onRankValueChange={setRankValue}
-                      onRankPresetChange={setRankPreset}
-                      onCountEnabledChange={setCountEnabled}
-                      onCountValueChange={setCountValue}
-                      onCountPresetChange={setCountPreset}
-                      onCombineModeChange={setCombineMode}
-                      onSortByChange={setSortBy}
-                      onFreeze={프리징핸들러}
-                      freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
-                      freezeLoading={freezeStatus === 'running'}
-                    />
-                  </div>
-                </Card>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <Card bodyStyle={{ padding: 0 }} style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
+                      {실행중 ? (
+                        <Button danger size="small" icon={<PauseCircleOutlined />} onClick={중지핸들러}>
+                          중지
+                        </Button>
+                      ) : (
+                        <Button type="primary" size="small" icon={<PlayCircleOutlined />} onClick={() => 실행핸들러({ category: 'popular', start_step: 1, end_step: 6 })}>
+                          전체 실행 (1→6)
+                        </Button>
+                      )}
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <ControlPanel
+                        folder="popular"
+                        onRun={실행핸들러}
+                        onStop={중지핸들러}
+                        onViewFile={파일보기}
+                        isRunning={실행중}
+                        stepStatuses={유효단계상태}
+                        stepElapsed={stepElapsed}
+                        stepOutputs={stepOutputs}
+                        stepPercents={stepPercents}
+                        rankEnabled={rankEnabled}
+                        rankValue={rankValue}
+                        rankPreset={rankPreset}
+                        countEnabled={countEnabled}
+                        countValue={countValue}
+                        countPreset={countPreset}
+                        combineMode={combineMode}
+                        sortBy={sortBy}
+                        onRankEnabledChange={setRankEnabled}
+                        onRankValueChange={setRankValue}
+                        onRankPresetChange={setRankPreset}
+                        onCountEnabledChange={setCountEnabled}
+                        onCountValueChange={setCountValue}
+                        onCountPresetChange={setCountPreset}
+                        onCombineModeChange={setCombineMode}
+                        onSortByChange={setSortBy}
+                        onFreeze={프리징핸들러}
+                        freezeDisabled={실행중 || 유효단계상태[5] !== 'completed' || freezeStatus === 'running'}
+                        freezeLoading={freezeStatus === 'running'}
+                      />
+                    </div>
+                  </Card>
 
-                <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
-                  </div>
-                  <div style={{ padding: 16, minHeight: 300 }}>
-                    <LogPanel
-                      logs={ws.logs}
-                      fileTabs={fileTabs}
-                      activeViewTab={activeViewTab}
-                      onTabChange={setActiveViewTab}
-                      isRunning={실행중}
-                    />
-                  </div>
-                </Card>
+                  <Card bodyStyle={{ padding: 0 }} style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
+                    </div>
+                    <div style={{ padding: 16, minHeight: 300 }}>
+                      <LogPanel
+                        logs={ws.logs}
+                        fileTabs={fileTabs}
+                        activeViewTab={activeViewTab}
+                        onTabChange={setActiveViewTab}
+                        isRunning={실행중}
+                      />
+                    </div>
+                  </Card>
+                </div>
               </div>
             ),
           },
