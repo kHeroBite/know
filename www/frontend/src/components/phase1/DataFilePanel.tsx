@@ -77,9 +77,11 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
     목록조회()
   }
 
+  const MAX_FILE_SIZE = 1024 * 1024 * 1024 // 1GB
+
   const 파일업로드처리 = useCallback(async (file: File) => {
-    if (file.size > 500 * 1024 * 1024) {
-      message.error('파일 크기 500MB 초과')
+    if (file.size > MAX_FILE_SIZE) {
+      message.error(`${file.name}: 파일 크기 1GB 초과`)
       return
     }
     set업로딩(true)
@@ -98,10 +100,17 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
     }
   }, [선택폴더, workspace])
 
+  const 다중파일업로드처리 = useCallback(async (files: FileList | File[]) => {
+    const fileArr = Array.from(files)
+    for (const file of fileArr) {
+      await 파일업로드처리(file)
+    }
+  }, [파일업로드처리])
+
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    파일업로드처리(file)
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    다중파일업로드처리(files)
     e.target.value = ''
   }
 
@@ -172,8 +181,8 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }}
         onDrop={(e) => {
           e.preventDefault(); e.stopPropagation(); set드래그오버(false)
-          const file = e.dataTransfer?.files?.[0]
-          if (file) 파일업로드처리(file)
+          const files = e.dataTransfer?.files
+          if (files && files.length > 0) 다중파일업로드처리(files)
         }}
         style={{
           position: 'relative',
@@ -190,6 +199,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
       >
         <input
           type="file"
+          multiple
           onChange={handleFileInputChange}
           style={{
             position: 'absolute',
@@ -204,7 +214,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
         />
         <p style={{ fontSize: 32, color: '#40a9ff', marginBottom: 8, pointerEvents: 'none' }}><InboxOutlined /></p>
         <p style={{ margin: '0 0 4px', color: 'rgba(0,0,0,0.88)', pointerEvents: 'none' }}>파일을 드래그하거나 클릭하여 업로드</p>
-        <p style={{ margin: 0, color: 'rgba(0,0,0,0.45)', fontSize: 12, pointerEvents: 'none' }}>텍스트 형식 파일 (최대 500MB)</p>
+        <p style={{ margin: 0, color: 'rgba(0,0,0,0.45)', fontSize: 12, pointerEvents: 'none' }}>텍스트 형식 파일 (최대 1GB, 다중 선택 가능)</p>
       </div>
 
       {업로딩 && (
@@ -240,8 +250,8 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }}
         onDrop={(e) => {
           e.preventDefault(); e.stopPropagation(); set드래그오버(false)
-          const file = e.dataTransfer?.files?.[0]
-          if (file) 파일업로드처리(file)
+          const files = e.dataTransfer?.files
+          if (files && files.length > 0) 다중파일업로드처리(files)
         }}
         style={{
           border: 드래그오버 ? '2px dashed #4f46e5' : '2px dashed transparent',

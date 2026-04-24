@@ -18,7 +18,7 @@ ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
 logger = logging.getLogger(__name__)
 
 ALLOWED_FOLDERS = {"popular", "fails"}
-MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "500"))
+MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "1024"))
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
