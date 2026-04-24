@@ -9,6 +9,7 @@ export interface ColumnSpec {
 export interface ColumnInfo {
   name: string
   samples: string[]
+  suggested_delimiter?: string | null
 }
 
 // ── 실행 페이로드 ──

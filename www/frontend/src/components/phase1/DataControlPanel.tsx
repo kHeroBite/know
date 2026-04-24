@@ -64,6 +64,16 @@ export default function DataControlPanel({
     return `선택 컬럼: ${head}${rest}`
   })()
 
+  // 상태별 Tag 색상 + 배경색
+  const tagColor = 현재상태 === 'completed' ? 'success'
+    : 현재상태 === 'failed' ? 'error'
+    : 현재상태 === 'running' ? 'processing'
+    : 'default'  // idle — 명확한 회색
+  const bgColor = 현재상태 === 'completed' ? '#f6ffed'
+    : 현재상태 === 'failed' ? '#fff2f0'
+    : 현재상태 === 'running' ? '#e6f4ff'
+    : '#f5f5f5'  // idle 명확한 회색
+
   return (
     <div>
       {/* 선택 컬럼 미리보기 */}
@@ -81,17 +91,14 @@ export default function DataControlPanel({
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '8px 12px', borderRadius: 8,
-        background: 현재상태 === 'running' ? '#1677ff08'
-          : 현재상태 === 'completed' ? '#f6ffed'
-          : 현재상태 === 'failed' ? '#fff2f0'
-          : '#fafafa',
+        background: bgColor,
         border: `1px solid ${현재상태 === 'running' ? '#1677ff'
           : 현재상태 === 'completed' ? '#b7eb8f'
           : 현재상태 === 'failed' ? '#ffa39e'
-          : '#f0f0f0'}`,
+          : '#d9d9d9'}`,
         marginBottom: 12,
       }}>
-        <Tag color="#1677ff" style={{ margin: 0, minWidth: 80, textAlign: 'center' }}>
+        <Tag color={tagColor} style={{ margin: 0, minWidth: 80, textAlign: 'center' }}>
           데이터처리
         </Tag>
         <div style={{ flex: 1 }}>

@@ -183,7 +183,9 @@ export default function Phase1Pipeline() {
       }
       try {
         const { data } = await phase1DataAPI.컬럼설정조회(selectedDomain)
-        setSelectedColumns(data.selected_columns || [])
+        // 미존재 도메인이어도 항상 배열 fallback 보장
+        const cols = Array.isArray(data?.selected_columns) ? data.selected_columns : []
+        setSelectedColumns(cols)
       } catch {
         setSelectedColumns([])
       }

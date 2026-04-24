@@ -54,9 +54,12 @@ export default function ColumnSelectModal({
           초기맵.set(c.name, c.split_delimiter ?? '')
         }
         for (const col of 컬럼) {
+          // 기존 저장된 구분자 우선, 없으면 API 추천 구분자 사용
+          const 저장된구분자 = 초기맵.get(col.name)
+          const 추천구분자 = col.suggested_delimiter ?? ''
           초기상태[col.name] = {
             selected: 초기맵.has(col.name),
-            split_delimiter: 초기맵.get(col.name) ?? '',
+            split_delimiter: 저장된구분자 !== undefined ? 저장된구분자 : 추천구분자,
           }
         }
         set행상태(초기상태)
@@ -199,7 +202,11 @@ export default function ColumnSelectModal({
       render: (_: any, record: ColumnInfo) => (
         <Input
           size="small"
-          placeholder='예: " > " 또는 ","'
+          placeholder={
+            record.suggested_delimiter
+              ? `추천: "${record.suggested_delimiter}"`
+              : '예: " > " 또는 ","'
+          }
           value={행상태[record.name]?.split_delimiter ?? ''}
           onChange={e => 구분자변경(record.name, e.target.value)}
           disabled={!행상태[record.name]?.selected}

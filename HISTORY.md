@@ -1,5 +1,18 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-24 — 데이터기반 전처리 UI 5개 버그/UX 개선
+
+> **작업 요약**: 직전 SGML 범용화(890de51) 후속. 컬럼분석 미수행 시 더미 prefill 제거, split delimiter 자동 감지, 샘플값 CRLF 처리, 컬럼 미선택 시 실행 버튼 disabled(AC-1 수정으로 자동 해결), "데이터처리" 카드 배경색/Tag 색상 상태별 분기. AC-1~5 전부 PASS.
+
+### 변경 파일 (5개)
+- `www/services/phase1_data_service.py` — sample_column_values CRLF 처리 + isfirst 스킵 비활성 + 10000줄 스캔 + analyze_columns suggested_delimiter 휴리스틱(" > " / "," / "\t")
+- `www/frontend/src/api/phase1Data.ts` — ColumnInfo.suggested_delimiter 타입 추가
+- `www/frontend/src/components/phase1/ColumnSelectModal.tsx` — suggested_delimiter prefill
+- `www/frontend/src/components/phase1/DataControlPanel.tsx` — tagColor/bgColor 상태별 분기(idle/running/completed/failed)
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — Array.isArray fallback(더미 prefill 제거)
+
+---
+
 ## 2026-04-24 — 데이터기반 전처리 범용화 — SGML 컬럼 자동감지+선택
 
 > **작업 요약**: 데이터기반 전처리를 사이트 고정(galleria/hmall/thd/ssf) 방식에서 범용 SGML 업로드 + 컬럼 자동감지 + 컬럼 선택으로 전면 교체. SSH/scp 의존 완전 제거 → 로컬 Python 스트리밍 파이프라인(Perl/shell 이식)으로 대체. o4 tier, 2명 병렬 odev(odev-be + odev-fe), AC-001~005 전부 PASS.

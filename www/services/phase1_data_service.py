@@ -181,6 +181,9 @@ def sample_column_values(
 
     - 모든 컬럼이 max_samples에 도달하면 즉시 break
     - 빈 문자열은 샘플에서 제외
+    - CRLF 처리: rstrip('\\r\\n') + rstrip() 으로 비교
+    - isfirst 스킵 로직 비활성화 (extract_column_values와 달리 첫 줄도 샘플로 수집)
+    - 최대 10000줄 스캔 (또는 모든 컬럼 채워질 때까지)
     """
     if not columns:
         return {}
@@ -188,18 +191,22 @@ def sample_column_values(
     samples: Dict[str, List[str]] = {col: [] for col in columns}
     # 현재 열려있는 컬럼 (open_tag 매칭 시 진입)
     current: Optional[str] = None
-    isfirst = False
+    line_count = 0
+    MAX_LINES = 10000  # 충분한 라인 스캔
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             for line in f:
-                stripped = line.rstrip('\r\n')
+                line_count += 1
+                if line_count > MAX_LINES:
+                    break
+                # CRLF 처리: rstrip('\r\n') + rstrip()
+                stripped = line.rstrip('\r\n').rstrip()
                 # 열림 태그?
                 m_open = _COL_PATTERN.match(stripped)
                 if m_open:
                     col = m_open.group(1)
                     if col in target_cols:
                         current = col
-                        isfirst = True
                         continue
                     else:
                         current = None
@@ -207,13 +214,11 @@ def sample_column_values(
                 # 닫힘 태그?
                 if current and stripped.startswith(f'){current}'):
                     current = None
-                    isfirst = False
                     continue
-                # 값 라인
-                if current and not isfirst:
+                # 값 라인 (isfirst 스킵 없음 — 첫 줄도 샘플로 수집)
+                if current:
                     if stripped and len(samples[current]) < max_samples:
                         samples[current].append(stripped)
-                isfirst = False
                 # 종료 조건: 모든 타겟 컬럼이 max_samples 도달
                 if all(len(samples[c]) >= max_samples for c in target_cols):
                     break
@@ -362,8 +367,27 @@ class Phase1Data서비스:
                     if vals:
                         samples[col] = vals
                         remaining.discard(col)
+            # suggested_delimiter 휴리스틱 계산
+            def _detect_delimiter(col_samples: List[str]) -> Optional[str]:
+                """샘플 5개 검사: 50%+ 에 포함된 구분자 반환."""
+                if not col_samples:
+                    return None
+                n = len(col_samples)
+                threshold = n * 0.5
+                if sum(1 for s in col_samples if ' > ' in s) >= threshold:
+                    return ' > '
+                if sum(1 for s in col_samples if ',' in s) >= threshold:
+                    return ','
+                if sum(1 for s in col_samples if '\t' in s) >= threshold:
+                    return '\t'
+                return None
+
             result_columns = [
-                {"name": col, "samples": samples.get(col, [])}
+                {
+                    "name": col,
+                    "samples": samples.get(col, []),
+                    "suggested_delimiter": _detect_delimiter(samples.get(col, [])),
+                }
                 for col in sorted_cols
             ]
             return {"columns": result_columns}
