@@ -269,6 +269,7 @@ www/
 ├── services/                  # 비즈니스 로직
 │   ├── auth_service.py, domain_service.py, dictionary_service.py
 │   ├── category_service.py, statistics_service.py
+│   ├── phase1_data_service.py # 데이터기반 전처리 서비스 (SGML 컬럼 자동감지+추출+정규화, Perl isfirst 이식, SSH/scp 제거)
 │   ├── phase1_service.py      # 데이터전처리 파이프라인 서비스
 │   ├── workspace_service.py   # 워크스페이스 상태 관리 (JSON 파일 기반) + 핫키 설정 + 도메인 메타(display_name) JSON 관리 + 통합 phase enum (preprocess/work/build/verify/complete) + user_work_phase (idle/working/done) + complete_workspace(도메인백업+WS→도메인복사) + link_domain() connected_at 기록 + participant_stats kw/dict 건수·시간당 실계산
 │   ├── dict_verify_service.py # 사전검증 서비스 (user.ks/cnlist.ks/synonym.UTF-8 교차검증, reprocess_keywords — phase_backward 2회 순차 호출)
@@ -290,7 +291,8 @@ www/
 │   └── email_contacts.py      # 메일 수신자 API (GET/POST/DELETE /api/email-contacts)
 ├── migrations/                # DB 마이그레이션 SQL
 │   ├── 001_phase3_tables.sql  # Phase 3 테이블 (pipeline_history, build_history 등)
-│   └── 002_user_work_phase.sql # user_work_phase 테이블 (사용자별 work 단계 상태)
+│   ├── 002_user_work_phase.sql # user_work_phase 테이블 (사용자별 work 단계 상태)
+│   └── 004_data_preprocess_config.sql # data_preprocess_config 테이블 (domain PK + selected_columns JSON — 2026-04-24 신규)
 ├── pipeline/                  # Celery 태스크 모듈
 │   ├── tasks.py               # Celery 태스크 정의
 │   ├── refine.py              # 검색로그 정제 태스크
@@ -315,8 +317,9 @@ www/
     │   ├── WorkHistory.tsx    # 작업이력 패널 (Table 4컬럼: 번호/사전/단어/작업 + undo)
     │   └── HotkeySettings.tsx # 핫키 설정 모달 (15개 단축키)
     ├── src/components/phase1/ # 데이터전처리 컴포넌트
-    │   ├── FilePanel.tsx      # 파일 패널 (탭 구조 제거)
-    │   └── ControlPanel.tsx   # 파이프라인 제어 패널
+    │   ├── DataFilePanel.tsx      # 데이터기반 파일 패널 (사이트 Select 제거, 파일 업로드+컬럼 분석 버튼)
+    │   ├── DataControlPanel.tsx   # 데이터기반 제어 패널 (folder→columns 파라미터, 전처리 실행)
+    │   └── ColumnSelectModal.tsx  # 신규: 컬럼 선택 모달 (체크박스+split delimiter 입력)
     │   # DomainPanel.tsx — 삭제됨 (워크스페이스 페이지로 이전)
     ├── src/api/pipeline.ts    # 파이프라인 API 클라이언트
     ├── src/api/assignment.ts  # 키워드 할당 API 클라이언트 (목록 조회, updateFlag, 키워드페이지조회, AssignmentStats.reprocess_count)

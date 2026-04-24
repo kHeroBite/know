@@ -57,7 +57,7 @@ _접근로그.setLevel(logging.INFO)
 async def _lifespan(app: FastAPI):
     """서버 기동 시 마이그레이션 + phase 자동 추론."""
     from sqlalchemy import text
-    for 마이그_번호, 마이그_파일 in [("002", "002_user_work_phase.sql"), ("003", "003_phase1_data_tables.sql")]:
+    for 마이그_번호, 마이그_파일 in [("002", "002_user_work_phase.sql"), ("003", "003_phase1_data_tables.sql"), ("004", "004_data_preprocess_config.sql")]:
         마이그레이션경로 = os.path.join(os.path.dirname(__file__), "migrations", 마이그_파일)
         try:
             with open(마이그레이션경로, "r", encoding="utf-8") as f:

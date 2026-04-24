@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Card, Button, message, Typography, Result, Tabs } from 'antd'
+import { Card, Button, message, Result, Tabs } from 'antd'
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
@@ -10,20 +10,17 @@ import DataControlPanel from '../components/phase1/DataControlPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
 import { usePhase1DataWebSocket } from '../hooks/usePhase1DataWebSocket'
 import { phase1API } from '../api/phase1'
-import { phase1DataAPI, type DataFolder } from '../api/phase1Data'
+import { phase1DataAPI, type ColumnSpec } from '../api/phase1Data'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import 클라이언트 from '../api/client'
 import PageHeader from '../components/PageHeader'
-
-const { Row, Col } = { Row: 'div', Col: 'div' } as any
-const { Title } = Typography
 
 export default function Phase1Pipeline() {
   // ── 로그기반 상태 ──
   const [runId, setRunId] = useState<string | null>(null)
   const [runStartStep, setRunStartStep] = useState(1)
   const ws = usePhase1WebSocket(runId, runStartStep)
-  const [hasLogFiles, setHasLogFiles] = useState(false)
+  const [, setHasLogFiles] = useState(false)
   const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
   const [rankEnabled, setRankEnabled] = useState(true)
   const [rankValue, setRankValue] = useState(150000)
@@ -42,10 +39,9 @@ export default function Phase1Pipeline() {
   // ── 데이터기반 상태 ──
   const [dataRunId, setDataRunId] = useState<string | null>(null)
   const dataWs = usePhase1DataWebSocket(dataRunId)
-  const [dataFolder, setDataFolder] = useState<DataFolder>('galleria')
-  const [dataFilesCount, setDataFilesCount] = useState<Record<DataFolder, number>>({
-    galleria: 0, hmall: 0, thd: 0, ssf: 0,
-  })
+  const [dataFilesCount, setDataFilesCount] = useState<number>(0)
+  const [dataFilenames, setDataFilenames] = useState<string[]>([])
+  const [selectedColumns, setSelectedColumns] = useState<ColumnSpec[]>([])
 
   // ── 탭 선택 상태 ──
   const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
@@ -130,6 +126,8 @@ export default function Phase1Pipeline() {
     setStepElapsed({})
     setStepOutputs({})
     setDataRunId(null)
+    setDataFilesCount(0)
+    setDataFilenames([])
   }, [selectedWorkspace])
 
   // ── reset=1 파라미터 감지 ──
@@ -169,12 +167,29 @@ export default function Phase1Pipeline() {
   useEffect(() => {
     const 이전데이터실행로드 = async () => {
       try {
-        const { data } = await phase1DataAPI.최근실행(selectedWorkspace ?? '', dataFolder)
+        const { data } = await phase1DataAPI.최근실행(selectedWorkspace ?? '')
         if (data.run_id) setDataRunId(data.run_id)
       } catch { /* ignore */ }
     }
     이전데이터실행로드()
   }, [selectedWorkspace])
+
+  // ── 도메인 변경 시 컬럼 설정 prefill ──
+  useEffect(() => {
+    const prefillColumns = async () => {
+      if (!selectedDomain) {
+        setSelectedColumns([])
+        return
+      }
+      try {
+        const { data } = await phase1DataAPI.컬럼설정조회(selectedDomain)
+        setSelectedColumns(data.selected_columns || [])
+      } catch {
+        setSelectedColumns([])
+      }
+    }
+    prefillColumns()
+  }, [selectedDomain])
 
   const 실행핸들러 = async (params: {
     category: string
@@ -239,8 +254,21 @@ export default function Phase1Pipeline() {
 
   // ── 데이터기반 실행 ──
   const 데이터실행핸들러 = async () => {
+    if (dataFilenames.length === 0) {
+      message.warning('업로드된 데이터 파일이 없습니다')
+      return
+    }
+    if (selectedColumns.length === 0) {
+      message.warning('컬럼을 먼저 선택하세요 ("컬럼 분석" 버튼)')
+      return
+    }
     try {
-      const { data } = await phase1DataAPI.실행(dataFolder, selectedWorkspace ?? '')
+      const { data } = await phase1DataAPI.실행({
+        filenames: dataFilenames,
+        columns: selectedColumns,
+        workspace: selectedWorkspace ?? '',
+        domain: selectedDomain ?? '',
+      })
       setDataRunId(data.run_id)
       // 데이터기반 실행 시작 → method 저장
       if (selectedWorkspace) {
@@ -322,8 +350,7 @@ export default function Phase1Pipeline() {
 
   const 실행중 = runId !== null && !ws.isCompleted
   const 데이터실행중 = dataRunId !== null && !dataWs.isCompleted
-  const 데이터파일있음 = dataFilesCount[dataFolder] > 0
-
+  const 데이터파일있음 = dataFilesCount > 0
 
   // 다음단계 조건: 현재 활성 탭 기준으로만 판단
   const 로그기반완료 = 유효단계상태[6] === 'completed' && !실행중
@@ -441,17 +468,23 @@ export default function Phase1Pipeline() {
                 <Card style={{ marginBottom: 16 }}>
                   <DataFilePanel
                     workspace={selectedWorkspace ?? undefined}
-                    onFolderChange={setDataFolder}
-                    onFilesChange={(folder, count) => {
-                      setDataFilesCount(prev => ({ ...prev, [folder]: count }))
+                    domain={selectedDomain ?? undefined}
+                    selectedColumns={selectedColumns}
+                    onFilesChange={(count, filenames) => {
+                      setDataFilesCount(count)
+                      setDataFilenames(filenames)
+                    }}
+                    onColumnsConfigured={(cols) => {
+                      setSelectedColumns(cols)
                     }}
                   />
                 </Card>
 
                 <Card bodyStyle={{ padding: 16 }}>
                   <DataControlPanel
-                    folder={dataFolder}
                     workspace={selectedWorkspace ?? undefined}
+                    selectedColumns={selectedColumns}
+                    filenames={dataFilenames}
                     onRun={데이터실행핸들러}
                     isRunning={데이터실행중}
                     isCompleted={dataWs.isCompleted}

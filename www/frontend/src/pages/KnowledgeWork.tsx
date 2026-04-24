@@ -21,6 +21,7 @@ import LLMPromptModal from '../components/workspace/LLMPromptModal'
 import CompleteModal from '../components/workspace/CompleteModal'
 import DicTab, { DicType } from '../components/workspace/DicTab'
 import JianaDictPanel from '../components/workspace/JianaDictPanel'
+import JianaDictFileViewer from '../components/workspace/JianaDictFileViewer'
 import MorphemeTab from '../components/workspace/MorphemeTab'
 import { 기본핫키맵, encodeKeyEvent, displayKey, displayTabKey, KbdKey } from '../utils/keyboard'
 import { getTypoVariants } from '../utils/hangul'
@@ -107,6 +108,7 @@ export default function KnowledgeWork() {
     filename: string
     content: string
   }>({ visible: false, dictType: '', filename: '', content: '' })
+  const isTableDict = (filename: string) => /\.(list|dic)$/i.test(filename)
   const [thesaurusSearch, setThesaurusSearch] = useState('')
   const [udicSearch, setUdicSearch] = useState('')
   const [cndicSearch, setCndicSearch] = useState('')
@@ -1358,18 +1360,30 @@ export default function KnowledgeWork() {
           {/* Jiana 사전 파일 편집 오버레이 — 파일 클릭(선택) 시 중앙열 전체를 덮음 */}
           {dictEditOverlay.visible && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'white', padding: 12, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-              <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
-              </div>
-              <Input.TextArea
-                value={dictEditOverlay.content}
-                onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
-                style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
-              />
-              <Space style={{ marginTop: 8 }}>
-                <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
-                <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
-              </Space>
+              {isTableDict(dictEditOverlay.filename) ? (
+                <JianaDictFileViewer
+                  workspaceId={selectedWorkspace!}
+                  domain={selectedDomain ?? undefined}
+                  dictType={dictEditOverlay.dictType}
+                  filename={dictEditOverlay.filename}
+                  onClose={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}
+                />
+              ) : (
+                <>
+                  <div style={{ marginBottom: 8, fontWeight: 'bold', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>[{dictEditOverlay.dictType}] {dictEditOverlay.filename}</span>
+                  </div>
+                  <Input.TextArea
+                    value={dictEditOverlay.content}
+                    onChange={e => setDictEditOverlay(prev => ({ ...prev, content: e.target.value }))}
+                    style={{ flex: 1, resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                  <Space style={{ marginTop: 8 }}>
+                    <Button type="primary" size="small" onClick={handleDictSave}>저장</Button>
+                    <Button size="small" onClick={() => setDictEditOverlay(prev => ({ ...prev, visible: false }))}>취소</Button>
+                  </Space>
+                </>
+              )}
             </div>
           )}
           <Card
@@ -1596,10 +1610,19 @@ export default function KnowledgeWork() {
 
           <Card
             size="small"
+            className="jiana-dict-card"
             style={{ height: 390, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}
-            styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px' } }}
+            styles={{ body: { flex: 1, overflow: 'hidden', padding: '4px 12px 12px', display: 'flex', flexDirection: 'column' } }}
           >
+            {/* Ant Design Tabs flex chain 수정: tabpane 내부 height:'100%'가 동작하도록 */}
+            <style>{`
+              .jiana-dict-card .ant-tabs { display: flex !important; flex-direction: column !important; flex: 1 !important; min-height: 0 !important; height: 100% !important; }
+              .jiana-dict-card .ant-tabs-content-holder { flex: 1 !important; min-height: 0 !important; overflow: hidden !important; }
+              .jiana-dict-card .ant-tabs-content { height: 100% !important; }
+              .jiana-dict-card .ant-tabs-tabpane-active { height: 100% !important; overflow: hidden !important; }
+            `}</style>
             <Tabs
+              className="jiana-dict-tabs"
               activeKey={['udic', 'cndic', 'thesaurus', 'jiana-grammar', 'jiana-sdic'].includes(activeTab) ? activeTab : 'udic'}
               onChange={(key) => {
                 setActiveTab(key)

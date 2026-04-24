@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button, Typography, Tag, Progress } from 'antd'
 import { PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import type { LogEntry } from '../../hooks/usePhase1WebSocket'
-import type { DataFolder } from '../../api/phase1Data'
+import type { ColumnSpec } from '../../api/phase1Data'
 
 const { Text } = Typography
 
 interface DataControlPanelProps {
-  folder: DataFolder
   workspace?: string
+  selectedColumns: ColumnSpec[]
+  filenames: string[]
   onRun: () => void
   isRunning: boolean
   isCompleted: boolean
@@ -18,13 +19,14 @@ interface DataControlPanelProps {
 }
 
 export default function DataControlPanel({
-  folder,
-  workspace,
+  workspace: _workspace,
+  selectedColumns,
+  filenames,
   onRun,
   isRunning,
   isCompleted,
   logs,
-  runId,
+  runId: _runId,
   hasFiles,
 }: DataControlPanelProps) {
   const 로그박스Ref = useRef<HTMLDivElement>(null)
@@ -49,8 +51,32 @@ export default function DataControlPanel({
     }
   }, [logs])
 
+  const 컬럼없음 = selectedColumns.length === 0
+  const 파일없음 = !hasFiles || filenames.length === 0
+  const 실행가능 = !isRunning && !컬럼없음 && !파일없음
+
+  // 컬럼 미리보기 (최대 3개 + 외 N개)
+  const 컬럼프리뷰 = (() => {
+    if (컬럼없음) return null
+    const names = selectedColumns.map(c => c.name)
+    const head = names.slice(0, 3).join(', ')
+    const rest = names.length > 3 ? ` 외 ${names.length - 3}개` : ''
+    return `선택 컬럼: ${head}${rest}`
+  })()
+
   return (
     <div>
+      {/* 선택 컬럼 미리보기 */}
+      <div style={{ marginBottom: 12, minHeight: 20 }}>
+        {컬럼프리뷰 ? (
+          <Text type="secondary" style={{ fontSize: 13 }}>{컬럼프리뷰}</Text>
+        ) : (
+          <Text type="warning" style={{ fontSize: 13 }}>
+            컬럼을 먼저 선택하세요 (파일 업로드 → "컬럼 분석" 버튼)
+          </Text>
+        )}
+      </div>
+
       {/* 실행 상태 표시 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
@@ -95,9 +121,9 @@ export default function DataControlPanel({
         <Button
           size="small"
           type={현재상태 === 'completed' ? 'default' : 'primary'}
-          style={현재상태 === 'idle' ? { background: '#1677ff', borderColor: '#1677ff' } : {}}
+          style={현재상태 === 'idle' && 실행가능 ? { background: '#1677ff', borderColor: '#1677ff' } : {}}
           icon={<PlayCircleOutlined />}
-          disabled={isRunning || !hasFiles}
+          disabled={!실행가능}
           onClick={onRun}
         >
           실행

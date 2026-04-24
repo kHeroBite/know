@@ -834,3 +834,39 @@ elif os.path.isdir(path):
 
 **Level**: 2 (재발 가능 — 유사 구조 존재 시 동일 패턴 위험)
 
+---
+
+## 2026-04-24 — 데이터기반 전처리 범용화 (SGML 컬럼 자동감지+선택)
+
+### L-062: 외부 스크립트 이식 전 메인 SSH 사전 분석 패턴 — oplan/odev 재조사 없이 구현 착수 가능 (2026-04-24)
+
+**상황**: 사이트 고정(galleria/hmall/thd/ssf) SSH/scp 파이프라인 → 로컬 Python 스트리밍으로 전면 교체.
+
+**패턴**: 메인이 SSH로 ext_*.sh / extquery_*.pl / refine_dbdata.sh를 다운로드+grep 사전 분석 → oplan에 분석 결과 전달 → odev가 재조사 없이 바로 구현 착수.
+
+**효과**: oplan/odev 중복 조사 제거 → 시간 절약 + 계획 정확도 향상.
+
+**재발방지**: 외부 의존 스크립트 이식 작업 시 메인이 SSH 사전 다운로드+grep 분석 수행 후 oplan에 전달 권장.
+
+**Level**: 1 (좋은 패턴 기록)
+
+### L-063: Perl state machine Python 이식 시 if/elif 순서와 state 리셋 시점 원본 동일 유지 필수 (2026-04-24)
+
+**상황**: extquery_*.pl의 isfirst state machine을 Python으로 이식.
+
+**핵심**: Perl의 isfirst 패턴은 (1) isquery 토글 (2) isfirst 첫 번째 줄 스킵 (3) isfirst 리셋 순서가 중요. 순서 오인 시 첫 번째 줄 포함/미포함 버그 발생.
+
+**재발방지**: Perl state machine 이식 시 if/elif 순서 + state 변수 리셋 시점 원본과 동일하게 유지. 단위 테스트로 첫 번째 줄 스킵 동작(isfirst=1 직후 첫 값이 결과에 미포함) 반드시 검증.
+
+**Level**: 1 (이식 주의 패턴)
+
+### L-064: SSH 의존 제거 전 출력 contract 백엔드 grep 확인 → 미참조 시 안전한 전면 재작성 가능 (2026-04-24)
+
+**상황**: ext_*.sh 출력 파일이 백엔드에서 참조되는지 확인 없이 전면 재작성 시 contract 끊김 위험.
+
+**패턴**: 교체 전 `grep -rn "ext_\|_111\|gall_" www/` 등으로 출력 파일명/포맷 참조 여부 확인 → 미참조 확인 시 contract 보존 부담 없이 전면 재작성 허용.
+
+**재발방지**: 원격 스크립트 출력 파일을 교체/제거 전 백엔드 코드에서 grep으로 참조 여부 확인. 미참조 시 전면 재작성 가능.
+
+**Level**: 1 (사전 확인 패턴)
+

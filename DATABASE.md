@@ -235,10 +235,29 @@ CREATE TABLE IF NOT EXISTS email_contacts (
 
 ---
 
+### data_preprocess_config 테이블 (2026-04-24 신규 — migration 004)
+
+```sql
+CREATE TABLE IF NOT EXISTS data_preprocess_config (
+    domain TEXT PRIMARY KEY,
+    selected_columns TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+```
+
+**목적**: 도메인별 데이터기반 전처리 컬럼 선택 설정 영속화  
+**주요 API**:
+- 조회: `GET /api/preprocess/data-config?domain={domain}` → `{domain, selected_columns}`
+- 저장: `POST /api/preprocess/data-config` body `{domain, selected_columns: [{name, split_delimiter?}]}` (UPSERT)  
+**참고**: domain은 단일 PK (워크스페이스 무관 도메인 전역 설정). selected_columns는 JSON 배열. 도메인 변경 시 자동 prefill.
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 | 파일 |
 |------|-----------|------|
+| 2026-04-24 | data_preprocess_config 테이블 신규 생성 (도메인별 SGML 컬럼 선택 설정 — domain PK + selected_columns JSON) | migrations/004_data_preprocess_config.sql |
 | 2026-04-16 | email_contacts 테이블 신규 생성 (메일 수신자 관리) | init_db.py, models/email_contact.py |
 | 2026-04-16 | system_settings 테이블 신규 생성 (key-value 전역 설정 + auto_logout_minutes 기본값) | init_db.py |
 | 2026-04-16 | workspace_domains.connected_at 컬럼 기록 추가 — link_domain() 호출 시 시작 시각 기록 | workspace_service.py |

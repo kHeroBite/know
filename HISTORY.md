@@ -1,5 +1,33 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-24 — 데이터기반 전처리 범용화 — SGML 컬럼 자동감지+선택
+
+> **작업 요약**: 데이터기반 전처리를 사이트 고정(galleria/hmall/thd/ssf) 방식에서 범용 SGML 업로드 + 컬럼 자동감지 + 컬럼 선택으로 전면 교체. SSH/scp 의존 완전 제거 → 로컬 Python 스트리밍 파이프라인(Perl/shell 이식)으로 대체. o4 tier, 2명 병렬 odev(odev-be + odev-fe), AC-001~005 전부 PASS.
+
+### 변경 파일 (9개 — 신규 2 + 수정 7)
+
+**백엔드 (4)**
+- `www/api/phase1_data.py` — 전면 재작성(233줄): ALLOWED_FOLDERS 제거, 7개 엔드포인트 재설계 (analyze-columns, data-config, data-run body 변경 등)
+- `www/services/phase1_data_service.py` — 전면 재작성(549줄): SITE_CONFIG+SSH/SCP 제거, extract_columns_from_sgml/extract_column_values/refine_keywords Python 이식, run_data_universal 신규
+- `www/migrations/004_data_preprocess_config.sql` — 신규: domain PK + selected_columns JSON 테이블
+- `www/main.py` — 1줄 수정: lifespan 마이그레이션 목록에 "004" 추가
+
+**프론트 (5)**
+- `www/frontend/src/api/phase1Data.ts` — DataFolder 타입 제거, ColumnSpec 타입 추가
+- `www/frontend/src/components/phase1/DataFilePanel.tsx` — 사이트 Select 제거, "컬럼 분석" 버튼 + 파일 업로드 다중 지원
+- `www/frontend/src/components/phase1/ColumnSelectModal.tsx` — 신규: 컬럼 체크박스 + split delimiter 입력
+- `www/frontend/src/components/phase1/DataControlPanel.tsx` — folder→columns 파라미터 교체
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — dataFolder 제거, 도메인별 자동 prefill
+
+### 주요 변경 사항
+- 사이트 고정(galleria/hmall/thd/ssf) Select 완전 제거 → SGML 파일 업로드 후 "컬럼 분석" 버튼으로 컬럼명 자동 추출
+- 컬럼 체크박스 + split delimiter 입력 + 도메인별 자동 prefill
+- ext_*.sh / extquery_*.pl / refine_dbdata.sh 로직을 Python 스트리밍으로 이식 (Perl isfirst state machine 무손실 이식)
+- SSH/scp 의존 완전 제거 → 1GB SGML 라인 스트리밍 안전한 로컬 처리
+- DB 신규 테이블 data_preprocess_config (domain PK + JSON selected_columns)
+
+---
+
 ## 2026-04-23 — 데이터전처리 2컬럼 분리 + 작업실 Jiana사전편집 메뉴
 
 ### 데이터전처리 로그기반/데이터기반 분리

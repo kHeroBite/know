@@ -137,6 +137,153 @@ def read_dict_file(ws_name: str, dict_type: str, filename: str, domain: str | No
     }
 
 
+def read_dict_rows(
+    ws_name: str,
+    dict_type: str,
+    filename: str,
+    page: int = 1,
+    page_size: int = 150,
+    q: str = "",
+    domain: str | None = None,
+) -> dict:
+    """사전 파일을 페이징하여 행 단위로 반환. 초성(자소) 검색 지원."""
+    _require_workspace_used(ws_name)
+    base_path = _get_dict_base_path(ws_name, dict_type)
+    full_path = _safe_file_path(base_path, filename)
+    if not os.path.isfile(full_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"파일을 찾을 수 없습니다: {filename}",
+        )
+
+    ext = Path(filename).suffix.lower()
+    sep = "\t" if ext == ".list" else " "
+
+    with open(full_path, "rb") as f:
+        raw = f.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("euc-kr")
+        except UnicodeDecodeError:
+            text = raw.decode("utf-8", errors="replace")
+
+    all_lines = text.splitlines()
+
+    # 필터링 (단순 substring 검색)
+    if q:
+        filtered: list[tuple[int, str]] = []
+        for idx, line in enumerate(all_lines, start=1):
+            if not line.strip():
+                continue
+            cols = line.split(sep)
+            first_col = cols[0] if cols else ""
+            if q.lower() in first_col.lower():
+                filtered.append((idx, line))
+    else:
+        filtered = [(idx, line) for idx, line in enumerate(all_lines, start=1) if line.strip()]
+
+    total = len(filtered)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_data = filtered[start:end]
+
+    rows = []
+    for line_num, line in page_data:
+        cols = line.split(sep)
+        rows.append({"line_num": line_num, "cols": cols})
+
+    # 헤더 컬럼 수 추정 (첫 데이터 행 기준)
+    col_count = max((len(r["cols"]) for r in rows), default=1)
+
+    return {
+        "filename": filename,
+        "sep": sep,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "rows": rows,
+        "col_count": col_count,
+    }
+
+
+def write_dict_row(
+    ws_name: str,
+    dict_type: str,
+    filename: str,
+    line_num: int,
+    cols: list[str],
+    domain: str | None = None,
+) -> dict:
+    """사전 파일의 특정 행(1-based line_num)을 수정."""
+    _require_workspace_used(ws_name)
+    base_path = _get_dict_base_path(ws_name, dict_type)
+    full_path = _safe_file_path(base_path, filename)
+    if not os.path.isfile(full_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"파일을 찾을 수 없습니다: {filename}",
+        )
+
+    ext = Path(filename).suffix.lower()
+    sep = "\t" if ext == ".list" else " "
+
+    with open(full_path, "rb") as f:
+        raw = f.read()
+    encoding = "utf-8"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("euc-kr")
+            encoding = "euc-kr"
+        except UnicodeDecodeError:
+            text = raw.decode("utf-8", errors="replace")
+
+    all_lines = text.splitlines(keepends=True)
+
+    if line_num < 1 or line_num > len(all_lines):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"유효하지 않은 줄 번호: {line_num} (총 {len(all_lines)}줄)",
+        )
+
+    # 원본 줄 끝 문자 보존
+    orig_line = all_lines[line_num - 1]
+    line_ending = ""
+    if orig_line.endswith("\r\n"):
+        line_ending = "\r\n"
+    elif orig_line.endswith("\n"):
+        line_ending = "\n"
+    elif orig_line.endswith("\r"):
+        line_ending = "\r"
+
+    new_line = sep.join(cols) + line_ending
+    all_lines[line_num - 1] = new_line
+
+    new_content = "".join(all_lines)
+
+    # .bak 백업
+    bak_path = full_path + ".bak"
+    shutil.copy2(full_path, bak_path)
+
+    with open(full_path, "w", encoding=encoding, newline="") as f:
+        f.write(new_content)
+
+    # dual-write outer
+    try:
+        outer_dir = os.path.join(WORKSPACE_DIR, ws_name, "txt_resrc", dict_type)
+        outer_path = os.path.join(outer_dir, filename)
+        os.makedirs(outer_dir, exist_ok=True)
+        with open(outer_path, "w", encoding=encoding, newline="") as f:
+            f.write(new_content)
+    except Exception as _e:
+        logger.warning("jiana_dict dual-write outer 실패 (무시): %s", _e)
+
+    return {"line_num": line_num, "saved": True}
+
+
 def write_dict_file(
     ws_name: str,
     dict_type: str,

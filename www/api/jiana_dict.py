@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -22,6 +22,8 @@ from services.jiana_dict_service import (
     list_dict_files,
     read_dict_file,
     write_dict_file,
+    read_dict_rows,
+    write_dict_row,
 )
 
 라우터 = APIRouter(prefix="/api/jiana-dict", tags=["jiana-dict"])
@@ -31,6 +33,13 @@ class 파일저장요청(BaseModel):
     workspace_id: str
     domain: Optional[str] = None
     content: str
+
+
+class 행수정요청(BaseModel):
+    workspace_id: str
+    domain: Optional[str] = None
+    line_num: int
+    cols: List[str]
 
 
 @라우터.get("/types")
@@ -66,6 +75,32 @@ def get_dict_file(
 ):
     """사전 파일 내용 반환."""
     return read_dict_file(workspace_id, dict_type, filename, domain)
+
+
+@라우터.get("/{dict_type}/file/{filename}/rows")
+def get_dict_file_rows(
+    dict_type: str,
+    filename: str,
+    workspace_id: str = Query(..., description="워크스페이스 ID"),
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    page_size: int = Query(150, ge=1, le=500, description="페이지 크기"),
+    q: str = Query("", description="초성 검색어"),
+    domain: Optional[str] = Query(None),
+    _: dict = Depends(get_current_user),
+):
+    """사전 파일 행 단위 페이징 조회 (초성 검색 지원)."""
+    return read_dict_rows(workspace_id, dict_type, filename, page, page_size, q, domain)
+
+
+@라우터.put("/{dict_type}/file/{filename}/row")
+def put_dict_file_row(
+    dict_type: str,
+    filename: str,
+    body: 행수정요청,
+    _: dict = Depends(get_current_user),
+):
+    """사전 파일 특정 행 수정."""
+    return write_dict_row(body.workspace_id, dict_type, filename, body.line_num, body.cols, body.domain)
 
 
 @라우터.put("/{dict_type}/file/{filename}")

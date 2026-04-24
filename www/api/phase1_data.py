@@ -1,21 +1,23 @@
-"""Phase 1 데이터기반 전처리 API — 사이트별 파일 관리 + 실행 (REST + WebSocket)"""
+"""Phase 1 데이터기반 전처리 API — 범용 SGML 컬럼 선택 방식 (REST + WebSocket)
+
+기존 사이트 고정(galleria/hmall/thd/ssf) 엔드포인트 제거.
+업로드된 SGML 파일에서 컬럼 자동 감지 → 사용자가 컬럼 선택 → 로컬 파이프라인 실행.
+"""
 import os
 import logging
 import uuid
 import json
-import asyncio
 from fastapi import APIRouter, UploadFile, File, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
-from core.exceptions import ValidationError, NotFoundError
+from core.exceptions import ValidationError
 
 라우터 = APIRouter()
 ws라우터 = APIRouter()  # WebSocket 전용 (prefix 없이 등록)
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_FOLDERS = {"galleria", "hmall", "thd", "ssf"}
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "1024"))
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
@@ -27,72 +29,123 @@ def _redis_url() -> str:
     return f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 
 
+# ──────────────────────────────────────────────
+# Pydantic 모델
+# ──────────────────────────────────────────────
+
+class ColumnSpec(BaseModel):
+    name: str
+    split_delimiter: Optional[str] = None
+
+
+class DataAnalyze요청(BaseModel):
+    filenames: List[str]
+    workspace: Optional[str] = ""
+
+
 class DataRun요청(BaseModel):
-    folder: str           # galleria / hmall / thd / ssf
-    workspace: Optional[str] = None
+    filenames: List[str]
+    columns: List[ColumnSpec]
+    workspace: Optional[str] = ""
 
 
-@라우터.get("/preprocess/data-files/{folder}")
-async def list_data_files(folder: str, workspace: str = Query("")):
-    if folder not in ALLOWED_FOLDERS:
-        raise ValidationError(f"폴더 오류: {folder}")
+class DataConfig요청(BaseModel):
+    domain: str
+    selected_columns: List[ColumnSpec]
+
+
+# ──────────────────────────────────────────────
+# 파일 관리 엔드포인트
+# ──────────────────────────────────────────────
+
+@라우터.get("/preprocess/data-files")
+async def list_data_files(workspace: str = Query("")):
+    """워크스페이스의 data_input/ 직계 파일 목록 (비재귀)."""
     from services.phase1_data_service import Phase1Data서비스
-    return await Phase1Data서비스.list_files(folder, workspace)
+    return await Phase1Data서비스.list_files(workspace)
 
 
-@라우터.post("/preprocess/data-files/{folder}")
-async def upload_data_file(folder: str, file: UploadFile = File(...), workspace: str = Query("")):
-    if folder not in ALLOWED_FOLDERS:
-        raise ValidationError(f"폴더 오류: {folder}")
+@라우터.post("/preprocess/data-files")
+async def upload_data_file(file: UploadFile = File(...), workspace: str = Query("")):
+    """SGML 파일 업로드 (workspace/build/data_input/ 루트로 저장)."""
     safe_name = os.path.basename(file.filename or "")
+    if not safe_name:
+        raise ValidationError("파일명이 비어 있습니다")
     ct = file.content_type or ""
     if ct.startswith(("image/", "audio/", "video/")):
         raise ValidationError(f"텍스트 파일만 허용됩니다: {ct}")
     content = await file.read()
     if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
         raise ValidationError(f"파일 크기 초과 (최대 {MAX_UPLOAD_MB}MB)")
-    logger.info(f"데이터 파일 업로드: name={safe_name}, size={len(content)}, folder={folder}, workspace={workspace}")
+    logger.info(
+        f"데이터 파일 업로드: name={safe_name}, size={len(content)}, workspace={workspace}"
+    )
     from services.phase1_data_service import Phase1Data서비스
-    return await Phase1Data서비스.save_file(folder, safe_name, content, workspace)
+    return await Phase1Data서비스.save_file(safe_name, content, workspace)
 
 
-@라우터.delete("/preprocess/data-files/{folder}/{filename}")
-async def delete_data_file(folder: str, filename: str, workspace: str = Query("")):
-    if folder not in ALLOWED_FOLDERS:
-        raise ValidationError(f"폴더 오류: {folder}")
+@라우터.delete("/preprocess/data-files/{filename}")
+async def delete_data_file(filename: str, workspace: str = Query("")):
+    """워크스페이스 data_input/ 직계 파일 삭제."""
     safe_name = os.path.basename(filename)
     from services.phase1_data_service import Phase1Data서비스
-    return await Phase1Data서비스.delete_file(folder, safe_name, workspace)
+    return await Phase1Data서비스.delete_file(safe_name, workspace)
 
+
+# ──────────────────────────────────────────────
+# 컬럼 분석 엔드포인트
+# ──────────────────────────────────────────────
+
+@라우터.post("/preprocess/data-analyze-columns")
+async def analyze_columns(요청: DataAnalyze요청):
+    """업로드된 SGML 파일들에서 컬럼명 추출 + 샘플 5개 반환."""
+    if not 요청.filenames:
+        raise ValidationError("분석할 파일명이 없습니다")
+    from services.phase1_data_service import Phase1Data서비스
+    return await Phase1Data서비스.analyze_columns(요청.filenames, 요청.workspace or "")
+
+
+# ──────────────────────────────────────────────
+# 실행 엔드포인트
+# ──────────────────────────────────────────────
 
 @라우터.post("/preprocess/data-run")
 async def start_data_execution(요청: DataRun요청, background_tasks: BackgroundTasks):
-    if 요청.folder not in ALLOWED_FOLDERS:
-        raise ValidationError(f"폴더 오류: {요청.folder}")
+    """선택된 컬럼만 추출+정규화하여 output/{col}.txt 저장."""
+    if not 요청.filenames:
+        raise ValidationError("입력 파일이 없습니다")
+    if not 요청.columns:
+        raise ValidationError("선택된 컬럼이 없습니다")
+
     run_id = str(uuid.uuid4())
     from services.phase1_data_service import Phase1Data서비스
-    await Phase1Data서비스.register_execution_db(run_id, 요청)
-    background_tasks.add_task(Phase1Data서비스.run_data_service, run_id, 요청)
+
+    workspace = 요청.workspace or ""
+    filenames = list(요청.filenames)
+    columns_payload = [c.dict() for c in 요청.columns]
+
+    await Phase1Data서비스.register_execution_db(run_id, workspace, filenames, columns_payload)
+    background_tasks.add_task(
+        Phase1Data서비스.run_data_service,
+        run_id,
+        workspace,
+        filenames,
+        columns_payload,
+    )
     return {"run_id": run_id}
 
 
 @라우터.get("/preprocess/data-run/latest")
-async def get_latest_data_run(workspace: str = Query(""), folder: str = Query("")):
-    """워크스페이스+폴더 기준 가장 최근 실행 정보 조회"""
+async def get_latest_data_run(workspace: str = Query("")):
+    """워크스페이스 기준 가장 최근 실행 정보 조회."""
     from core.database import 세션팩토리
     from sqlalchemy import text
     db = 세션팩토리()
     try:
-        if folder and folder in ALLOWED_FOLDERS:
-            row = db.execute(text(
-                "SELECT run_id, status, folder, workspace FROM phase1_data_runs "
-                "WHERE workspace=:ws AND folder=:folder ORDER BY id DESC LIMIT 1"
-            ), {"ws": workspace, "folder": folder}).fetchone()
-        else:
-            row = db.execute(text(
-                "SELECT run_id, status, folder, workspace FROM phase1_data_runs "
-                "WHERE workspace=:ws ORDER BY id DESC LIMIT 1"
-            ), {"ws": workspace}).fetchone()
+        row = db.execute(text(
+            "SELECT run_id, status, folder, workspace FROM phase1_data_runs "
+            "WHERE workspace=:ws ORDER BY id DESC LIMIT 1"
+        ), {"ws": workspace}).fetchone()
         if row:
             return {"run_id": row[0], "status": row[1], "folder": row[2], "workspace": row[3]}
         return {"run_id": None}
@@ -102,7 +155,7 @@ async def get_latest_data_run(workspace: str = Query(""), folder: str = Query(""
 
 @라우터.get("/preprocess/data-logs/{run_id}")
 async def get_data_execution_log(run_id: str):
-    """data run 로그 DB 조회"""
+    """data run 로그 DB 조회."""
     from core.database import 세션팩토리
     from sqlalchemy import text
     db = 세션팩토리()
@@ -119,6 +172,33 @@ async def get_data_execution_log(run_id: str):
     finally:
         db.close()
 
+
+# ──────────────────────────────────────────────
+# 컬럼 선택 설정 엔드포인트 (도메인 단위)
+# ──────────────────────────────────────────────
+
+@라우터.get("/preprocess/data-config")
+async def get_data_config(domain: str = Query(...)):
+    """도메인별 선택 컬럼 설정 조회."""
+    if not domain:
+        raise ValidationError("domain 파라미터가 필요합니다")
+    from services.phase1_data_service import Phase1Data서비스
+    return await Phase1Data서비스.get_config(domain)
+
+
+@라우터.post("/preprocess/data-config")
+async def save_data_config(요청: DataConfig요청):
+    """도메인별 선택 컬럼 설정 저장 (UPSERT)."""
+    if not 요청.domain:
+        raise ValidationError("domain은 필수입니다")
+    from services.phase1_data_service import Phase1Data서비스
+    selected = [c.dict() for c in 요청.selected_columns]
+    return await Phase1Data서비스.save_config(요청.domain, selected)
+
+
+# ──────────────────────────────────────────────
+# WebSocket (기존 유지)
+# ──────────────────────────────────────────────
 
 @ws라우터.websocket("/ws/preprocess-data/{run_id}")
 async def phase1_data_ws(websocket: WebSocket, run_id: str):

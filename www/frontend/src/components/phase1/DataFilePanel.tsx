@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Table, Card, Button, Typography, Popconfirm, Progress, Checkbox, Space, Select, message } from 'antd'
-import { InboxOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
-import { phase1DataAPI, type DataFolder } from '../../api/phase1Data'
+import { useState, useEffect, useCallback } from 'react'
+import { Table, Card, Button, Typography, Popconfirm, Progress, Checkbox, Space, message } from 'antd'
+import { InboxOutlined, DeleteOutlined, ReloadOutlined, ScanOutlined } from '@ant-design/icons'
+import { phase1DataAPI, type ColumnSpec } from '../../api/phase1Data'
+import ColumnSelectModal from './ColumnSelectModal'
 
 const { Text } = Typography
 
@@ -13,53 +14,47 @@ interface FileItem {
 
 interface DataFilePanelProps {
   workspace?: string
-  onFolderChange?: (folder: DataFolder) => void
-  onFilesChange?: (folder: DataFolder, count: number) => void
+  domain?: string
+  selectedColumns: ColumnSpec[]
+  onFilesChange?: (count: number, filenames: string[]) => void
+  onColumnsConfigured?: (columns: ColumnSpec[]) => void
 }
 
-const 사이트목록: { label: string; value: DataFolder }[] = [
-  { label: '갤러리아', value: 'galleria' },
-  { label: 'H몰', value: 'hmall' },
-  { label: 'THD', value: 'thd' },
-  { label: 'SSF', value: 'ssf' },
-]
-
-export default function DataFilePanel({ workspace, onFolderChange, onFilesChange }: DataFilePanelProps) {
-  const [선택폴더, set선택폴더] = useState<DataFolder>('galleria')
+export default function DataFilePanel({
+  workspace,
+  domain,
+  selectedColumns,
+  onFilesChange,
+  onColumnsConfigured,
+}: DataFilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
   const [업로딩, set업로딩] = useState(false)
   const [업로드진행률, set업로드진행률] = useState(0)
   const [드래그오버, set드래그오버] = useState(false)
   const [선택항목, set선택항목] = useState<string[]>([])
-  const 목록조회 = useCallback(async (folder?: DataFolder) => {
-    const 대상폴더 = folder ?? 선택폴더
+  const [모달열림, set모달열림] = useState(false)
+
+  const 목록조회 = useCallback(async () => {
     set로딩(true)
     try {
-      const { data } = await phase1DataAPI.파일목록(대상폴더, workspace)
-      const files = data.files || []
+      const { data } = await phase1DataAPI.파일목록(workspace)
+      const files: FileItem[] = data.files || []
       set파일목록(files)
       set선택항목([])
-      onFilesChange?.(대상폴더, files.length)
+      onFilesChange?.(files.length, files.map(f => f.name))
     } catch {
       message.error('파일 목록 조회 실패')
     } finally {
       set로딩(false)
     }
-  }, [선택폴더, workspace, onFilesChange])
+  }, [workspace, onFilesChange])
 
-  useEffect(() => { 목록조회(선택폴더) }, [선택폴더, workspace])
-
-  const 폴더변경 = (folder: DataFolder) => {
-    set선택폴더(folder)
-    set파일목록([])
-    set선택항목([])
-    onFolderChange?.(folder)
-  }
+  useEffect(() => { 목록조회() }, [workspace])
 
   const 삭제핸들러 = async (filename: string) => {
     try {
-      await phase1DataAPI.파일삭제(선택폴더, filename, workspace)
+      await phase1DataAPI.파일삭제(filename, workspace)
       message.success(`${filename} 삭제 완료`)
       목록조회()
     } catch (err: any) {
@@ -70,7 +65,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
   const 일괄삭제핸들러 = async () => {
     for (const name of 선택항목) {
       try {
-        await phase1DataAPI.파일삭제(선택폴더, name, workspace)
+        await phase1DataAPI.파일삭제(name, workspace)
       } catch { /* skip */ }
     }
     message.success(`${선택항목.length}개 파일 삭제 완료`)
@@ -87,7 +82,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
     set업로딩(true)
     set업로드진행률(0)
     try {
-      await phase1DataAPI.파일업로드(선택폴더, file, workspace, (percent) => {
+      await phase1DataAPI.파일업로드(file, workspace, (percent) => {
         set업로드진행률(percent)
       })
       message.success(`${file.name} 업로드 완료`)
@@ -98,7 +93,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
       set업로딩(false)
       set업로드진행률(0)
     }
-  }, [선택폴더, workspace])
+  }, [workspace, 목록조회])
 
   const 다중파일업로드처리 = useCallback(async (files: FileList | File[]) => {
     const fileArr = Array.from(files)
@@ -161,21 +156,10 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
     },
   ]
 
+  const 파일없음 = 파일목록.length === 0
+
   return (
-    <Card
-      title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>사이트 데이터</span>
-          <Select
-            size="small"
-            value={선택폴더}
-            onChange={폴더변경}
-            options={사이트목록}
-            style={{ width: 110 }}
-          />
-        </div>
-      }
-    >
+    <Card title="데이터 파일">
       <div
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(true) }}
         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); set드래그오버(false) }}
@@ -214,7 +198,7 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
         />
         <p style={{ fontSize: 32, color: '#40a9ff', marginBottom: 8, pointerEvents: 'none' }}><InboxOutlined /></p>
         <p style={{ margin: '0 0 4px', color: 'rgba(0,0,0,0.88)', pointerEvents: 'none' }}>파일을 드래그하거나 클릭하여 업로드</p>
-        <p style={{ margin: 0, color: 'rgba(0,0,0,0.45)', fontSize: 12, pointerEvents: 'none' }}>텍스트 형식 파일 (최대 1GB, 다중 선택 가능)</p>
+        <p style={{ margin: 0, color: 'rgba(0,0,0,0.45)', fontSize: 12, pointerEvents: 'none' }}>SGML 등 텍스트 형식 파일 (최대 1GB, 다중 선택 가능)</p>
       </div>
 
       {업로딩 && (
@@ -242,7 +226,20 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
             </Popconfirm>
           )}
         </Space>
-        <Button size="small" icon={<ReloadOutlined />} onClick={() => 목록조회()} loading={로딩}>새로고침</Button>
+        <Space size={8}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<ScanOutlined />}
+            disabled={파일없음}
+            onClick={() => set모달열림(true)}
+          >
+            컬럼 분석
+          </Button>
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => 목록조회()} loading={로딩}>
+            새로고침
+          </Button>
+        </Space>
       </div>
 
       <div
@@ -269,6 +266,18 @@ export default function DataFilePanel({ workspace, onFolderChange, onFilesChange
           pagination={{ pageSize: 10, size: 'small' }}
         />
       </div>
+
+      <ColumnSelectModal
+        open={모달열림}
+        onClose={() => set모달열림(false)}
+        workspace={workspace}
+        domain={domain}
+        filenames={파일목록.map(f => f.name)}
+        initialColumns={selectedColumns}
+        onSave={(cols) => {
+          onColumnsConfigured?.(cols)
+        }}
+      />
     </Card>
   )
 }
