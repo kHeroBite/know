@@ -42,6 +42,9 @@ export default function Phase1Pipeline() {
   const [dataFilesCount, setDataFilesCount] = useState<number>(0)
   const [dataFilenames, setDataFilenames] = useState<string[]>([])
   const [selectedColumns, setSelectedColumns] = useState<ColumnSpec[]>([])
+  const [showColumnModal, setShowColumnModal] = useState(false)
+  const [dataStepElapsed, setDataStepElapsed] = useState<Record<number, number>>({})
+  const [dataStepOutputs, setDataStepOutputs] = useState<Record<number, string>>({})
 
   // ── 탭 선택 상태 ──
   const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
@@ -254,30 +257,74 @@ export default function Phase1Pipeline() {
     }
   }
 
-  // ── 데이터기반 실행 ──
-  const 데이터실행핸들러 = async () => {
+  // ── 데이터기반: 단계별 경과시간/output 집계 ──
+  useEffect(() => {
+    for (const entry of dataWs.logs) {
+      if (entry.elapsed_sec && entry.elapsed_sec > 0 && entry.status === 'completed') {
+        setDataStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
+      }
+      if (entry.message && entry.step_num >= 1) {
+        const m = entry.message.match(/complete:\s*(\/[^\s(]+)\s*(\([^)]+\))?/)
+        if (m) {
+          const output = m[1].trim() + (m[2] ? ' ' + m[2] : '')
+          setDataStepOutputs(prev => ({ ...prev, [entry.step_num]: output }))
+        }
+      }
+    }
+  }, [dataWs.logs])
+
+  // ── 데이터기반 전체실행 핸들러 ──
+  const 데이터전체실행핸들러 = async () => {
     if (dataFilenames.length === 0) {
       message.warning('업로드된 데이터 파일이 없습니다')
       return
     }
     if (selectedColumns.length === 0) {
-      message.warning('컬럼을 먼저 선택하세요 ("컬럼 분석" 버튼)')
+      message.warning('컬럼을 먼저 선택하세요 (설정 버튼)')
       return
     }
     try {
-      const { data } = await phase1DataAPI.실행({
+      const { data } = await phase1DataAPI.전체실행({
         filenames: dataFilenames,
         columns: selectedColumns,
         workspace: selectedWorkspace ?? '',
         domain: selectedDomain ?? '',
       })
       setDataRunId(data.run_id)
-      // 데이터기반 실행 시작 → method 저장
+      setDataStepElapsed({})
+      setDataStepOutputs({})
       if (selectedWorkspace) {
         localStorage.setItem(`preprocess_method_${selectedWorkspace}`, 'data')
       }
     } catch (err: any) {
-      message.error(err.response?.data?.detail || '데이터 전처리 실행 실패')
+      message.error(err.response?.data?.detail || '데이터 전체실행 시작 실패')
+    }
+  }
+
+  // ── 데이터기반 단계실행 핸들러 ──
+  const 데이터단계실행핸들러 = async (stepNum: number) => {
+    if (dataFilenames.length === 0 && stepNum === 1) {
+      message.warning('업로드된 데이터 파일이 없습니다')
+      return
+    }
+    if (selectedColumns.length === 0 && stepNum === 1) {
+      message.warning('컬럼을 먼저 선택하세요 (설정 버튼)')
+      return
+    }
+    try {
+      const { data } = await phase1DataAPI.단계실행({
+        filenames: dataFilenames,
+        columns: selectedColumns,
+        workspace: selectedWorkspace ?? '',
+        domain: selectedDomain ?? '',
+        step_num: stepNum,
+      })
+      setDataRunId(data.run_id)
+      if (selectedWorkspace) {
+        localStorage.setItem(`preprocess_method_${selectedWorkspace}`, 'data')
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || `Step ${stepNum} 실행 시작 실패`)
     }
   }
 
@@ -354,9 +401,20 @@ export default function Phase1Pipeline() {
   const 데이터실행중 = dataRunId !== null && !dataWs.isCompleted
   const 데이터파일있음 = dataFilesCount > 0
 
+  // 데이터기반 단계별 진행률
+  const 데이터단계퍼센트 = useMemo(() => {
+    const result: Record<number, number> = {}
+    for (const entry of dataWs.logs) {
+      if (entry.step_num >= 1 && entry.percent != null) {
+        result[entry.step_num] = entry.percent
+      }
+    }
+    return result
+  }, [dataWs.logs])
+
   // 다음단계 조건: 현재 활성 탭 기준으로만 판단
   const 로그기반완료 = 유효단계상태[6] === 'completed' && !실행중
-  const 데이터기반완료 = dataWs.isCompleted && !데이터실행중
+  const 데이터기반완료 = (dataWs.stepStatuses[6] === 'completed' || dataWs.isCompleted) && !데이터실행중
   const 다음단계가능 = activeTab === 'log' ? 로그기반완료 : 데이터기반완료
 
   if (!selectedWorkspace) {
@@ -466,34 +524,68 @@ export default function Phase1Pipeline() {
             key: 'data',
             label: '데이터기반 전처리',
             children: (
-              <div>
-                <Card style={{ marginBottom: 16 }}>
-                  <DataFilePanel
-                    workspace={selectedWorkspace ?? undefined}
-                    domain={selectedDomain ?? undefined}
-                    selectedColumns={selectedColumns}
-                    onFilesChange={(count, filenames) => {
-                      setDataFilesCount(count)
-                      setDataFilenames(filenames)
-                    }}
-                    onColumnsConfigured={(cols) => {
-                      setSelectedColumns(cols)
-                    }}
-                  />
-                </Card>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                {/* 왼쪽: 파일 패널 + 실행 패널 */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Card>
+                    <DataFilePanel
+                      workspace={selectedWorkspace ?? undefined}
+                      domain={selectedDomain ?? undefined}
+                      selectedColumns={selectedColumns}
+                      onFilesChange={(count, filenames) => {
+                        setDataFilesCount(count)
+                        setDataFilenames(filenames)
+                      }}
+                      onColumnsConfigured={(cols) => {
+                        setSelectedColumns(cols)
+                      }}
+                      showColumnModal={showColumnModal}
+                      onColumnModalClose={() => setShowColumnModal(false)}
+                    />
+                  </Card>
 
-                <Card bodyStyle={{ padding: 16 }}>
-                  <DataControlPanel
-                    workspace={selectedWorkspace ?? undefined}
-                    selectedColumns={selectedColumns}
-                    filenames={dataFilenames}
-                    onRun={데이터실행핸들러}
-                    isRunning={데이터실행중}
-                    isCompleted={dataWs.isCompleted}
-                    logs={dataWs.logs}
-                    runId={dataRunId}
-                    hasFiles={데이터파일있음}
-                  />
+                  <Card bodyStyle={{ padding: 0 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <DataControlPanel
+                        workspace={selectedWorkspace ?? ''}
+                        selectedColumns={selectedColumns}
+                        filenames={dataFilenames}
+                        hasFiles={데이터파일있음}
+                        isRunning={데이터실행중}
+                        isCompleted={dataWs.isCompleted}
+                        runId={dataRunId}
+                        stepStatuses={dataWs.stepStatuses}
+                        stepPercents={데이터단계퍼센트}
+                        stepElapsed={dataStepElapsed}
+                        stepOutputs={dataStepOutputs}
+                        onRunAll={데이터전체실행핸들러}
+                        onRunStep={데이터단계실행핸들러}
+                        onOpenColumnModal={() => setShowColumnModal(true)}
+                      />
+                    </div>
+                  </Card>
+                </div>
+
+                {/* 오른쪽: 실시간 로그 */}
+                <Card
+                  bodyStyle={{ padding: 0 }}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+                    <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
+                  </div>
+                  <div style={{ padding: 16, minHeight: 300 }}>
+                    <LogPanel
+                      logs={dataWs.logs}
+                      fileTabs={{}}
+                      activeViewTab={null}
+                      onTabChange={() => {}}
+                      isRunning={데이터실행중}
+                    />
+                  </div>
                 </Card>
               </div>
             ),

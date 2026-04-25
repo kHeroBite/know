@@ -1,5 +1,27 @@
 # HISTORY.md — 작업 이력
 
+## 2026-04-25 — 데이터기반 전처리 6단계 파이프라인 구조 재구성
+
+> **작업 요약**: 데이터기반 전처리 탭을 6단계 카드 + 좌/우 분할 레이아웃으로 전면 재구성. 1단계 컬럼분석 + 2~6단계 로그기반 백엔드(정제/형태소분석/결과변환/유사어검사/DB업데이트) 재사용. 백엔드 통합 엔드포인트 data-run-all + WS relay + DB dual-write. extract_column_values isfirst 버그 수정(SGML 첫 데이터 라인 손실). 검증: SLITM_NM 70,123개 키워드, DB 55,111건 INSERT, 1230초 1~6단계 완주 (AC-001/002/003 모두 PASS).
+
+### 변경 파일 (6개)
+- `www/services/phase1_data_service.py` — run_data_service publish_terminal + run_all_stages + relay + extract_column_values isfirst 버그 수정
+- `www/api/phase1_data.py` — data-run-all + data-run-step + data-step-status 엔드포인트 추가
+- `www/frontend/src/api/phase1Data.ts` — 전체실행/단계실행 API 타입 추가
+- `www/frontend/src/hooks/usePhase1DataWebSocket.ts` — stepStatuses/stepElapsed/stepOutputs/stepPercents 상태 추가
+- `www/frontend/src/components/phase1/DataControlPanel.tsx` — 전면 재작성 (6단계 카드 UI)
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — 좌/우 flex 레이아웃 분할
+
+### 주요 변경 사항
+- 좌/우 분할 레이아웃: 왼쪽(파일+6단계 카드), 오른쪽(실행 로그 LogPanel)
+- 6단계: 컬럼분석/정제/형태소분석/결과변환/유사어검사/DB업데이트
+- 단일 run_id로 1→6 연쇄 실행 (data-run-all 통합 엔드포인트)
+- WS relay: phase1:{rid} → phase1_data:{rid} + phase1_data_logs DB dual-write
+- 컬럼 선택 모달 도메인 저장값 prefill 유지
+- 🐛 extract_column_values isfirst 버그 수정 (형제 함수 sample_column_values와 동일 버그 잔존)
+
+---
+
 ## 2026-04-24 — 데이터기반 전처리 UI 5개 버그/UX 개선
 
 > **작업 요약**: 직전 SGML 범용화(890de51) 후속. 컬럼분석 미수행 시 더미 prefill 제거, split delimiter 자동 감지, 샘플값 CRLF 처리, 컬럼 미선택 시 실행 버튼 disabled(AC-1 수정으로 자동 해결), "데이터처리" 카드 배경색/Tag 색상 상태별 분기. AC-1~5 전부 PASS.

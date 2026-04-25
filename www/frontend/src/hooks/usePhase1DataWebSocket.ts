@@ -4,11 +4,13 @@ import 클라이언트 from '../api/client'
 
 export function usePhase1DataWebSocket(runId: string | null) {
   const [logs, setLogs] = useState<LogEntry[]>([])
+  const [stepStatuses, setStepStatuses] = useState<Record<number, string>>({})
   const [isConnected, setIsConnected] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
   const [isReconnecting, setIsReconnecting] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const doneRef = useRef(false)
+  const stepStatusesRef = useRef<Record<number, string>>({})
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -17,6 +19,8 @@ export function usePhase1DataWebSocket(runId: string | null) {
     if (!runId) return
 
     setLogs([])
+    setStepStatuses({})
+    stepStatusesRef.current = {}
     setIsCompleted(false)
     doneRef.current = false
 
@@ -34,8 +38,25 @@ export function usePhase1DataWebSocket(runId: string | null) {
 
     const applyLogs = (entries: LogEntry[]) => {
       setLogs(entries)
-      const pipelineCompleted = entries.some(e => e.step_num === -1 && e.status === 'completed')
-      const hasFailed = entries.some(e => e.status === 'failed')
+      // stepStatuses 집계: 단계별 마지막 상태 추적
+      const stepLatest: Record<number, LogEntry> = {}
+      let pipelineCompleted = false
+      let hasFailed = false
+      for (const e of entries) {
+        stepLatest[e.step_num] = e
+        if (e.step_num === -1 && e.status === 'completed') pipelineCompleted = true
+        if (e.status === 'failed') hasFailed = true
+      }
+      const newStatuses: Record<number, string> = {}
+      for (const [k, e] of Object.entries(stepLatest)) {
+        if (Number(k) >= 1) newStatuses[Number(k)] = e.status
+      }
+      stepStatusesRef.current = { ...stepStatusesRef.current, ...newStatuses }
+      setStepStatuses(prev => {
+        const merged = { ...prev }
+        for (const [k, v] of Object.entries(newStatuses)) merged[Number(k)] = v
+        return merged
+      })
       if (pipelineCompleted || hasFailed) doMarkDone()
       return pipelineCompleted || hasFailed
     }
@@ -86,6 +107,11 @@ export function usePhase1DataWebSocket(runId: string | null) {
         try {
           const data: LogEntry = JSON.parse(e.data)
           setLogs(prev => [...prev.slice(-999), data])
+          // stepStatuses 실시간 갱신
+          if (data.step_num >= 1) {
+            stepStatusesRef.current = { ...stepStatusesRef.current, [data.step_num]: data.status }
+            setStepStatuses(prev => ({ ...prev, [data.step_num]: data.status }))
+          }
           if ((data.status === 'completed' && data.step_num === -1) || data.status === 'failed') {
             doMarkDone()
           } else {
@@ -120,5 +146,5 @@ export function usePhase1DataWebSocket(runId: string | null) {
     }
   }, [runId])
 
-  return { logs, isConnected, isCompleted, isReconnecting }
+  return { logs, stepStatuses, isConnected, isCompleted, isReconnecting }
 }

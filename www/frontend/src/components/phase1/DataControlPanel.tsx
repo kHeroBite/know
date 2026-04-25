@@ -1,177 +1,189 @@
-import { useEffect, useRef } from 'react'
-import { Button, Typography, Tag, Progress } from 'antd'
-import { PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
-import type { LogEntry } from '../../hooks/usePhase1WebSocket'
-import type { ColumnSpec } from '../../api/phase1Data'
+import { Button, Space, Typography, Tag, Progress } from 'antd'
+import {
+  PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
+  CloseCircleOutlined, SettingOutlined,
+} from '@ant-design/icons'
 
 const { Text } = Typography
 
+// ── 데이터기반 전처리 6단계 정의 ──
+const 단계목록 = [
+  { num: 1, name: '컬럼분석',   color: '#1677ff', output: 'output/*.txt' },
+  { num: 2, name: '정제',       color: '#52c41a', output: 'refine.txt' },
+  { num: 3, name: '형태소분석', color: '#fa8c16', output: 'analyzed.txt' },
+  { num: 4, name: '결과변환',   color: '#722ed1', output: 'transform.txt' },
+  { num: 5, name: '유사어검사', color: '#eb2f96', output: 'synonym.txt' },
+  { num: 6, name: 'DB업데이트', color: '#13c2c2', output: '' },
+]
+
 interface DataControlPanelProps {
-  workspace?: string
-  selectedColumns: ColumnSpec[]
+  workspace: string
+  // 파일/컬럼 정보
+  selectedColumns: Array<{ name: string; split_delimiter?: string | null }>
   filenames: string[]
-  onRun: () => void
+  hasFiles: boolean
+  // 실행 상태
   isRunning: boolean
   isCompleted: boolean
-  logs: LogEntry[]
   runId: string | null
-  hasFiles: boolean
+  // 단계 상태
+  stepStatuses: Record<number, string>
+  stepPercents?: Record<number, number>
+  stepElapsed?: Record<number, number>
+  stepOutputs?: Record<number, string>
+  // 콜백
+  onRunAll: () => void
+  onRunStep: (stepNum: number) => void
+  onOpenColumnModal: () => void
+}
+
+function 경과표시(sec: number): string {
+  if (sec < 60) return `${sec.toFixed(1)}초`
+  return `${Math.floor(sec / 60)}분 ${Math.round(sec % 60)}초`
 }
 
 export default function DataControlPanel({
-  workspace: _workspace,
-  selectedColumns,
-  filenames,
-  onRun,
-  isRunning,
-  isCompleted,
-  logs,
-  runId: _runId,
-  hasFiles,
+  selectedColumns, filenames, hasFiles,
+  isRunning, isCompleted, runId,
+  stepStatuses, stepPercents, stepElapsed, stepOutputs,
+  onRunAll, onRunStep, onOpenColumnModal,
 }: DataControlPanelProps) {
-  const 로그박스Ref = useRef<HTMLDivElement>(null)
 
-  // 최근 50줄만 표시
-  const 표시로그 = logs.slice(-50)
-
-  // 전체 진행률 (step_num=1 기준)
-  const 전체진행률 = logs.reduce((acc, e) => {
-    if (e.step_num === 1 && e.percent != null) return e.percent
-    return acc
-  }, 0)
-
-  const 현재상태 = isCompleted
-    ? (logs.some(e => e.status === 'failed') ? 'failed' : 'completed')
-    : isRunning ? 'running' : 'idle'
-
-  // 로그 자동 스크롤
-  useEffect(() => {
-    if (로그박스Ref.current) {
-      로그박스Ref.current.scrollTop = 로그박스Ref.current.scrollHeight
+  const 실행가능 = (stepNum: number): boolean => {
+    if (isRunning) return false
+    if (stepNum === 1) return hasFiles && selectedColumns.length > 0
+    // 이전 단계가 completed이거나, 해당 단계 이후가 이미 completed면 허용
+    if (stepStatuses[stepNum - 1] === 'completed') return true
+    for (let i = stepNum; i <= 6; i++) {
+      if (stepStatuses[i] === 'completed') return true
     }
-  }, [logs])
+    return false
+  }
 
-  const 컬럼없음 = selectedColumns.length === 0
-  const 파일없음 = !hasFiles || filenames.length === 0
-  const 실행가능 = !isRunning && !컬럼없음 && !파일없음
-
-  // 컬럼 미리보기 (최대 3개 + 외 N개)
-  const 컬럼프리뷰 = (() => {
-    if (컬럼없음) return null
-    const names = selectedColumns.map(c => c.name)
-    const head = names.slice(0, 3).join(', ')
-    const rest = names.length > 3 ? ` 외 ${names.length - 3}개` : ''
-    return `선택 컬럼: ${head}${rest}`
-  })()
-
-  // 상태별 Tag 색상 + 배경색
-  const tagColor = 현재상태 === 'completed' ? 'success'
-    : 현재상태 === 'failed' ? 'error'
-    : 현재상태 === 'running' ? 'processing'
-    : 'default'  // idle — 명확한 회색
-  const bgColor = 현재상태 === 'completed' ? '#f6ffed'
-    : 현재상태 === 'failed' ? '#fff2f0'
-    : 현재상태 === 'running' ? '#e6f4ff'
-    : '#f5f5f5'  // idle 명확한 회색
+  const 전체실행가능 = !isRunning && hasFiles && selectedColumns.length > 0
 
   return (
     <div>
-      {/* 선택 컬럼 미리보기 */}
-      <div style={{ marginBottom: 12, minHeight: 20 }}>
-        {컬럼프리뷰 ? (
-          <Text type="secondary" style={{ fontSize: 13 }}>{컬럼프리뷰}</Text>
-        ) : (
-          <Text type="warning" style={{ fontSize: 13 }}>
-            컬럼을 먼저 선택하세요 (파일 업로드 → "컬럼 분석" 버튼)
-          </Text>
-        )}
-      </div>
-
-      {/* 실행 상태 표시 */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 12px', borderRadius: 8,
-        background: bgColor,
-        border: `1px solid ${현재상태 === 'running' ? '#1677ff'
-          : 현재상태 === 'completed' ? '#b7eb8f'
-          : 현재상태 === 'failed' ? '#ffa39e'
-          : '#d9d9d9'}`,
-        marginBottom: 12,
-      }}>
-        <Tag color={tagColor} style={{ margin: 0, minWidth: 80, textAlign: 'center' }}>
-          데이터처리
-        </Tag>
-        <div style={{ flex: 1 }}>
-          {현재상태 === 'completed' && (
-            <Text type="success"><CheckCircleOutlined /> 완료</Text>
-          )}
-          {현재상태 === 'running' && (
-            <div>
-              <Text style={{ color: '#1677ff' }}><ClockCircleOutlined /> 실행 중</Text>
-              <Progress
-                percent={전체진행률}
-                size="small"
-                status="active"
-                strokeColor="#1677ff"
-                style={{ margin: '2px 0 0', maxWidth: 160 }}
-                format={(p) => `${p}%`}
-              />
-            </div>
-          )}
-          {현재상태 === 'failed' && (
-            <Text type="danger"><CloseCircleOutlined /> 실패</Text>
-          )}
-          {현재상태 === 'idle' && (
-            <Text type="secondary">대기</Text>
-          )}
-        </div>
+      {/* 전체 실행 버튼 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
         <Button
-          size="small"
-          type={현재상태 === 'completed' ? 'default' : 'primary'}
-          style={현재상태 === 'idle' && 실행가능 ? { background: '#1677ff', borderColor: '#1677ff' } : {}}
+          type="primary"
           icon={<PlayCircleOutlined />}
-          disabled={!실행가능}
-          onClick={onRun}
+          disabled={!전체실행가능}
+          onClick={onRunAll}
+          style={{ flex: 1 }}
         >
-          실행
+          전체 실행 (6단계)
+        </Button>
+        <Button
+          icon={<SettingOutlined />}
+          onClick={onOpenColumnModal}
+          title="컬럼 선택 설정"
+        >
+          설정
         </Button>
       </div>
 
-      {/* 실행 로그 */}
-      <div
-        ref={로그박스Ref}
-        style={{
-          height: 280,
-          overflowY: 'auto',
-          background: '#1f1f1f',
-          color: '#d4d4d4',
-          padding: 12,
-          fontFamily: 'monospace',
-          fontSize: 12,
-          borderRadius: 6,
-        }}
-      >
-        {표시로그.length === 0 ? (
-          <Text style={{ color: '#666' }}>실행 대기 중...</Text>
-        ) : (
-          표시로그.map((entry, i) => (
-            <div key={i} style={{ marginBottom: 2 }}>
-              <Tag
-                color="#1677ff"
-                style={{ fontSize: 10, padding: '0 4px', margin: 0 }}
-              >
-                {entry.step_name}
-              </Tag>
-              <span style={{ color: '#ccc', marginLeft: 4 }}>{entry.message}</span>
-              {entry.elapsed_sec != null && entry.elapsed_sec > 0 && (
-                <span style={{ color: '#888', marginLeft: 6, fontSize: 11 }}>
-                  ({entry.elapsed_sec < 60 ? `${entry.elapsed_sec.toFixed(1)}초` : `${Math.floor(entry.elapsed_sec / 60)}분`})
-                </span>
-              )}
-            </div>
-          ))
+      {/* 컬럼/파일 요약 */}
+      <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+        파일 {filenames.length}개 | 컬럼 {selectedColumns.length}개
+        {selectedColumns.length > 0 && (
+          <span style={{ marginLeft: 6 }}>
+            ({selectedColumns.slice(0, 3).map(c => c.name).join(', ')}
+            {selectedColumns.length > 3 ? ` 외 ${selectedColumns.length - 3}개` : ''})
+          </span>
         )}
       </div>
+
+      {/* 6단계 카드 목록 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {단계목록.map(step => {
+          const status = stepStatuses[step.num]
+          const elapsed = stepElapsed?.[step.num] ?? 0
+          const output = stepOutputs?.[step.num] ?? ''
+          const running = status === 'running'
+          const completed = status === 'completed'
+          const failed = status === 'failed'
+
+          return (
+            <div
+              key={step.num}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', borderRadius: 8,
+                background: running ? `${step.color}08` : completed ? '#f6ffed' : failed ? '#fff2f0' : '#fafafa',
+                border: `1px solid ${running ? step.color : completed ? '#b7eb8f' : failed ? '#ffa39e' : '#f0f0f0'}`,
+                minHeight: 44,
+              }}
+            >
+              {/* 단계 태그 */}
+              <Tag color={step.color} style={{ margin: 0, minWidth: 72, textAlign: 'center' }}>
+                {step.num}. {step.name}
+              </Tag>
+
+              {/* 상태 영역 */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                {completed && (
+                  <>
+                    <Text type="success"><CheckCircleOutlined /> 완료</Text>
+                    {elapsed > 0 && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>({경과표시(elapsed)})</Text>
+                    )}
+                    {output && (
+                      <Text style={{ fontSize: 12, color: step.color }}>{output}</Text>
+                    )}
+                  </>
+                )}
+                {running && (
+                  <div style={{ flex: 1 }}>
+                    <Text style={{ color: step.color }}><ClockCircleOutlined /> 실행 중</Text>
+                    <Progress
+                      percent={stepPercents?.[step.num] ?? 0}
+                      size="small"
+                      status="active"
+                      showInfo={stepPercents?.[step.num] != null}
+                      strokeColor={step.color}
+                      style={{ margin: '2px 0 0', maxWidth: 160 }}
+                      format={(p) => `${p}%`}
+                    />
+                  </div>
+                )}
+                {failed && <Text type="danger"><CloseCircleOutlined /> 실패</Text>}
+                {!status && <Text type="secondary" style={{ fontSize: 12 }}>대기</Text>}
+              </div>
+
+              {/* 단계 실행 버튼 */}
+              <Space size={4}>
+                {step.num === 1 && (
+                  <Button
+                    size="small"
+                    icon={<SettingOutlined />}
+                    onClick={onOpenColumnModal}
+                    title="컬럼 선택"
+                  />
+                )}
+                <Button
+                  size="small"
+                  type={completed ? 'default' : 'primary'}
+                  style={!completed && !running ? { background: step.color, borderColor: step.color } : {}}
+                  icon={<PlayCircleOutlined />}
+                  disabled={!실행가능(step.num)}
+                  onClick={() => onRunStep(step.num)}
+                >
+                  실행
+                </Button>
+              </Space>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* run_id 표시 */}
+      {runId && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#bbb', wordBreak: 'break-all' }}>
+          실행ID: {runId}
+        </div>
+      )}
     </div>
   )
 }

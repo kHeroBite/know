@@ -20,6 +20,21 @@ export interface DataRunPayload {
   domain?: string
 }
 
+export interface DataRunAllPayload {
+  filenames: string[]
+  columns: ColumnSpec[]
+  workspace?: string
+  domain?: string
+}
+
+export interface DataRunStepPayload {
+  filenames: string[]
+  columns: ColumnSpec[]
+  workspace?: string
+  domain?: string
+  step_num: number
+}
+
 export const phase1DataAPI = {
   파일목록: (workspace?: string) =>
     클라이언트.get('/preprocess/data-files', { params: { workspace: workspace || '' } }),
@@ -58,4 +73,15 @@ export const phase1DataAPI = {
 
   로그: (runId: string) =>
     클라이언트.get(`/preprocess/data-logs/${runId}`),
+
+  전체실행: (payload: DataRunAllPayload) =>
+    클라이언트.post('/preprocess/data-run-all', payload),
+
+  단계실행: (payload: DataRunStepPayload) =>
+    클라이언트.post('/preprocess/data-run-step', payload),
+
+  단계상태: (workspace?: string, runId?: string) =>
+    클라이언트.get('/preprocess/data-step-status', {
+      params: { workspace: workspace || '', run_id: runId || '' },
+    }),
 }

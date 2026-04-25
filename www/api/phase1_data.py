@@ -54,6 +54,23 @@ class DataConfig요청(BaseModel):
     selected_columns: List[ColumnSpec]
 
 
+class DataRunAll요청(BaseModel):
+    """데이터기반 전처리 6단계 전체 실행 요청."""
+    filenames: List[str]
+    columns: List[ColumnSpec]
+    workspace: Optional[str] = ""
+    domain: Optional[str] = ""
+
+
+class DataRunStep요청(BaseModel):
+    """데이터기반 전처리 단일 단계 실행 요청."""
+    filenames: List[str]
+    columns: List[ColumnSpec]
+    workspace: Optional[str] = ""
+    domain: Optional[str] = ""
+    step_num: int  # 1~6
+
+
 # ──────────────────────────────────────────────
 # 파일 관리 엔드포인트
 # ──────────────────────────────────────────────
@@ -194,6 +211,139 @@ async def save_data_config(요청: DataConfig요청):
     from services.phase1_data_service import Phase1Data서비스
     selected = [c.dict() for c in 요청.selected_columns]
     return await Phase1Data서비스.save_config(요청.domain, selected)
+
+
+# ──────────────────────────────────────────────
+# B5: 6단계 전체 실행 엔드포인트
+# ──────────────────────────────────────────────
+
+@라우터.post("/preprocess/data-run-all")
+async def data_run_all(요청: DataRunAll요청, background_tasks: BackgroundTasks):
+    """데이터기반 전처리 6단계 전체 실행.
+
+    반환: {run_id, status, message}
+    WS로 실시간 진행상황 수신: /ws/preprocess-data/{run_id}
+    """
+    from services.phase1_data_service import Phase1Data서비스
+
+    if not 요청.filenames:
+        raise ValidationError("filenames는 필수입니다")
+    if not 요청.columns:
+        raise ValidationError("columns는 필수입니다")
+
+    run_id = str(uuid.uuid4())
+    workspace = 요청.workspace or ""
+    domain = 요청.domain or ""
+    filenames = [f for f in 요청.filenames if f]
+    columns = [c.dict() for c in 요청.columns]
+
+    # DB 등록
+    await Phase1Data서비스.register_execution_db(run_id, workspace, filenames, columns)
+
+    # 백그라운드 실행
+    background_tasks.add_task(
+        Phase1Data서비스.run_all_stages,
+        run_id, workspace, domain, filenames, columns
+    )
+
+    return {"run_id": run_id, "status": "started", "message": "6단계 전처리 시작됨"}
+
+
+# ──────────────────────────────────────────────
+# B6: 단일 단계 실행 엔드포인트
+# ──────────────────────────────────────────────
+
+@라우터.post("/preprocess/data-run-step")
+async def data_run_step(요청: DataRunStep요청, background_tasks: BackgroundTasks):
+    """데이터기반 전처리 단일 단계 실행.
+
+    반환: {run_id, status, step_num, message}
+    """
+    from services.phase1_data_service import Phase1Data서비스
+
+    if not (1 <= 요청.step_num <= 6):
+        raise ValidationError(f"step_num은 1~6 범위여야 합니다: {요청.step_num}")
+    if not 요청.filenames:
+        raise ValidationError("filenames는 필수입니다")
+
+    run_id = str(uuid.uuid4())
+    workspace = 요청.workspace or ""
+    domain = 요청.domain or ""
+    filenames = [f for f in 요청.filenames if f]
+    columns = [c.dict() for c in 요청.columns]
+
+    # DB 등록
+    await Phase1Data서비스.register_execution_db(run_id, workspace, filenames, columns)
+
+    # 백그라운드 실행
+    background_tasks.add_task(
+        Phase1Data서비스.run_step_only,
+        run_id, workspace, domain, 요청.step_num, filenames, columns
+    )
+
+    return {
+        "run_id": run_id,
+        "status": "started",
+        "step_num": 요청.step_num,
+        "message": f"Step {요청.step_num} 실행 시작됨"
+    }
+
+
+# ──────────────────────────────────────────────
+# B7: 단계 상태 조회 엔드포인트
+# ──────────────────────────────────────────────
+
+@라우터.get("/preprocess/data-step-status")
+async def data_step_status(workspace: str = Query(""), run_id: Optional[str] = Query(None)):
+    """데이터기반 전처리 단계별 최신 상태 조회.
+
+    run_id를 지정하면 해당 실행의 단계별 상태를 반환한다.
+    run_id 미지정 시 워크스페이스 최근 실행의 상태를 반환한다.
+    """
+    from sqlalchemy import text
+    from core.database import 세션팩토리
+
+    def _query():
+        db = 세션팩토리()
+        try:
+            resolved_run_id = run_id
+            if not resolved_run_id:
+                # 최근 실행 run_id 조회
+                row = db.execute(text(
+                    "SELECT run_id FROM phase1_data_runs "
+                    "WHERE workspace=:ws ORDER BY rowid DESC LIMIT 1"
+                ), {"ws": workspace or ""}).fetchone()
+                if not row:
+                    return {"run_id": None, "steps": {}}
+                resolved_run_id = row[0]
+
+            # 단계별 최신 상태 (step_num별 마지막 row)
+            rows = db.execute(text(
+                "SELECT step_num, step_name, status, percent, message, elapsed_sec "
+                "FROM phase1_data_logs "
+                "WHERE run_id=:run_id "
+                "ORDER BY id DESC"
+            ), {"run_id": resolved_run_id}).fetchall()
+
+            steps: dict = {}
+            for r in rows:
+                s_num = r[0]
+                if s_num not in steps:
+                    steps[s_num] = {
+                        "step_num": s_num,
+                        "step_name": r[1],
+                        "status": r[2],
+                        "percent": r[3],
+                        "message": r[4],
+                        "elapsed_sec": r[5],
+                    }
+            return {"run_id": resolved_run_id, "steps": steps}
+        finally:
+            db.close()
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query)
 
 
 # ──────────────────────────────────────────────

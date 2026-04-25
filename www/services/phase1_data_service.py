@@ -92,36 +92,34 @@ def extract_columns_from_sgml(filepath: str) -> List[str]:
 
 
 def extract_column_values(filepath: str, column_name: str) -> Iterator[str]:
-    """Perl extquery_*.pl 로직 이식 — (COL 직후 첫 줄 스킵, )COL 까지 yield.
+    """Perl extquery_*.pl 로직 이식 — (COL 라인만 스킵, )COL 까지 yield.
 
-    원 Perl 로직:
+    Perl 원본:
         isquery=0, isfirst=0
-        if line == "(COL":       isquery=1, isfirst=1, next
-        elif line ~ /^\\)COL/:    isquery=0, next
+        if line == "(COL":      isquery=1, isfirst=1   ← (COL 라인 자체는 출력 안 함
+        elif line ~ /^\\)COL/: isquery=0              ← )COL 라인 자체도 출력 안 함
         if (isquery==1 and isfirst==0): print line
-        isfirst=0   # loop 끝에서 항상 0으로
+        isfirst=0                                      ← 루프 끝에서 0으로 → 다음 라인부터 출력
+
+    Perl 의도: (COL 라인만 스킵, 첫 데이터 라인부터 즉시 출력.
+    Python isfirst 패턴은 continue 이후 재진입 시 한 루프 늦게 리셋되어
+    첫 데이터 라인까지 스킵하는 버그 발생 → isfirst 완전 제거.
     """
     open_tag = f'({column_name}'
     close_tag = f'){column_name}'
     isquery = False
-    isfirst = False
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             for line in f:
                 stripped = line.rstrip('\r\n')
                 if stripped == open_tag:
                     isquery = True
-                    isfirst = True
-                    # (COL 라인 자체는 yield하지 않음 (Perl의 next)
-                    continue
+                    continue  # (COL 라인 자체는 yield하지 않음
                 elif stripped.startswith(close_tag):
                     isquery = False
-                    # )COL 라인 자체도 yield하지 않음 (Perl의 next)
-                    continue
-                if isquery and not isfirst:
-                    yield stripped
-                # 매 루프 끝에서 isfirst를 False로 리셋 (Perl과 동일)
-                isfirst = False
+                    continue  # )COL 라인 자체도 yield하지 않음
+                if isquery:
+                    yield stripped  # 첫 데이터 라인 포함 모두 yield
     except FileNotFoundError:
         return
 
@@ -420,8 +418,12 @@ class Phase1Data서비스:
 
     @staticmethod
     async def run_data_service(run_id: str, workspace: str,
-                               filenames: List[str], columns: List[Dict]) -> None:
+                               filenames: List[str], columns: List[Dict],
+                               publish_terminal: bool = True) -> None:
         """범용 데이터기반 전처리 실행 — 로컬 Python 스트리밍 파이프라인.
+
+        publish_terminal=True (기본): step_num=-1 완료 신호 발행 (단독 실행 시)
+        publish_terminal=False: step_num=1 completed 발행만 (run_all_stages 내 Stage 1로 실행 시)
 
         진행률:
           0~10%   입력 검증
@@ -506,10 +508,18 @@ class Phase1Data서비스:
                           f"output/ 하위 {total_cols}개 파일 생성 완료", "running")
 
             elapsed = round(time.time() - start_time, 1)
-            _publish_data(run_id, -1, "완료", 100,
-                          f"데이터기반 전처리 완료 ({elapsed}초)", "completed",
-                          elapsed_sec=elapsed)
-            await loop.run_in_executor(None, _update_status, "completed", None)
+            if publish_terminal:
+                # 단독 실행: terminal(-1) 신호로 WS 종료
+                _publish_data(run_id, -1, "완료", 100,
+                              f"데이터기반 전처리 완료 ({elapsed}초)", "completed",
+                              elapsed_sec=elapsed)
+                await loop.run_in_executor(None, _update_status, "completed", None)
+            else:
+                # 파이프라인 Stage 1: step 1 완료 신호만 (WS 유지)
+                _publish_data(run_id, 1, "컬럼분석완료", 100,
+                              f"컬럼분석 완료 ({elapsed}초) — 다음 단계 준비 중", "completed",
+                              elapsed_sec=elapsed)
+                await loop.run_in_executor(None, _update_status, "running", None)
 
         except Exception as e:
             logger.error(
@@ -571,3 +581,285 @@ class Phase1Data서비스:
             finally:
                 db.close()
         return await loop.run_in_executor(None, _save)
+
+    # ──────────────────────────────────────────────
+    # B1: output/*.txt → build/work/keywords.txt 병합
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _merge_output_to_work(workspace: str) -> int:
+        """data_input/output/*.txt 파일들을 합쳐 build/work/keywords.txt에 저장.
+
+        중복 제거 + 정렬 적용. 로그기반 Step2(_sync_refine)가 이 파일을 읽는다.
+        반환값: 병합된 키워드 총 수
+        """
+        ws = workspace or "default"
+        output_dir = _workspace_output_dir(workspace)
+        work_dir = os.path.join(WORKSPACE_DIR, ws, "build", "work")
+        os.makedirs(work_dir, exist_ok=True)
+        keywords_path = os.path.join(work_dir, "keywords.txt")
+
+        merged: Set[str] = set()
+        if os.path.isdir(output_dir):
+            for fname in sorted(os.listdir(output_dir)):
+                if not fname.endswith(".txt"):
+                    continue
+                fp = os.path.join(output_dir, fname)
+                if not os.path.isfile(fp):
+                    continue
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            kw = line.strip()
+                            if kw:
+                                merged.add(kw)
+                except Exception as e:
+                    logger.warning(f"output 파일 읽기 실패: {fp} — {e}")
+
+        sorted_kws = sorted(merged)
+        with open(keywords_path, "w", encoding="utf-8", newline="\n") as f:
+            for kw in sorted_kws:
+                f.write(kw + "\n")
+
+        logger.info(f"_merge_output_to_work: {len(sorted_kws)}개 키워드 → {keywords_path}")
+        return len(sorted_kws)
+
+    # ──────────────────────────────────────────────
+    # B3: phase1:{run_id} 구독 → phase1_data:{run_id} 재발행 (asyncio)
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    async def _relay_from_log_topic(
+        run_id: str,
+        ready: Optional[asyncio.Event] = None,
+    ) -> None:
+        """phase1:{run_id} Redis 토픽을 구독하여 phase1_data:{run_id}로 재발행하고
+        phase1_data_logs DB에 dual-write한다.
+
+        ready: 구독 완료 후 set() 호출 (run_all_stages 경쟁 조건 방지).
+        step_num==-1 또는 status==failed 수신 시 종료.
+        """
+        try:
+            import aioredis
+        except ImportError:
+            import redis.asyncio as aioredis
+
+        redis_url = (
+            f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}"
+            f":{os.environ.get('REDIS_PORT', '6379')}"
+            f"/{os.environ.get('REDIS_DB', '0')}"
+        )
+        r = await aioredis.from_url(redis_url, decode_responses=True)
+        pubsub = r.pubsub()
+        try:
+            await pubsub.subscribe(f"phase1:{run_id}")
+            # 구독 완료 신호 — run_all_stages가 이 이벤트를 await한 후 run_phase1_service 호출
+            if ready is not None:
+                ready.set()
+            async for raw_msg in pubsub.listen():
+                if raw_msg["type"] != "message":
+                    continue
+                try:
+                    data = json.loads(raw_msg["data"])
+                except Exception:
+                    continue
+
+                step_num = data.get("step_num", 0)
+                step_name = data.get("step_name", "")
+                percent = data.get("percent", 0)
+                message = data.get("message", "")
+                status = data.get("status", "running")
+                elapsed_sec = data.get("elapsed_sec", 0.0)
+
+                # DB + Redis 재발행 (phase1_data:{run_id} 토픽)
+                _publish_data(
+                    run_id, step_num, step_name, percent,
+                    message, status, elapsed_sec=elapsed_sec
+                )
+
+                # 종료 조건
+                if step_num == -1 or status == "failed":
+                    break
+        finally:
+            await pubsub.unsubscribe(f"phase1:{run_id}")
+            await r.aclose()
+
+    # ──────────────────────────────────────────────
+    # B2: 6단계 전체 파이프라인 실행 오케스트레이터
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    async def run_all_stages(run_id: str, workspace: str, domain: str,
+                             filenames: List[str], columns: List[Dict]) -> None:
+        """데이터기반 전처리 6단계 전체 실행.
+
+        Stage 1 (컬럼분석): run_data_service (데이터 전용)
+        Stage 1.5 (병합): output/*.txt → build/work/keywords.txt
+        Stage 2~6 (정제~DB업데이트): run_phase1_service(start_step=2, end_step=6) 재사용
+
+        WS 토픽: phase1_data:{run_id}
+        """
+        loop = asyncio.get_event_loop()
+        start_time = time.time()
+
+        def _update_status(status: str, error: Optional[str] = None):
+            try:
+                from sqlalchemy import text
+                db = 세션팩토리()
+                db.execute(text(
+                    "UPDATE phase1_data_runs SET status=:status, error_message=:error WHERE run_id=:run_id"
+                ), {"status": status, "error": error, "run_id": run_id})
+                db.commit()
+                db.close()
+            except Exception:
+                pass
+
+        try:
+            await loop.run_in_executor(None, _update_status, "running", None)
+
+            # ── Stage 1: 컬럼분석 (데이터기반 Step 1, WS 종료 안 함) ──
+            _publish_data(run_id, 1, "컬럼분석", 5, "SGML 컬럼 추출 시작", "running")
+            await Phase1Data서비스.run_data_service(
+                run_id, workspace, filenames, columns, publish_terminal=False
+            )
+
+            # ── Stage 1.5: 병합 (output/*.txt → work/keywords.txt) ──
+            _publish_data(run_id, 1, "병합", 5, "키워드 병합 중 (work/keywords.txt)", "running")
+            merged_count = await loop.run_in_executor(
+                None, Phase1Data서비스._merge_output_to_work, workspace
+            )
+            _publish_data(run_id, 1, "병합완료", 8,
+                          f"병합 완료: {merged_count}개 키워드 → work/keywords.txt", "running")
+
+            # ── Stage 2~6: 로그기반 executor 재사용 (start_step=2) ──
+            # relay 태스크: 구독 완료 후 run_phase1_service 호출 (race condition 방지)
+            relay_ready = asyncio.Event()
+            relay_task = asyncio.create_task(
+                Phase1Data서비스._relay_from_log_topic(run_id, ready=relay_ready)
+            )
+            # 구독이 완료될 때까지 대기 (최대 5초)
+            try:
+                await asyncio.wait_for(relay_ready.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"relay subscribe 타임아웃: run_id={run_id}")
+
+            # Phase1실행요청 구성
+            from api.phase1 import Phase1실행요청
+            log_요청 = Phase1실행요청(
+                domain=domain or "",
+                category="popular",
+                filename=None,
+                start_step=2,
+                end_step=6,
+                workspace=workspace,
+                filter_mode="rank",
+                filter_value=150000,
+                sort_by="count",
+                rank_value=150000,
+                count_value=5,
+            )
+
+            from services.phase1_service import Phase1서비스
+            await Phase1서비스.run_phase1_service(run_id, log_요청)
+
+            # relay 완료 대기 (타임아웃 30초)
+            try:
+                await asyncio.wait_for(relay_task, timeout=30.0)
+            except asyncio.TimeoutError:
+                relay_task.cancel()
+                logger.warning(f"relay_task 타임아웃: run_id={run_id}")
+
+            elapsed = round(time.time() - start_time, 1)
+            _publish_data(run_id, -1, "완료", 100,
+                          f"데이터기반 6단계 전처리 완료 ({elapsed}초)", "completed",
+                          elapsed_sec=elapsed)
+            await loop.run_in_executor(None, _update_status, "completed", None)
+
+        except Exception as e:
+            logger.error(
+                f"run_all_stages 실패: run_id={run_id}, error={e}", exc_info=True
+            )
+            try:
+                _publish_data(run_id, -1, "오류", 0, str(e), "failed")
+            except Exception:
+                pass
+            await loop.run_in_executor(None, _update_status, "failed", str(e))
+
+    # ──────────────────────────────────────────────
+    # B4: 단일 단계 실행
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    async def run_step_only(run_id: str, workspace: str, domain: str,
+                            step_num: int, filenames: List[str],
+                            columns: List[Dict]) -> None:
+        """단일 단계만 실행.
+
+        step_num=1: 컬럼분석(run_data_service)
+        step_num=2~6: 로그기반 해당 단계만 (start_step=step_num, end_step=step_num)
+        """
+        loop = asyncio.get_event_loop()
+
+        def _update_status(status: str, error: Optional[str] = None):
+            try:
+                from sqlalchemy import text
+                db = 세션팩토리()
+                db.execute(text(
+                    "UPDATE phase1_data_runs SET status=:status, error_message=:error WHERE run_id=:run_id"
+                ), {"status": status, "error": error, "run_id": run_id})
+                db.commit()
+                db.close()
+            except Exception:
+                pass
+
+        try:
+            await loop.run_in_executor(None, _update_status, "running", None)
+
+            if step_num == 1:
+                # 데이터기반 Step 1 단독 실행
+                await Phase1Data서비스.run_data_service(run_id, workspace, filenames, columns)
+            elif 2 <= step_num <= 6:
+                # relay 태스크 시작 (race condition 방지: 구독 완료 후 실행)
+                relay_ready = asyncio.Event()
+                relay_task = asyncio.create_task(
+                    Phase1Data서비스._relay_from_log_topic(run_id, ready=relay_ready)
+                )
+                try:
+                    await asyncio.wait_for(relay_ready.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning(f"relay subscribe 타임아웃(단계실행): run_id={run_id}, step={step_num}")
+                from api.phase1 import Phase1실행요청
+                log_요청 = Phase1실행요청(
+                    domain=domain or "",
+                    category="popular",
+                    filename=None,
+                    start_step=step_num,
+                    end_step=step_num,
+                    workspace=workspace,
+                    filter_mode="rank",
+                    filter_value=150000,
+                    sort_by="count",
+                    rank_value=150000,
+                    count_value=5,
+                )
+                from services.phase1_service import Phase1서비스
+                await Phase1서비스.run_phase1_service(run_id, log_요청)
+                try:
+                    await asyncio.wait_for(relay_task, timeout=30.0)
+                except asyncio.TimeoutError:
+                    relay_task.cancel()
+                    logger.warning(f"relay_task 타임아웃(단계실행): run_id={run_id}, step={step_num}")
+            else:
+                raise ValueError(f"유효하지 않은 step_num: {step_num} (1~6 허용)")
+
+            await loop.run_in_executor(None, _update_status, "completed", None)
+
+        except Exception as e:
+            logger.error(
+                f"run_step_only 실패: run_id={run_id}, step={step_num}, error={e}", exc_info=True
+            )
+            try:
+                _publish_data(run_id, -1, "오류", 0, str(e), "failed")
+            except Exception:
+                pass
+            await loop.run_in_executor(None, _update_status, "failed", str(e))
