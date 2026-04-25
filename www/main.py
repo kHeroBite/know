@@ -189,7 +189,11 @@ if os.path.isdir(_프론트엔드경로):
 
     @앱.get("/{full_path:path}")
     def serve_frontend(full_path: str):
-        """SPA 라우팅 — 정적 파일 존재 시 직접 서빙, 아니면 index.html."""
+        """SPA 라우팅 — 정적 파일 존재 시 직접 서빙, 아니면 index.html.
+        /api/* 또는 /ws/* 미등록 경로는 404 반환 (SPA 폴백 대상 아님)."""
+        from fastapi import HTTPException
+        if full_path.startswith("api/") or full_path.startswith("ws/"):
+            raise HTTPException(status_code=404, detail="Not Found")
         file_path = os.path.join(_프론트엔드경로, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
