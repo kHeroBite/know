@@ -8,7 +8,7 @@ interface ColumnSelectModalProps {
   open: boolean
   onClose: () => void
   workspace?: string
-  domain?: string
+  siteCode?: string
   filenames: string[]
   initialColumns: ColumnSpec[]
   onSave: (columns: ColumnSpec[]) => void
@@ -23,7 +23,7 @@ export default function ColumnSelectModal({
   open,
   onClose,
   workspace,
-  domain,
+  siteCode,
   filenames,
   initialColumns,
   onSave,
@@ -110,8 +110,8 @@ export default function ColumnSelectModal({
     }
     set저장중(true)
     try {
-      if (domain && domain.length > 0) {
-        await phase1DataAPI.컬럼설정저장(domain, 선택컬럼)
+      if (siteCode && siteCode.length > 0) {
+        await phase1DataAPI.컬럼설정저장(siteCode, 선택컬럼)
       }
       message.success('컬럼 설정 저장 완료')
       onSave(선택컬럼)
@@ -229,7 +229,7 @@ export default function ColumnSelectModal({
     >
       <div style={{ marginBottom: 12 }}>
         <Text type="secondary">
-          {domain ? `도메인: ${domain} · ` : '도메인 미선택 · '}
+          {siteCode ? `사이트: ${siteCode} · ` : '사이트 미선택 · '}
           업로드 파일 {filenames.length}개 기준 컬럼 분석 결과
         </Text>
       </div>

@@ -59,11 +59,11 @@ export const phase1DataAPI = {
   컬럼분석: (filenames: string[], workspace?: string) =>
     클라이언트.post('/preprocess/data-analyze-columns', { filenames, workspace: workspace || '' }),
 
-  컬럼설정조회: (domain: string) =>
-    클라이언트.get('/preprocess/data-config', { params: { domain } }),
+  컬럼설정조회: (siteCode: string) =>
+    클라이언트.get('/preprocess/data-config', { params: { site_code: siteCode } }),
 
-  컬럼설정저장: (domain: string, selected_columns: ColumnSpec[]) =>
-    클라이언트.post('/preprocess/data-config', { domain, selected_columns }),
+  컬럼설정저장: (siteCode: string, selected_columns: ColumnSpec[]) =>
+    클라이언트.post('/preprocess/data-config', { site_code: siteCode, selected_columns }),
 
   실행: (payload: DataRunPayload) =>
     클라이언트.post('/preprocess/data-run', payload),

@@ -12,6 +12,7 @@ import { usePhase1DataWebSocket } from '../hooks/usePhase1DataWebSocket'
 import { phase1API } from '../api/phase1'
 import { phase1DataAPI, type ColumnSpec } from '../api/phase1Data'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import PageHeader from '../components/PageHeader'
 
@@ -45,6 +46,8 @@ export default function Phase1Pipeline() {
   const [showColumnModal, setShowColumnModal] = useState(false)
   const [dataStepElapsed, setDataStepElapsed] = useState<Record<number, number>>({})
   const [dataStepOutputs, setDataStepOutputs] = useState<Record<number, string>>({})
+
+  const [siteCode, setSiteCode] = useState<string | null>(null)
 
   // ── 탭 선택 상태 ──
   const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
@@ -177,16 +180,34 @@ export default function Phase1Pipeline() {
     이전데이터실행로드()
   }, [selectedWorkspace])
 
-  // ── 도메인 변경 시 컬럼 설정 prefill ──
+  // ── 워크스페이스 변경 시 site_code 추출 ──
+  useEffect(() => {
+    const fetchSiteCode = async () => {
+      if (!selectedWorkspace) {
+        setSiteCode(null)
+        return
+      }
+      try {
+        const { data } = await workspaceAPI.워크스페이스목록()
+        const wsInfo = (data || []).find((w: any) => w.name === selectedWorkspace)
+        setSiteCode(wsInfo?.site_code || null)
+      } catch {
+        setSiteCode(null)
+      }
+    }
+    fetchSiteCode()
+  }, [selectedWorkspace])
+
+  // ── siteCode 변경 시 컬럼 설정 prefill ──
   useEffect(() => {
     const prefillColumns = async () => {
-      if (!selectedDomain) {
+      if (!siteCode) {
         setSelectedColumns([])
         return
       }
       try {
-        const { data } = await phase1DataAPI.컬럼설정조회(selectedDomain)
-        // 미존재 도메인이어도 항상 배열 fallback 보장
+        const { data } = await phase1DataAPI.컬럼설정조회(siteCode)
+        // 미존재 site_code이어도 항상 배열 fallback 보장
         const cols = Array.isArray(data?.selected_columns) ? data.selected_columns : []
         setSelectedColumns(cols)
       } catch {
@@ -194,7 +215,7 @@ export default function Phase1Pipeline() {
       }
     }
     prefillColumns()
-  }, [selectedDomain])
+  }, [siteCode])
 
   const 실행핸들러 = async (params: {
     category: string
@@ -530,7 +551,7 @@ export default function Phase1Pipeline() {
                   <Card>
                     <DataFilePanel
                       workspace={selectedWorkspace ?? undefined}
-                      domain={selectedDomain ?? undefined}
+                      siteCode={siteCode ?? undefined}
                       selectedColumns={selectedColumns}
                       onFilesChange={(count, filenames) => {
                         setDataFilesCount(count)

@@ -4,6 +4,16 @@
 
 ## 교훈 항목
 
+### L-site-code-config-key (2026-04-27) — 컬럼 설정 저장 키는 site_code 기준
+
+**문제**: 데이터기반 전처리 컬럼 설정(selected_columns)을 `domain` 단위로 저장 → 같은 사이트(동일 SGML 포맷)라도 다른 domain을 가진 workspace마다 설정 재입력 필요.
+**원인**: 초기 설계에서 workspace의 domain을 저장 키로 사용. 그러나 동일 사이트 내에서 domain이 다른 workspace들은 SGML 컬럼 포맷이 동일하므로 공유 가능.
+**해결**: DB 컬럼명 `domain` → `site_code`(VARCHAR(50)) 변경 + API/서비스/프론트 전반 `site_code` 기준으로 통일. migration SQL(005_data_preprocess_config_site.sql) 추가.
+**원칙**: 컬럼 설정 저장 키는 SGML 포맷 단위인 `site_code`로 관리. 같은 사이트를 공유하는 workspace들이 설정을 재사용할 수 있어야 함.
+**Level**: 2 (설계 개선 — 8개 파일 수정)
+
+---
+
 ### L-059: TeamCreate 후 config.json 타이밍 이슈 — spawn 전 파일 존재 확인 필수 (2026-04-16)
 
 **현상**: TeamCreate 직후 Agent spawn 시도 시 "config.json 부재" 차단(ERR-6) 발생. ERR-5에서 언더스코어 팀명으로 팀 미존재 오류 → 재시도(ERR-6)에서 하이픈 팀명으로 정정했으나 이때 config.json이 아직 생성되지 않은 상태.

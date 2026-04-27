@@ -50,7 +50,7 @@ class DataRun요청(BaseModel):
 
 
 class DataConfig요청(BaseModel):
-    domain: str
+    site_code: str
     selected_columns: List[ColumnSpec]
 
 
@@ -195,22 +195,22 @@ async def get_data_execution_log(run_id: str):
 # ──────────────────────────────────────────────
 
 @라우터.get("/preprocess/data-config")
-async def get_data_config(domain: str = Query(...)):
-    """도메인별 선택 컬럼 설정 조회."""
-    if not domain:
-        raise ValidationError("domain 파라미터가 필요합니다")
+async def get_data_config(site_code: str = Query(...)):
+    """사이트코드별 선택 컬럼 설정 조회."""
+    if not site_code:
+        raise ValidationError("site_code 파라미터가 필요합니다")
     from services.phase1_data_service import Phase1Data서비스
-    return await Phase1Data서비스.get_config(domain)
+    return await Phase1Data서비스.get_config(site_code)
 
 
 @라우터.post("/preprocess/data-config")
 async def save_data_config(요청: DataConfig요청):
-    """도메인별 선택 컬럼 설정 저장 (UPSERT)."""
-    if not 요청.domain:
-        raise ValidationError("domain은 필수입니다")
+    """사이트코드별 선택 컬럼 설정 저장 (UPSERT)."""
+    if not 요청.site_code:
+        raise ValidationError("site_code는 필수입니다")
     from services.phase1_data_service import Phase1Data서비스
     selected = [c.dict() for c in 요청.selected_columns]
-    return await Phase1Data서비스.save_config(요청.domain, selected)
+    return await Phase1Data서비스.save_config(요청.site_code, selected)
 
 
 # ──────────────────────────────────────────────

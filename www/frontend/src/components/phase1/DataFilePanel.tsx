@@ -14,18 +14,23 @@ interface FileItem {
 
 interface DataFilePanelProps {
   workspace?: string
-  domain?: string
+  siteCode?: string
   selectedColumns: ColumnSpec[]
   onFilesChange?: (count: number, filenames: string[]) => void
   onColumnsConfigured?: (columns: ColumnSpec[]) => void
+  // 외부 controlled 모달 (DataControlPanel의 설정 버튼에서 열기)
+  showColumnModal?: boolean
+  onColumnModalClose?: () => void
 }
 
 export default function DataFilePanel({
   workspace,
-  domain,
+  siteCode,
   selectedColumns,
   onFilesChange,
   onColumnsConfigured,
+  showColumnModal,
+  onColumnModalClose,
 }: DataFilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
@@ -34,6 +39,17 @@ export default function DataFilePanel({
   const [드래그오버, set드래그오버] = useState(false)
   const [선택항목, set선택항목] = useState<string[]>([])
   const [모달열림, set모달열림] = useState(false)
+
+  // 외부 showColumnModal prop으로 모달 강제 열기
+  useEffect(() => {
+    if (showColumnModal) set모달열림(true)
+  }, [showColumnModal])
+
+  // 모달 닫힘 시 외부 콜백 호출
+  const 모달닫기 = () => {
+    set모달열림(false)
+    onColumnModalClose?.()
+  }
 
   const 목록조회 = useCallback(async () => {
     set로딩(true)
@@ -269,9 +285,9 @@ export default function DataFilePanel({
 
       <ColumnSelectModal
         open={모달열림}
-        onClose={() => set모달열림(false)}
+        onClose={모달닫기}
         workspace={workspace}
-        domain={domain}
+        siteCode={siteCode}
         filenames={파일목록.map(f => f.name)}
         initialColumns={selectedColumns}
         onSave={(cols) => {

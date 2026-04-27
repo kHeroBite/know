@@ -532,8 +532,8 @@ class Phase1Data서비스:
             await loop.run_in_executor(None, _update_status, "failed", str(e))
 
     @staticmethod
-    async def get_config(domain: str) -> Dict:
-        """도메인별 컬럼 선택 설정 조회."""
+    async def get_config(site_code: str) -> Dict:
+        """사이트코드별 컬럼 선택 설정 조회."""
         loop = asyncio.get_event_loop()
 
         def _get():
@@ -541,8 +541,8 @@ class Phase1Data서비스:
             db = 세션팩토리()
             try:
                 row = db.execute(text(
-                    "SELECT selected_columns FROM data_preprocess_config WHERE domain = :domain"
-                ), {"domain": domain}).fetchone()
+                    "SELECT selected_columns FROM data_preprocess_config WHERE site_code = :site_code"
+                ), {"site_code": site_code}).fetchone()
                 if row and row[0]:
                     try:
                         cols = json.loads(row[0])
@@ -550,14 +550,14 @@ class Phase1Data서비스:
                         cols = []
                 else:
                     cols = []
-                return {"domain": domain, "selected_columns": cols}
+                return {"site_code": site_code, "selected_columns": cols}
             finally:
                 db.close()
         return await loop.run_in_executor(None, _get)
 
     @staticmethod
-    async def save_config(domain: str, selected_columns: List[Dict]) -> Dict:
-        """도메인별 컬럼 선택 설정 저장 (UPSERT)."""
+    async def save_config(site_code: str, selected_columns: List[Dict]) -> Dict:
+        """사이트코드별 컬럼 선택 설정 저장 (UPSERT)."""
         loop = asyncio.get_event_loop()
 
         def _save():
@@ -567,14 +567,14 @@ class Phase1Data서비스:
                 payload = json.dumps(selected_columns or [], ensure_ascii=False)
                 # SQLite UPSERT
                 db.execute(text("""
-                    INSERT INTO data_preprocess_config (domain, selected_columns, updated_at)
-                    VALUES (:domain, :cols, CURRENT_TIMESTAMP)
-                    ON CONFLICT(domain) DO UPDATE SET
+                    INSERT INTO data_preprocess_config (site_code, selected_columns, updated_at)
+                    VALUES (:site_code, :cols, CURRENT_TIMESTAMP)
+                    ON CONFLICT(site_code) DO UPDATE SET
                         selected_columns = excluded.selected_columns,
                         updated_at = CURRENT_TIMESTAMP
-                """), {"domain": domain, "cols": payload})
+                """), {"site_code": site_code, "cols": payload})
                 db.commit()
-                return {"saved": True, "domain": domain}
+                return {"saved": True, "site_code": site_code}
             except Exception:
                 db.rollback()
                 raise
