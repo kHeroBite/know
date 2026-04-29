@@ -288,9 +288,9 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
 
 
 def _sync_freeze(domain: str, workspace_dir: str, run_id: str = "", step_num: int = 6, step_name: str = "DB업데이트") -> str:
-    """DB업데이트: 배치 INSERT + 진행률 publish + reanalyze_after_build."""
+    """DB업데이트: 배치 INSERT + 진행률 publish."""
     from core.database import 세션팩토리
-    from services.assignment_service import ensure_kw_table, reanalyze_after_build
+    from services.assignment_service import ensure_kw_table
     from sqlalchemy import text
     from core.constants import WORKSPACE_BASE
 
@@ -334,14 +334,7 @@ def _sync_freeze(domain: str, workspace_dir: str, run_id: str = "", step_num: in
     finally:
         db.close()
 
-    # analysis / full_analysis 업데이트
-    if run_id:
-        _publish_phase1(run_id, step_num, step_name, 95,
-                        f"INSERT 완료 {total}건 — 형태소분석 결과 갱신 중", "running")
-    reanalyze_result = reanalyze_after_build(ws_name, domain)
-    ana_cnt = reanalyze_result.get("analysis_updated", 0)
-    full_cnt = reanalyze_result.get("full_analysis_updated", 0)
-    return f"{total}건 (분석 {ana_cnt}건, full {full_cnt}건)"
+    return f"{total}건"
 
 
 async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_path: str, workspace_dir: str, filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
