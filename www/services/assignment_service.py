@@ -603,47 +603,59 @@ def reanalyze_after_build(workspace: str, domain: str) -> dict:
         logger.error("reanalyze_after_build: synonym.txt 파싱 실패 — %s", e)
         return {"skipped": True, "reason": f"synonym.txt 파싱 실패: {e}"}
 
+    tbl = _kw_table(workspace)
+
+    from core.database import 엔진 as _엔진
+
+    def _chunked_update(rows: list[dict], sql_tpl: str, chunk: int = 500) -> int:
+        """엔진 커넥션으로 청크 커밋 — 커넥션을 즉시 반납해 pool 경합 최소화."""
+        count = 0
+        for i in range(0, len(rows), chunk):
+            try:
+                with _엔진.begin() as conn:
+                    for row in rows[i: i + chunk]:
+                        conn.execute(text(sql_tpl), row)
+                count += len(rows[i: i + chunk])
+            except Exception as e:
+                logger.error("청크 업데이트 실패 (offset=%d): %s", i, e)
+        return count
+
+    # ensure_kw_table (짧은 단독 커넥션)
     db = 세션팩토리()
     try:
-        tbl = _kw_table(workspace)
         ensure_kw_table(db, workspace)
-
-        # analysis 컬럼 업데이트 (lite)
-        for block in blocks:
-            db.execute(text(f"""
-                UPDATE {tbl} SET analysis=:ana
-                WHERE domain=:dom AND keyword=:kw
-            """), {"ana": block["analysis"], "dom": domain, "kw": block["keyword"]})
         db.commit()
-        logger.info("reanalyze_after_build: analysis 업데이트 complete — %d건", len(blocks))
-
-        # full_analysis 컬럼 업데이트 (FullTest 배치)
-        keywords = [b["keyword"] for b in blocks]
-        풀분석결과 = _batch_full_analyze(keywords, workspace)
-        if 풀분석결과:
-            full_count = 0
-            for block in blocks:
-                merged = _merge_full_analyze_synonyms(block, 풀분석결과)
-                if merged:
-                    db.execute(text(f"""
-                        UPDATE {tbl} SET full_analysis=:fa
-                        WHERE domain=:dom AND keyword=:kw
-                    """), {"fa": merged, "dom": domain, "kw": block["keyword"]})
-                    full_count += 1
-            db.commit()
-            logger.info("reanalyze_after_build: full_analysis 업데이트 complete — %d건", full_count)
-        else:
-            full_count = 0
-            logger.warning("reanalyze_after_build: FullTest 결과 없음 — full_analysis 업데이트 스킵")
-
-        return {
-            "workspace": workspace,
-            "domain": domain,
-            "analysis_updated": len(blocks),
-            "full_analysis_updated": full_count,
-        }
     finally:
         db.close()
+
+    # analysis 컬럼 업데이트 (lite) — 청크 커밋
+    analysis_rows = [{"ana": b["analysis"], "dom": domain, "kw": b["keyword"]} for b in blocks]
+    analysis_sql = f"UPDATE {tbl} SET analysis=:ana WHERE domain=:dom AND keyword=:kw"
+    analysis_count = _chunked_update(analysis_rows, analysis_sql)
+    logger.info("reanalyze_after_build: analysis 업데이트 complete — %d건", analysis_count)
+
+    # full_analysis 컬럼 업데이트 (FullTest 배치)
+    keywords = [b["keyword"] for b in blocks]
+    풀분석결과 = _batch_full_analyze(keywords, workspace)
+    if 풀분석결과:
+        full_rows = []
+        for block in blocks:
+            merged = _merge_full_analyze_synonyms(block, 풀분석결과)
+            if merged:
+                full_rows.append({"fa": merged, "dom": domain, "kw": block["keyword"]})
+        full_sql = f"UPDATE {tbl} SET full_analysis=:fa WHERE domain=:dom AND keyword=:kw"
+        full_count = _chunked_update(full_rows, full_sql)
+        logger.info("reanalyze_after_build: full_analysis 업데이트 complete — %d건", full_count)
+    else:
+        full_count = 0
+        logger.warning("reanalyze_after_build: FullTest 결과 없음 — full_analysis 업데이트 스킵")
+
+    return {
+        "workspace": workspace,
+        "domain": domain,
+        "analysis_updated": analysis_count,
+        "full_analysis_updated": full_count,
+    }
 
 
 def save_last_selected(db, user_id: str, workspace: str, domain: str, keyword_id: int):
