@@ -46,11 +46,14 @@ export default function Phase1Pipeline() {
   const [showColumnModal, setShowColumnModal] = useState(false)
   const [dataStepElapsed, setDataStepElapsed] = useState<Record<number, number>>({})
   const [dataStepOutputs, setDataStepOutputs] = useState<Record<number, string>>({})
+  const [dataFileTabs, setDataFileTabs] = useState<Record<string, string>>({})
+  const [dataActiveViewTab, setDataActiveViewTab] = useState<string | null>(null)
 
   const [siteCode, setSiteCode] = useState<string | null>(null)
 
   // ── 탭 선택 상태 ──
   const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
+  const handleTabChange = (key: string) => setActiveTab(key as 'log' | 'data')
 
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -394,6 +397,17 @@ export default function Phase1Pipeline() {
     }
   }
 
+  const 데이터파일보기 = async (filePath: string) => {
+    const tabKey = filePath.split('/').pop() || filePath
+    try {
+      const { data } = await 클라이언트.get('/preprocess/view-file', { params: { path: filePath } })
+      setDataFileTabs(prev => ({ ...prev, [tabKey]: data.content }))
+      setDataActiveViewTab(tabKey)
+    } catch {
+      message.error('파일 읽기 실패')
+    }
+  }
+
   // 파일 존재 기반으로 stepStatuses 보정
   const 유효단계상태 = useMemo(() => {
     if (runId !== null && !ws.isCompleted) {
@@ -456,7 +470,7 @@ export default function Phase1Pipeline() {
 
       <Tabs
         activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as 'log' | 'data')}
+        onChange={handleTabChange}
         type="card"
         destroyInactiveTabPane
         style={{ padding: '0 0' }}
@@ -588,6 +602,7 @@ export default function Phase1Pipeline() {
                         onRunAll={데이터전체실행핸들러}
                         onRunStep={데이터단계실행핸들러}
                         onOpenColumnModal={() => setShowColumnModal(true)}
+                        onViewFile={데이터파일보기}
                       />
                     </div>
                   </Card>
@@ -599,9 +614,9 @@ export default function Phase1Pipeline() {
                     <div style={{ padding: 16, minHeight: 300 }}>
                       <LogPanel
                         logs={dataWs.logs}
-                        fileTabs={{}}
-                        activeViewTab={null}
-                        onTabChange={() => {}}
+                        fileTabs={dataFileTabs}
+                        activeViewTab={dataActiveViewTab}
+                        onTabChange={setDataActiveViewTab}
                         isRunning={데이터실행중}
                       />
                     </div>

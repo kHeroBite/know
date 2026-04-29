@@ -1,19 +1,19 @@
 import { Button, Space, Typography, Tag, Progress } from 'antd'
 import {
   PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
-  CloseCircleOutlined, SettingOutlined,
+  CloseCircleOutlined, SettingOutlined, EyeOutlined,
 } from '@ant-design/icons'
 
 const { Text } = Typography
 
 // ── 데이터기반 전처리 6단계 정의 ──
 const 단계목록 = [
-  { num: 1, name: '컬럼분석',   color: '#1677ff', output: 'output/*.txt' },
-  { num: 2, name: '정제',       color: '#52c41a', output: 'refine.txt' },
-  { num: 3, name: '형태소분석', color: '#fa8c16', output: 'analyzed.txt' },
-  { num: 4, name: '결과변환',   color: '#722ed1', output: 'transform.txt' },
-  { num: 5, name: '유사어검사', color: '#eb2f96', output: 'synonym.txt' },
-  { num: 6, name: 'DB업데이트', color: '#13c2c2', output: '' },
+  { num: 1, name: '컬럼분석',   color: '#1677ff', outputFile: '' },
+  { num: 2, name: '정제',       color: '#52c41a', outputFile: 'work/refine.txt' },
+  { num: 3, name: '형태소분석', color: '#fa8c16', outputFile: 'work/analyzed.txt' },
+  { num: 4, name: '결과변환',   color: '#722ed1', outputFile: 'work/transform.txt' },
+  { num: 5, name: '유사어검사', color: '#eb2f96', outputFile: 'work/synonym.txt' },
+  { num: 6, name: 'DB업데이트', color: '#13c2c2', outputFile: 'work/keywords.txt' },
 ]
 
 interface DataControlPanelProps {
@@ -35,6 +35,7 @@ interface DataControlPanelProps {
   onRunAll: () => void
   onRunStep: (stepNum: number) => void
   onOpenColumnModal: () => void
+  onViewFile?: (filePath: string) => void
 }
 
 function 경과표시(sec: number): string {
@@ -43,10 +44,10 @@ function 경과표시(sec: number): string {
 }
 
 export default function DataControlPanel({
-  selectedColumns, filenames, hasFiles,
+  workspace, selectedColumns, filenames, hasFiles,
   isRunning, isCompleted, runId,
   stepStatuses, stepPercents, stepElapsed, stepOutputs,
-  onRunAll, onRunStep, onOpenColumnModal,
+  onRunAll, onRunStep, onOpenColumnModal, onViewFile,
 }: DataControlPanelProps) {
 
   const 실행가능 = (stepNum: number): boolean => {
@@ -105,6 +106,9 @@ export default function DataControlPanel({
           const running = status === 'running'
           const completed = status === 'completed'
           const failed = status === 'failed'
+          const buildPath = workspace && step.outputFile
+            ? `${workspace}/build/${step.outputFile}`
+            : ''
 
           return (
             <div
@@ -170,9 +174,20 @@ export default function DataControlPanel({
                 {!status && <Text type="secondary" style={{ fontSize: 12 }}>대기</Text>}
               </div>
 
-              {/* 단계 실행 버튼 (step 1 컬럼분석은 제외) */}
-              {step.num !== 1 && (
-                <Space size={4}>
+              {/* 버튼 영역 */}
+              <Space size={4}>
+                {/* 보기 버튼: 완료된 단계 + 파일 경로 있을 때 */}
+                {completed && buildPath && onViewFile && (
+                  <Button
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => onViewFile(buildPath)}
+                  >
+                    보기
+                  </Button>
+                )}
+                {/* 실행 버튼: step 1 컬럼분석은 제외 */}
+                {step.num !== 1 && (
                   <Button
                     size="small"
                     type={completed ? 'default' : 'primary'}
@@ -183,8 +198,8 @@ export default function DataControlPanel({
                   >
                     실행
                   </Button>
-                </Space>
-              )}
+                )}
+              </Space>
             </div>
           )
         })}
