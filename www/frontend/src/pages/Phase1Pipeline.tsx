@@ -200,16 +200,16 @@ export default function Phase1Pipeline() {
     fetchSiteCode()
   }, [selectedWorkspace])
 
-  // ── siteCode 변경 시 컬럼 설정 prefill ──
+  // ── siteCode or workspace 변경 시 컬럼 설정 prefill ──
   useEffect(() => {
     const prefillColumns = async () => {
-      if (!siteCode) {
+      const configKey = siteCode || (selectedWorkspace ? `ws:${selectedWorkspace}` : null)
+      if (!configKey) {
         setSelectedColumns([])
         return
       }
       try {
-        const { data } = await phase1DataAPI.컬럼설정조회(siteCode)
-        // 미존재 site_code이어도 항상 배열 fallback 보장
+        const { data } = await phase1DataAPI.컬럼설정조회(configKey)
         const cols = Array.isArray(data?.selected_columns) ? data.selected_columns : []
         setSelectedColumns(cols)
       } catch {
@@ -217,7 +217,7 @@ export default function Phase1Pipeline() {
       }
     }
     prefillColumns()
-  }, [siteCode])
+  }, [siteCode, selectedWorkspace])
 
   const 실행핸들러 = async (params: {
     category: string

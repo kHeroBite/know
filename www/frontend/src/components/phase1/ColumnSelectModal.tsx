@@ -123,8 +123,11 @@ export default function ColumnSelectModal({
     }
     set저장중(true)
     try {
-      if (siteCode && siteCode.length > 0) {
-        await phase1DataAPI.컬럼설정저장(siteCode, 선택컬럼)
+      const configKey = (siteCode && siteCode.length > 0)
+        ? siteCode
+        : (workspace ? `ws:${workspace}` : null)
+      if (configKey) {
+        await phase1DataAPI.컬럼설정저장(configKey, 선택컬럼)
       }
       message.success('컬럼 설정 저장 완료')
       onSave(선택컬럼)
