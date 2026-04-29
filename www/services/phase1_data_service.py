@@ -64,7 +64,7 @@ _COL_PATTERN = re.compile(r'^\(([A-Z_][A-Z0-9_]*)$')
 _WRAPPER_BLOCKS = {"DQ_DOC"}
 
 # refine_keywords 내부 정규식
-_BRACKET_RE = re.compile(r'[\(\[\]\)]')
+_BRACKET_RE = re.compile(r'[\(\[\]\)/]')
 _BOUNDARY_RE1 = re.compile(r'([^A-Z0-9])([A-Z])')
 _BOUNDARY_RE2 = re.compile(r'([^A-Z0-9])([0-9])')
 
@@ -373,7 +373,9 @@ class Phase1Data서비스:
                 n = len(col_samples)
                 threshold = n * 0.5
                 # 우선순위 순으로 검사 (다중문자 → 단일문자)
-                candidates = [' > ', ' | ', ' / ', ',', '#', '|', '/', '\t', ';', '·', '•']
+                # '/' 단독은 제외 — 상품명 내부 슬래시(바지/팬츠)와 구분 불가. ' / '(공백포함)만 허용.
+                # '( ) [ ]'는 refine_keywords 2단계에서 자동 처리되므로 구분자 추천 불필요.
+                candidates = [' > ', ' | ', ' / ', ',', '#', '|', '\t', ';', '·', '•']
                 for delim in candidates:
                     if sum(1 for s in col_samples if delim in s) >= threshold:
                         return delim
