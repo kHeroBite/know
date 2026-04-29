@@ -340,10 +340,10 @@ class Phase1Data서비스:
 
     @staticmethod
     async def analyze_columns(filenames: List[str], workspace: str = "") -> Dict:
-        """업로드된 SGML 파일들에서 컬럼명을 추출하고 각 컬럼의 샘플 5개를 반환.
+        """업로드된 SGML 파일들에서 컬럼명을 추출하고 각 컬럼의 샘플 10개를 반환.
 
         - 여러 파일의 컬럼명은 합집합
-        - 샘플은 첫 번째로 컬럼이 등장하는 파일에서 최대 5개
+        - 샘플은 첫 번째로 컬럼이 등장하는 파일에서 최대 10개
         """
         loop = asyncio.get_event_loop()
 
@@ -361,14 +361,14 @@ class Phase1Data서비스:
                 for col in extract_columns_from_sgml(fp):
                     all_columns.add(col)
             sorted_cols = sorted(all_columns)
-            # 샘플 수집: 컬럼별로 첫 번째로 값이 있는 파일에서 5개까지
+            # 샘플 수집: 컬럼별로 첫 번째로 값이 있는 파일에서 10개까지
             samples: Dict[str, List[str]] = {col: [] for col in sorted_cols}
             remaining = set(sorted_cols)
             for fp in valid_paths:
                 if not remaining:
                     break
                 needed = sorted(remaining)
-                partial = sample_column_values(fp, needed, max_samples=5)
+                partial = sample_column_values(fp, needed, max_samples=10)
                 for col, vals in partial.items():
                     if vals:
                         samples[col] = vals
