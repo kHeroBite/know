@@ -38,12 +38,18 @@ export function usePhase1DataWebSocket(runId: string | null) {
 
     const applyLogs = (entries: LogEntry[]) => {
       setLogs(entries)
-      // stepStatuses 집계: 단계별 마지막 상태 추적
+      // stepStatuses 집계: 단계별 상태 추적 (completed는 running으로 되돌리지 않음)
       const stepLatest: Record<number, LogEntry> = {}
       let pipelineCompleted = false
       let hasFailed = false
       for (const e of entries) {
-        stepLatest[e.step_num] = e
+        const prev = stepLatest[e.step_num]
+        // 이미 completed인 step은 running/대기 로그로 덮어쓰지 않음
+        if (prev && prev.status === 'completed' && e.status !== 'completed' && e.status !== 'failed') {
+          // skip — completed 유지
+        } else {
+          stepLatest[e.step_num] = e
+        }
         if (e.step_num === -1 && e.status === 'completed') pipelineCompleted = true
         if (e.status === 'failed') hasFailed = true
       }
@@ -107,10 +113,13 @@ export function usePhase1DataWebSocket(runId: string | null) {
         try {
           const data: LogEntry = JSON.parse(e.data)
           setLogs(prev => [...prev.slice(-999), data])
-          // stepStatuses 실시간 갱신
+          // stepStatuses 실시간 갱신 (completed → running 역전 방지)
           if (data.step_num >= 1) {
-            stepStatusesRef.current = { ...stepStatusesRef.current, [data.step_num]: data.status }
-            setStepStatuses(prev => ({ ...prev, [data.step_num]: data.status }))
+            const prevStatus = stepStatusesRef.current[data.step_num]
+            if (prevStatus !== 'completed' || data.status === 'completed' || data.status === 'failed') {
+              stepStatusesRef.current = { ...stepStatusesRef.current, [data.step_num]: data.status }
+              setStepStatuses(prev => ({ ...prev, [data.step_num]: data.status }))
+            }
           }
           if ((data.status === 'completed' && data.step_num === -1) || data.status === 'failed') {
             doMarkDone()

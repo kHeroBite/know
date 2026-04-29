@@ -495,7 +495,7 @@ class Phase1Data서비스:
 
                 percent = 10 + int((idx + 1) / total_cols * progress_span)
                 _publish_data(
-                    run_id, 2, "컬럼처리", percent,
+                    run_id, 1, "컬럼처리", percent,
                     f"[{idx+1}/{total_cols}] {col_name} → {len(keywords)}개 키워드",
                     "running"
                 )
@@ -503,8 +503,7 @@ class Phase1Data서비스:
             for idx, col_spec in enumerate(columns):
                 await loop.run_in_executor(None, _process_column, col_spec, idx)
 
-            # Step 3: 저장 완료
-            _publish_data(run_id, 3, "저장완료", 95,
+            _publish_data(run_id, 1, "저장완료", 95,
                           f"output/ 하위 {total_cols}개 파일 생성 완료", "running")
 
             elapsed = round(time.time() - start_time, 1)
