@@ -83,14 +83,20 @@ async def start_execution(요청: Phase1실행요청, background_tasks: Backgrou
 @라우터.get("/preprocess/view-file")
 async def view_file(path: str = Query("")):
     """서버 파일 내용 읽기 (work 디렉토리 내 파일만)"""
-    if not path or "/work/" not in path:
+    if not path or "work" not in path:
         raise ValidationError("work 디렉토리 파일만 조회 가능")
+    # 상대경로(workspace명/build/work/...) 처리
+    if not path.startswith("/"):
+        from core.constants import WORKSPACE_BASE
+        abs_path = os.path.join(WORKSPACE_BASE, path)
+    else:
+        abs_path = path
     try:
-        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+        with open(abs_path, "r", encoding="utf-8-sig", errors="replace") as f:
             content = f.read(100000)  # 최대 100KB
-        return {"content": content, "path": path}
+        return {"content": content, "path": abs_path}
     except FileNotFoundError:
-        raise NotFoundError(f"파일: {path}")
+        raise NotFoundError(f"파일: {abs_path}")
 
 
 @라우터.get("/preprocess/step-status")
