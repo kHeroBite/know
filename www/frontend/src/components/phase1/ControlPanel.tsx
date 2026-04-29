@@ -139,7 +139,14 @@ export default function ControlPanel({
                     <>
                       <Text type="success"><CheckCircleOutlined /> 완료</Text>
                       {elapsed && elapsed > 0 && <Text type="secondary" style={{ fontSize: 12 }}>({경과표시(elapsed)})</Text>}
-                      {output && (() => { const m = output.match(/\(([^)]+)\)/); return m ? <Text style={{ fontSize: 12, color: step.color }}>{m[1]}</Text> : null })()}
+                      {output && (() => {
+                        const m = output.match(/\(([^)]+)\)/)
+                        if (m) return <Text style={{ fontSize: 12, color: step.color }}>{m[1]}</Text>
+                        // 괄호 없는 "N건" 형태 (DB업데이트 등)
+                        const m2 = output.match(/^(\d+[^\n]*)$/)
+                        if (m2) return <Text style={{ fontSize: 12, color: step.color }}>{m2[1]}</Text>
+                        return null
+                      })()}
                     </>
                   )}
                   {running && (

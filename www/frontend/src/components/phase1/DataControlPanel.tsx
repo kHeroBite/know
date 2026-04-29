@@ -80,27 +80,28 @@ export default function DataControlPanel({
           onClick={onOpenColumnModal}
           title="컬럼 선택 설정"
         >
-          설정
+          컬럼분석
         </Button>
-      </div>
-
-      {/* 컬럼/파일 요약 */}
-      <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
-        파일 {filenames.length}개 | 컬럼 {selectedColumns.length}개
-        {selectedColumns.length > 0 && (
-          <span style={{ marginLeft: 6 }}>
-            ({selectedColumns.slice(0, 3).map(c => c.name).join(', ')}
-            {selectedColumns.length > 3 ? ` 외 ${selectedColumns.length - 3}개` : ''})
-          </span>
-        )}
       </div>
 
       {/* 6단계 카드 목록 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {단계목록.map(step => {
-          const status = stepStatuses[step.num]
+          // step 1: selectedColumns 기반으로 완료 여부 판단
+          const isStep1 = step.num === 1
+          const step1Done = isStep1 && selectedColumns.length >= 1
+          const status = isStep1
+            ? (step1Done ? 'completed' : (stepStatuses[1] ?? undefined))
+            : stepStatuses[step.num]
           const elapsed = stepElapsed?.[step.num] ?? 0
           const output = stepOutputs?.[step.num] ?? ''
+          // output에서 정보 추출: "(N건, 형태소:M ...)" 또는 괄호 없는 "N건"
+          const outputInfo = (() => {
+            const m = output.match(/\(([^)]+)\)/)
+            if (m) return m[1]
+            const m2 = output.match(/^(\d+[^\n]*)$/)
+            return m2 ? m2[1] : null
+          })()
           const running = status === 'running'
           const completed = status === 'completed'
           const failed = status === 'failed'
@@ -118,7 +119,7 @@ export default function DataControlPanel({
             >
               {/* 단계 태그 */}
               <Tag color={step.color} style={{ margin: 0, minWidth: 72, textAlign: 'center' }}>
-                {step.num}. {step.name}
+                {step.name}
               </Tag>
 
               {/* 상태 영역 */}
@@ -126,11 +127,28 @@ export default function DataControlPanel({
                 {completed && (
                   <>
                     <Text type="success"><CheckCircleOutlined /> 완료</Text>
-                    {elapsed > 0 && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>({경과표시(elapsed)})</Text>
-                    )}
-                    {output && (
-                      <Text style={{ fontSize: 12, color: step.color }}>{output}</Text>
+                    {/* step 1: 파일/컬럼 요약 표시 */}
+                    {isStep1 ? (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        파일 {filenames.length}개 | 컬럼 {selectedColumns.length}개
+                        {selectedColumns.length > 0 && (
+                          <>
+                            {' ('}
+                            {selectedColumns.slice(0, 3).map(c => c.name).join(', ')}
+                            {selectedColumns.length > 3 ? ` 외 ${selectedColumns.length - 3}개` : ''}
+                            {')'}
+                          </>
+                        )}
+                      </Text>
+                    ) : (
+                      <>
+                        {elapsed > 0 && (
+                          <Text type="secondary" style={{ fontSize: 12 }}>({경과표시(elapsed)})</Text>
+                        )}
+                        {outputInfo && (
+                          <Text style={{ fontSize: 12, color: step.color }}>{outputInfo}</Text>
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -152,27 +170,21 @@ export default function DataControlPanel({
                 {!status && <Text type="secondary" style={{ fontSize: 12 }}>대기</Text>}
               </div>
 
-              {/* 단계 실행 버튼 */}
-              <Space size={4}>
-                {step.num === 1 && (
+              {/* 단계 실행 버튼 (step 1 컬럼분석은 제외) */}
+              {step.num !== 1 && (
+                <Space size={4}>
                   <Button
                     size="small"
-                    icon={<SettingOutlined />}
-                    onClick={onOpenColumnModal}
-                    title="컬럼 선택"
-                  />
-                )}
-                <Button
-                  size="small"
-                  type={completed ? 'default' : 'primary'}
-                  style={!completed && !running ? { background: step.color, borderColor: step.color } : {}}
-                  icon={<PlayCircleOutlined />}
-                  disabled={!실행가능(step.num)}
-                  onClick={() => onRunStep(step.num)}
-                >
-                  실행
-                </Button>
-              </Space>
+                    type={completed ? 'default' : 'primary'}
+                    style={!completed && !running ? { background: step.color, borderColor: step.color } : {}}
+                    icon={<PlayCircleOutlined />}
+                    disabled={!실행가능(step.num)}
+                    onClick={() => onRunStep(step.num)}
+                  >
+                    실행
+                  </Button>
+                </Space>
+              )}
             </div>
           )
         })}

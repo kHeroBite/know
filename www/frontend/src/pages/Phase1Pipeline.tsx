@@ -114,10 +114,15 @@ export default function Phase1Pipeline() {
         setStepElapsed(prev => ({ ...prev, [entry.step_num]: entry.elapsed_sec! }))
       }
       if (entry.message && entry.step_num >= 1) {
+        // 경로 포함: "complete: /path/file (N건...)"
         const m = entry.message.match(/complete:\s*(\/[^\s(]+)\s*(\([^)]+\))?/)
         if (m) {
           const output = m[1].trim() + (m[2] ? ' ' + m[2] : '')
           setStepOutputs(prev => ({ ...prev, [entry.step_num]: output }))
+        } else {
+          // 경로 없음: "complete: N건" (DB업데이트 등)
+          const m2 = entry.message.match(/complete:\s*(\d+[^\n]*)/)
+          if (m2) setStepOutputs(prev => ({ ...prev, [entry.step_num]: m2[1].trim() }))
         }
       }
     }
@@ -169,15 +174,9 @@ export default function Phase1Pipeline() {
     이전실행로드()
   }, [selectedWorkspace])
 
-  // ── 이전 데이터기반 run 복원 ──
+  // ── 워크스페이스 변경 시 데이터기반 상태 초기화 ──
   useEffect(() => {
-    const 이전데이터실행로드 = async () => {
-      try {
-        const { data } = await phase1DataAPI.최근실행(selectedWorkspace ?? '')
-        if (data.run_id) setDataRunId(data.run_id)
-      } catch { /* ignore */ }
-    }
-    이전데이터실행로드()
+    setDataRunId(null)
   }, [selectedWorkspace])
 
   // ── 워크스페이스 변경 시 site_code 추출 ──
@@ -289,6 +288,9 @@ export default function Phase1Pipeline() {
         if (m) {
           const output = m[1].trim() + (m[2] ? ' ' + m[2] : '')
           setDataStepOutputs(prev => ({ ...prev, [entry.step_num]: output }))
+        } else {
+          const m2 = entry.message.match(/complete:\s*(\d+[^\n]*)/)
+          if (m2) setDataStepOutputs(prev => ({ ...prev, [entry.step_num]: m2[1].trim() }))
         }
       }
     }
@@ -301,7 +303,7 @@ export default function Phase1Pipeline() {
       return
     }
     if (selectedColumns.length === 0) {
-      message.warning('컬럼을 먼저 선택하세요 (설정 버튼)')
+      message.warning('컬럼을 먼저 선택하세요 (컬럼분석 버튼)')
       return
     }
     try {
@@ -329,7 +331,7 @@ export default function Phase1Pipeline() {
       return
     }
     if (selectedColumns.length === 0 && stepNum === 1) {
-      message.warning('컬럼을 먼저 선택하세요 (설정 버튼)')
+      message.warning('컬럼을 먼저 선택하세요 (컬럼분석 버튼)')
       return
     }
     try {
@@ -545,28 +547,29 @@ export default function Phase1Pipeline() {
             key: 'data',
             label: '데이터기반 전처리',
             children: (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                {/* 왼쪽: 파일 패널 + 실행 패널 */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <Card>
-                    <DataFilePanel
-                      workspace={selectedWorkspace ?? undefined}
-                      siteCode={siteCode ?? undefined}
-                      selectedColumns={selectedColumns}
-                      onFilesChange={(count, filenames) => {
-                        setDataFilesCount(count)
-                        setDataFilenames(filenames)
-                      }}
-                      onColumnsConfigured={(cols) => {
-                        setSelectedColumns(cols)
-                      }}
-                      showColumnModal={showColumnModal}
-                      onColumnModalClose={() => setShowColumnModal(false)}
-                    />
-                  </Card>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* 1행: 데이터 파일 (전체 너비) */}
+                <Card>
+                  <DataFilePanel
+                    workspace={selectedWorkspace ?? undefined}
+                    siteCode={siteCode ?? undefined}
+                    selectedColumns={selectedColumns}
+                    onFilesChange={(count, filenames) => {
+                      setDataFilesCount(count)
+                      setDataFilenames(filenames)
+                    }}
+                    onColumnsConfigured={(cols) => {
+                      setSelectedColumns(cols)
+                    }}
+                    showColumnModal={showColumnModal}
+                    onColumnModalClose={() => setShowColumnModal(false)}
+                  />
+                </Card>
 
-                  <Card bodyStyle={{ padding: 0 }}>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* 2행: 전처리 실행 + 실행 로그 */}
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <Card bodyStyle={{ padding: 0 }} style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
                       <span style={{ fontWeight: 600, fontSize: 16 }}>전처리 실행</span>
                     </div>
                     <div style={{ padding: 16 }}>
@@ -588,26 +591,22 @@ export default function Phase1Pipeline() {
                       />
                     </div>
                   </Card>
-                </div>
 
-                {/* 오른쪽: 실시간 로그 */}
-                <Card
-                  bodyStyle={{ padding: 0 }}
-                  style={{ flex: 1, minWidth: 0 }}
-                >
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
-                  </div>
-                  <div style={{ padding: 16, minHeight: 300 }}>
-                    <LogPanel
-                      logs={dataWs.logs}
-                      fileTabs={{}}
-                      activeViewTab={null}
-                      onTabChange={() => {}}
-                      isRunning={데이터실행중}
-                    />
-                  </div>
-                </Card>
+                  <Card bodyStyle={{ padding: 0 }} style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>실행 로그</span>
+                    </div>
+                    <div style={{ padding: 16, minHeight: 300 }}>
+                      <LogPanel
+                        logs={dataWs.logs}
+                        fileTabs={{}}
+                        activeViewTab={null}
+                        onTabChange={() => {}}
+                        isRunning={데이터실행중}
+                      />
+                    </div>
+                  </Card>
+                </div>
               </div>
             ),
           },
