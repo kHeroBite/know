@@ -33,6 +33,27 @@ export default function ColumnSelectModal({
   const [행상태, set행상태] = useState<Record<string, 컬럼행상태>>({})
   const [저장중, set저장중] = useState(false)
 
+  // 컬럼 목록 + 저장된 선택 → 행상태 변환 (기존 선택 유지 우선)
+  const 컬럼행상태로변환 = (
+    컬럼: ColumnInfo[],
+    저장된: ColumnSpec[],
+    기존상태: Record<string, 컬럼행상태>
+  ): Record<string, 컬럼행상태> => {
+    const 저장맵 = new Map(저장된.map(c => [c.name, c.split_delimiter ?? '']))
+    const 결과: Record<string, 컬럼행상태> = {}
+    for (const col of 컬럼) {
+      const 저장된구분자 = 저장맵.get(col.name)
+      const 추천구분자 = col.suggested_delimiter ?? ''
+      결과[col.name] = {
+        selected: 저장맵.has(col.name),
+        split_delimiter: (저장된구분자 !== undefined && 저장된구분자 !== '')
+          ? 저장된구분자
+          : (기존상태[col.name]?.split_delimiter || 추천구분자),
+      }
+    }
+    return 결과
+  }
+
   // 모달 열릴 때마다 컬럼 분석 호출
   useEffect(() => {
     if (!open) return
@@ -46,23 +67,8 @@ export default function ColumnSelectModal({
         const { data } = await phase1DataAPI.컬럼분석(filenames, workspace)
         const 컬럼: ColumnInfo[] = data.columns || []
         set분석결과(컬럼)
-
-        // initialColumns 기반 prefill
-        const 초기상태: Record<string, 컬럼행상태> = {}
-        const 초기맵 = new Map<string, string>()
-        for (const c of initialColumns) {
-          초기맵.set(c.name, c.split_delimiter ?? '')
-        }
-        for (const col of 컬럼) {
-          // 기존 저장된 구분자 우선, 없으면 API 추천 구분자 사용
-          const 저장된구분자 = 초기맵.get(col.name)
-          const 추천구분자 = col.suggested_delimiter ?? ''
-          초기상태[col.name] = {
-            selected: 초기맵.has(col.name),
-            split_delimiter: (저장된구분자 !== undefined && 저장된구분자 !== '') ? 저장된구분자 : 추천구분자,
-          }
-        }
-        set행상태(초기상태)
+        // 분석 완료 후 최신 initialColumns로 prefill (클로저 시점의 값 사용)
+        set행상태(prev => 컬럼행상태로변환(컬럼, initialColumns, prev))
       } catch (err: any) {
         message.error(err.response?.data?.detail || '컬럼 분석 실패')
         set분석결과([])
@@ -72,7 +78,14 @@ export default function ColumnSelectModal({
       }
     }
     분석실행()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, filenames.join(','), workspace])
+
+  // initialColumns가 나중에 채워지면(비동기 로딩) 분석결과에 prefill 재적용
+  useEffect(() => {
+    if (!open || 분석결과.length === 0) return
+    set행상태(prev => 컬럼행상태로변환(분석결과, initialColumns, prev))
+  }, [initialColumns])
 
   const 체크변경 = (name: string, checked: boolean) => {
     set행상태(prev => ({
