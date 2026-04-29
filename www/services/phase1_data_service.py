@@ -367,17 +367,16 @@ class Phase1Data서비스:
                         remaining.discard(col)
             # suggested_delimiter 휴리스틱 계산
             def _detect_delimiter(col_samples: List[str]) -> Optional[str]:
-                """샘플 5개 검사: 50%+ 에 포함된 구분자 반환."""
+                """샘플에서 가장 빈도 높은 구분자 반환 (50%+ 조건)."""
                 if not col_samples:
                     return None
                 n = len(col_samples)
                 threshold = n * 0.5
-                if sum(1 for s in col_samples if ' > ' in s) >= threshold:
-                    return ' > '
-                if sum(1 for s in col_samples if ',' in s) >= threshold:
-                    return ','
-                if sum(1 for s in col_samples if '\t' in s) >= threshold:
-                    return '\t'
+                # 우선순위 순으로 검사 (다중문자 → 단일문자)
+                candidates = [' > ', ' | ', ' / ', ',', '#', '|', '/', '\t', ';', '·', '•']
+                for delim in candidates:
+                    if sum(1 for s in col_samples if delim in s) >= threshold:
+                        return delim
                 return None
 
             result_columns = [
