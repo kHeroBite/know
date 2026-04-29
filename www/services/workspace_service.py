@@ -107,21 +107,41 @@ def _write_domain_meta(data: dict[str, str]) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def _get_domain_to_site_code_map() -> dict[str, str]:
+    """sites 테이블에서 domain_code → site_code 매핑 반환 (site_code fallback용)."""
+    try:
+        import sqlite3 as _sqlite3
+        from core.config import settings as _settings
+        db_path = _settings.DB_URL.replace("sqlite:///", "")
+        with _sqlite3.connect(db_path) as conn:
+            rows = conn.execute("SELECT domain_code, site_code FROM sites WHERE site_code != ''").fetchall()
+            return {row[0]: row[1] for row in rows if row[0] and row[1]}
+    except Exception:
+        return {}
+
+
 def list_workspaces_service() -> list[dict[str, Any]]:
     """폴더 list_tasks + 상태 JSON merge."""
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     상태 = _read_state()
+    domain_to_site = _get_domain_to_site_code_map()
     결과 = []
     for 항목 in sorted(Path(WORKSPACE_DIR).iterdir()):
         if 항목.is_dir() and not 항목.name.startswith("."):
             ws상태 = 상태.get(항목.name, {"status": "IDLE", "domain": None})
+            site_code = ws상태.get("site_code")
+            # site_code 미설정 시 domain_code로 자동 매핑
+            if not site_code:
+                domain = ws상태.get("domain")
+                if domain:
+                    site_code = domain_to_site.get(domain)
             결과.append({
                 "name": 항목.name,
                 "status": ws상태.get("status", "IDLE"),
                 "domain": ws상태.get("domain"),
                 "connected_by": ws상태.get("connected_by"),
                 "color": ws상태.get("color"),
-                "site_code": ws상태.get("site_code"),
+                "site_code": site_code,
                 "backup_name": ws상태.get("backup_name"),
             })
     return 결과

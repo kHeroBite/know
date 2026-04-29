@@ -287,19 +287,57 @@ def _sync_synonym(file_path: str, domain: str, workspace_dir: str) -> str:
     return f"{result} ({kw_cnt}건, 유사어 {syn_cnt}건)"
 
 
-def _sync_freeze(domain: str, workspace_dir: str) -> str:
-    """DB업데이트: freeze_service(키워드 INSERT) + reanalyze_after_build(analysis/full_analysis UPDATE)"""
+def _sync_freeze(domain: str, workspace_dir: str, run_id: str = "", step_num: int = 6, step_name: str = "DB업데이트") -> str:
+    """DB업데이트: 배치 INSERT + 진행률 publish + reanalyze_after_build."""
     from core.database import 세션팩토리
-    from services.assignment_service import freeze_service, reanalyze_after_build
+    from services.assignment_service import ensure_kw_table, reanalyze_after_build
+    from sqlalchemy import text
+    from core.constants import WORKSPACE_BASE
+
     ws_name = Path(workspace_dir).name  # "A", "B" 등
+    refine_path = os.path.join(WORKSPACE_BASE, ws_name, "build", "work", "refine.txt")
+    if not os.path.isfile(refine_path):
+        raise Exception(f"refine.txt 없음: {refine_path}")
+
+    with open(refine_path, encoding="utf-8", errors="replace") as f:
+        keywords = [line.strip() for line in f if line.strip()]
+
+    if not keywords:
+        raise Exception("키워드가 없습니다")
+
+    tbl = f"kw_{ws_name}"
     db = 세션팩토리()
     try:
-        result = freeze_service(db, ws_name, domain)
-        total = result['total']
+        ensure_kw_table(db, ws_name)
+        db.execute(text(f"DELETE FROM {tbl} WHERE domain=:dom"), {"dom": domain})
+        try:
+            db.execute(text("DELETE FROM user_last_selected WHERE workspace=:ws AND domain=:dom"),
+                       {"ws": ws_name, "dom": domain})
+        except Exception:
+            pass
+
+        total = len(keywords)
+        BATCH = 200
+        inserted = 0
+        for i, kw in enumerate(keywords, 1):
+            db.execute(text(f"""
+                INSERT INTO {tbl} (domain, line_num, keyword, analysis, full_analysis, status)
+                VALUES (:dom, :num, :kw, '', '', 'pending')
+            """), {"dom": domain, "num": i, "kw": kw})
+            inserted += 1
+            if inserted % BATCH == 0 and run_id:
+                db.commit()
+                pct = min(90, int(inserted / total * 90))
+                _publish_phase1(run_id, step_num, step_name, pct,
+                                f"INSERT {inserted}/{total}건", "running")
+        db.commit()
     finally:
         db.close()
 
     # analysis / full_analysis 업데이트
+    if run_id:
+        _publish_phase1(run_id, step_num, step_name, 95,
+                        f"INSERT 완료 {total}건 — 형태소분석 결과 갱신 중", "running")
     reanalyze_result = reanalyze_after_build(ws_name, domain)
     ana_cnt = reanalyze_result.get("analysis_updated", 0)
     full_cnt = reanalyze_result.get("full_analysis_updated", 0)
@@ -331,7 +369,7 @@ async def _run_python(run_id: str, step_num: int, step: dict, domain: str, file_
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
         _publish_phase1(run_id, step_num, step["name"], 100, f"check_synonyms complete: {result}", "running", elapsed)
     elif func == "freeze":
-        result = await loop.run_in_executor(None, _sync_freeze, domain, workspace_dir)
+        result = await loop.run_in_executor(None, _sync_freeze, domain, workspace_dir, run_id, step_num, step["name"])
         elapsed = time.time() - _step_start_times.get(f"{run_id}_{step_num}", time.time())
         _publish_phase1(run_id, step_num, step["name"], 100, f"DB업데이트 complete: {result}", "running", elapsed)
 

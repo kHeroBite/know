@@ -728,8 +728,8 @@ class Phase1Data서비스:
             merged_count = await loop.run_in_executor(
                 None, Phase1Data서비스._merge_output_to_work, workspace
             )
-            _publish_data(run_id, 1, "병합완료", 8,
-                          f"병합 완료: {merged_count}개 키워드 → work/keywords.txt", "running")
+            _publish_data(run_id, 1, "병합완료", 100,
+                          f"병합 완료: {merged_count}개 키워드 → work/keywords.txt", "completed")
 
             # ── Stage 2~6: 로그기반 executor 재사용 (start_step=2) ──
             # relay 태스크: 구독 완료 후 run_phase1_service 호출 (race condition 방지)
