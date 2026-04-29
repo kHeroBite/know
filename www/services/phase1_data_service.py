@@ -67,6 +67,9 @@ _WRAPPER_BLOCKS = {"DQ_DOC"}
 _BRACKET_RE = re.compile(r'[\(\[\]\)/]')
 _BOUNDARY_RE1 = re.compile(r'([^A-Z0-9])([A-Z])')
 _BOUNDARY_RE2 = re.compile(r'([^A-Z0-9])([0-9])')
+# C안: 전처리 정규식
+_NUM_PREFIX_RE = re.compile(r'^\d+[.\+\-_]\s*')   # 앞에 붙는 번호 접두어 (1., 2+, 06-, 1_)
+_SPECIAL_SEP_RE = re.compile(r'[_\+]')             # _ + 는 구분자로 처리 (공백치환)
 
 
 def extract_columns_from_sgml(filepath: str) -> List[str]:
@@ -129,7 +132,8 @@ def refine_keywords(values: Iterable[str], split_delimiter: Optional[str] = None
 
     단계:
       1. split_delimiter 있으면 line.split(delimiter)
-      2. 괄호 [ ] ( ) → newline
+      1.5. [C안] 번호 접두어 제거 (숫자.텍스트 → 텍스트), _ + → 공백
+      2. 괄호 [ ] ( ) / → newline
       3. tab/space → newline
       4. 앞 -_ 제거 (lstrip)
       5. uppercase
@@ -148,6 +152,10 @@ def refine_keywords(values: Iterable[str], split_delimiter: Optional[str] = None
         else:
             parts = [v]
         for p in parts:
+            # 1.5. [C안] 번호 접두어 제거: "1.허리스트링..." → "허리스트링..."
+            p = _NUM_PREFIX_RE.sub('', p)
+            # 1.5. [C안] _ + → 공백으로 치환 (구분자로 사용)
+            p = _SPECIAL_SEP_RE.sub(' ', p)
             # 2. 괄호 → newline
             p = _BRACKET_RE.sub('\n', p)
             # 3. tab/space → newline
@@ -375,7 +383,7 @@ class Phase1Data서비스:
                 # 우선순위 순으로 검사 (다중문자 → 단일문자)
                 # '/' 단독은 제외 — 상품명 내부 슬래시(바지/팬츠)와 구분 불가. ' / '(공백포함)만 허용.
                 # '( ) [ ]'는 refine_keywords 2단계에서 자동 처리되므로 구분자 추천 불필요.
-                candidates = [' > ', ' | ', ' / ', ',', '#', '|', '\t', ';', '·', '•']
+                candidates = [' > ', ' | ', ' / ', ',', '#', '|', '_', '+', '\t', ';', '·', '•']
                 for delim in candidates:
                     if sum(1 for s in col_samples if delim in s) >= threshold:
                         return delim
