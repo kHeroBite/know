@@ -59,7 +59,7 @@ export default function ColumnSelectModal({
           const 추천구분자 = col.suggested_delimiter ?? ''
           초기상태[col.name] = {
             selected: 초기맵.has(col.name),
-            split_delimiter: 저장된구분자 !== undefined ? 저장된구분자 : 추천구분자,
+            split_delimiter: (저장된구분자 !== undefined && 저장된구분자 !== '') ? 저장된구분자 : 추천구분자,
           }
         }
         set행상태(초기상태)
@@ -162,7 +162,7 @@ export default function ColumnSelectModal({
       render: (name: string) => <Text strong>{name}</Text>,
     },
     {
-      title: '샘플값 (최대 5개)',
+      title: '샘플값 (최대 10개)',
       dataIndex: 'samples',
       key: 'samples',
       render: (samples: string[]) => {
@@ -171,7 +171,7 @@ export default function ColumnSelectModal({
         }
         return (
           <Space size={4} wrap>
-            {samples.slice(0, 5).map((s, i) => (
+            {samples.slice(0, 10).map((s, i) => (
               <Tooltip key={i} title={s}>
                 <span
                   style={{
