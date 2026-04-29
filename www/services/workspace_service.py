@@ -111,7 +111,7 @@ def _get_domain_to_site_code_map() -> dict[str, str]:
     """sites 테이블에서 domain_code → site_code 매핑 반환 (site_code fallback용)."""
     try:
         import sqlite3 as _sqlite3
-        from core.config import settings as _settings
+        from core.config import 설정값 as _settings
         db_path = _settings.DB_URL.replace("sqlite:///", "")
         with _sqlite3.connect(db_path) as conn:
             rows = conn.execute("SELECT domain_code, site_code FROM sites WHERE site_code != ''").fetchall()

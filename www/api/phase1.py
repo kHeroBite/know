@@ -93,7 +93,7 @@ async def view_file(path: str = Query("")):
         abs_path = path
     try:
         with open(abs_path, "r", encoding="utf-8-sig", errors="replace") as f:
-            content = f.read(100000)  # 최대 100KB
+            content = f.read(500000)  # 최대 500KB
         return {"content": content, "path": abs_path}
     except FileNotFoundError:
         raise NotFoundError(f"파일: {abs_path}")
