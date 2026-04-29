@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -32,9 +32,12 @@ def get_task_status(workspace: str = Query(...), domain: str = Query(...),
     return {"phase": phase_val, "my_phase": my_phase_val, "stats": stats}
 
 @라우터.post("/freeze")
-def freeze_service(workspace: str = Query(...), domain: str = Query(...),
+def freeze_service(background_tasks: BackgroundTasks,
+          workspace: str = Query(...), domain: str = Query(...),
           db: Session = Depends(db_session), current: dict = Depends(get_current_user)):
-    return assignment_service.freeze_service(db, workspace, domain)
+    result = assignment_service.freeze_service(db, workspace, domain)
+    background_tasks.add_task(assignment_service.reanalyze_after_build, workspace, domain)
+    return result
 
 @라우터.get("/list")
 def list_tasks(workspace: str = Query(...), domain: str = Query(...),
