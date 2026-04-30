@@ -557,6 +557,16 @@ export default function KnowledgeWork() {
     }
   }, [목록초기화, setMorphPrefillKw, setMorphTrigger])
 
+  // 선택된 키워드 변경 시 분석결과 자동 트리거 (형태소 + AI 동시)
+  useEffect(() => {
+    const kw = selected?.keyword
+    if (!kw) return
+    setMorphPrefillKw(kw)
+    setMorphTrigger(prev => prev + 1)
+    setAiKeyword(kw)
+    setAiTrigger(prev => prev + 1)
+  }, [selected?.keyword])
+
   const 사전빌드실행 = useCallback(() => {
     if (!selectedDomain || isBlocked) return
     executeBuild(selectedDomain, selectedWorkspace, {
