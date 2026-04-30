@@ -334,6 +334,14 @@ def _sync_freeze(domain: str, workspace_dir: str, run_id: str = "", step_num: in
     finally:
         db.close()
 
+    # 형태소 분석 자동 실행 (analysis/full_analysis 컬럼 채움)
+    try:
+        from services.assignment_service import reanalyze_after_build
+        reanalyze_result = reanalyze_after_build(ws_name, domain)
+        logger.info("[freeze] 자동 재분석 complete: %s", reanalyze_result)
+    except Exception as e:
+        logger.error("[freeze] 자동 재분석 실패: %s", e, exc_info=True)
+
     return f"{total}건"
 
 
