@@ -31,7 +31,6 @@ export default function MorphemeTab({
     try {
       const { data } = await 클라이언트.post('/morpheme/analyze', { keyword: kw, domain, workspace })
       setResult(data.result || '결과 없음')
-      onAnalysisDone?.()
     } catch {
       message.error('형태소분석 실패')
       setResult(null)
@@ -40,11 +39,10 @@ export default function MorphemeTab({
     }
   }
 
-  // 외부에서 키워드 주입 + 자동 분석
+  // 외부에서 키워드 주입만 — 자동 분석 금지 (사용자가 분석 버튼/Enter 누를 때만 실행)
   useEffect(() => {
     if (prefillTrigger && prefillTrigger > 0 && prefillKeyword) {
       setKeyword(prefillKeyword)
-      분석실행(prefillKeyword)
     }
   }, [prefillTrigger])
 
