@@ -67,10 +67,21 @@ export function parseAnalysisText(text: string): Token[] {
               idx++
             })
           } else {
-            const subParts = part.split(/(<<|>>|,)/).filter(Boolean)
-            subParts.forEach(sp => {
-              tokens.push({ text: sp, index: idx })
-              idx++
+            // 꺽쇠(<<,>>)는 별도 토큰, 콤마(,)는 단어 분리자로만 사용 (표시할 때는 단어 끝에 ,를 붙여 시각적 구분)
+            const bracketSplit = part.split(/(<<|>>)/).filter(Boolean)
+            bracketSplit.forEach(bp => {
+              if (bp === '<<' || bp === '>>') {
+                tokens.push({ text: bp, index: idx })
+                idx++
+                return
+              }
+              // 콤마 분리: STEEL,STILL → ['STEEL', 'STILL'] 각 단어를 별도 토큰으로 (마지막 외 단어 끝에 , 부착)
+              const commaParts = bp.split(',').filter(Boolean)
+              commaParts.forEach((cp, ci) => {
+                const txt = ci < commaParts.length - 1 ? `${cp},` : cp
+                tokens.push({ text: txt, index: idx })
+                idx++
+              })
             })
           }
         })
@@ -116,8 +127,13 @@ export function parseFullTestText(text: string): FullToken[] {
         if (ti > 1) {
           tokens.push({ text: '\n', index: -1, lineBreak: true })
         }
-        tokens.push({ text: seg, index: idx })
-        idx++
+        // 콤마 분리: STEEL,STILL → ['STEEL,', 'STILL'] 각 단어를 별도 토큰으로
+        const commaParts = seg.split(',').filter(Boolean)
+        commaParts.forEach((cp, ci) => {
+          const txt = ci < commaParts.length - 1 ? `${cp},` : cp
+          tokens.push({ text: txt, index: idx })
+          idx++
+        })
       })
       if (li < lines.length - 1) tokens.push({ text: '\n', index: -1, lineBreak: true })
       return
