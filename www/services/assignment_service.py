@@ -49,6 +49,7 @@ def ensure_kw_table(db: Session, ws: str) -> None:
     )"""))
     db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_domain ON {tbl}(domain)"))
     db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_status ON {tbl}(status)"))
+    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_dom_kw ON {tbl}(domain, keyword)"))
     db.commit()
 
 

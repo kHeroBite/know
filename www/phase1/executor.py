@@ -334,13 +334,17 @@ def _sync_freeze(domain: str, workspace_dir: str, run_id: str = "", step_num: in
     finally:
         db.close()
 
-    # 형태소 분석 자동 실행 (analysis/full_analysis 컬럼 채움)
-    try:
-        from services.assignment_service import reanalyze_after_build
-        reanalyze_result = reanalyze_after_build(ws_name, domain)
-        logger.info("[freeze] 자동 재분석 complete: %s", reanalyze_result)
-    except Exception as e:
-        logger.error("[freeze] 자동 재분석 실패: %s", e, exc_info=True)
+    # 형태소 분석 자동 실행 (백그라운드 스레드 — phase1 진행률 publish 방해 방지)
+    def _bg_reanalyze():
+        try:
+            from services.assignment_service import reanalyze_after_build
+            r = reanalyze_after_build(ws_name, domain)
+            logger.info("[freeze][bg] 자동 재분석 complete: %s", r)
+        except Exception as ex:
+            logger.error("[freeze][bg] 자동 재분석 실패: %s", ex, exc_info=True)
+    import threading
+    threading.Thread(target=_bg_reanalyze, daemon=True, name=f"reanalyze-{ws_name}-{domain}").start()
+    logger.info("[freeze] 백그라운드 재분석 스레드 시작 (workspace=%s domain=%s)", ws_name, domain)
 
     return f"{total}건"
 
