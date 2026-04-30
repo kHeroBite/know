@@ -196,13 +196,15 @@ export function parseFullTestText(text: string): FullToken[] {
 }
 
 export function isWordToken(text: string): boolean {
-  // 한글, 영문, 일본어(히라가나/카타카나), 한자
-  if (!/[가-힣a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text)) return false
   // <<유사어목록>> 토큰, 꺽쇠 잔여 조각, 품사태그는 워드가 아님
   if (text.startsWith('<<') && text.endsWith('>>')) return false
   if (text.includes('<') || text.includes('>')) return false
   if (POS_TAG_SET.has(text.toLowerCase())) return false
-  return true
+  // 한글/영문/일본어(히라가나·카타카나)/한자 포함 시 워드
+  if (/[가-힣a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text)) return true
+  // 순수 숫자: 2자 이상이면 워드(키워드 가능 — 0563 등), 1자는 빈도수/카운트로 간주
+  if (/^\d+$/.test(text) && text.length >= 2) return true
+  return false
 }
 
 export function isNavigableToken(toks: Token[], idx: number): boolean {
