@@ -28,7 +28,7 @@ async def ai_search_by_provider(
     current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """특정 범용LLM provider로 AI분석 호출."""
-    if provider not in ("openai", "claude", "gemini"):
+    if provider not in ("openai", "claude", "gemini", "local"):
         raise HTTPException(status_code=400, detail=f"잘못된 provider: {provider}")
     return await ai_search_provider(keyword, provider, user_id=current.get("user_id", ""))
 

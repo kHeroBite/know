@@ -230,7 +230,7 @@ export default function Layout() {
               size="small"
               showInfo={false}
               status={currentTask.status === 'error' ? 'exception' : currentTask.status === 'done' ? 'success' : 'active'}
-              strokeColor={currentTask.status === 'error' ? '#ff4d4f' : currentTask.status === 'done' ? '#52c41a' : 'rgba(255,255,255,0.7)'}
+              strokeColor={currentTask.status === 'error' ? '#ff4d4f' : currentTask.status === 'done' ? '#52c41a' : (selectedColor || 'rgba(255,255,255,0.7)')}
               trailColor="rgba(255,255,255,0.15)"
             />
           </div>

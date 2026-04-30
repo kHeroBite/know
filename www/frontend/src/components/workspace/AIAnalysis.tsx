@@ -112,13 +112,28 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
         onSearch?.()
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
         setHasWikiResult(!!hasWiki)
-        // 탭 초기 선택: 로컬LLM 활성이면 local, 아니면 wikipedia
-        if (data.local_active && data.local_result?.result) {
+        // 탭 초기 선택: 로컬LLM 활성이면 local(자동 호출), 아니면 wikipedia
+        if (data.local_active) {
           setActiveTab('local')
+          // searchKeyword 상태 업데이트 전이므로 kw 직접 사용
+          pendingProvidersRef.current.add('local')
+          setProviderResults(prev => ({ ...prev, local: { loading: true, data: null } }))
+          workspaceAPI.searchAIByProvider(kw, 'local')
+            .then(({ data: localData }) => {
+              pendingProvidersRef.current.delete('local')
+              setProviderResults(prev => ({ ...prev, local: { loading: false, data: localData } }))
+            })
+            .catch((err) => {
+              pendingProvidersRef.current.delete('local')
+              setProviderResults(prev => ({
+                ...prev,
+                local: { loading: false, data: { error: err?.response?.data?.detail || '호출 실패', provider: 'local', model: undefined } },
+              }))
+            })
         } else if (hasWiki) {
           setActiveTab('wikipedia')
         } else {
-          setActiveTab('local')
+          setActiveTab('wikipedia')
         }
       })
       .catch((err) => {
@@ -276,13 +291,10 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
 
   // 활성 탭 콘텐츠 — tabItems와 분리하여 직접 렌더링 (provider 결과 변경 시 탭 구조 재마운트 없음)
   const renderActiveTabContent = () => {
-    if (activeTab === 'local') {
-      return renderTextResult(baseResult?.local_result?.result, baseResult?.local_result?.error)
-    }
     if (activeTab === 'wikipedia') {
       return renderWikiResult()
     }
-    // 범용LLM
+    // 로컬LLM + 범용LLM 공통: providerResults 사용 (클릭 시 호출)
     const state = providerResults[activeTab]
     if (!searchKeyword) {
       return <div style={{ textAlign: 'center', padding: '12px 0' }}><Text type="secondary">검색 후 클릭하세요</Text></div>
@@ -338,7 +350,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
               activeKey={activeTab}
               onChange={(key) => {
                 setActiveTab(key)
-                if (activeProviders.some(p => p.provider === key)) {
+                if (key === 'local' || activeProviders.some(p => p.provider === key)) {
                   fetchProvider(key)
                 }
               }}

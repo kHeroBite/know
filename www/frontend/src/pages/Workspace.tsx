@@ -462,6 +462,7 @@ export default function Workspace() {
                         status="active"
                         format={p => `${p}%`}
                         style={{ flex: 1 }}
+                        strokeColor={ws.color || undefined}
                       />
                       <Button
                         size="small"
@@ -567,7 +568,7 @@ export default function Workspace() {
                         percent={작업진행률[ws.name]}
                         size="small"
                         showInfo={false}
-                        strokeColor={isSelected ? 'rgba(255,255,255,0.85)' : undefined}
+                        strokeColor={isSelected ? 'rgba(255,255,255,0.85)' : (ws.color || undefined)}
                         trailColor={isSelected ? 'rgba(255,255,255,0.2)' : undefined}
                       />
                     </div>

@@ -81,42 +81,31 @@ async def _search_wikipedia(keyword: str) -> dict:
 
 
 async def ai_search_service(keyword: str, user_id: str = '') -> dict:
-    """로컬LLM + Wikipedia 기본 검색 (범용LLM 제외)."""
+    """Wikipedia 기본 검색 + 활성 LLM 목록 반환 (LLM 호출은 provider별 개별 요청)."""
     import asyncio
-    from services.llm_settings_service import _get_active_settings_list, _single_llm_query
+    from services.llm_settings_service import _get_active_settings_list
     logger.info("[AI분석] 검색 시작: keyword=%r", keyword)
     prompt = load_prompt()
 
-    # 로컬LLM 설정만 추출
     all_active = _get_active_settings_list()
-    local_settings = [s for s in all_active if s["provider"] == "local"]
+    local_active = any(s["provider"] == "local" for s in all_active)
 
-    tasks_map = {}
-    if local_settings:
-        tasks_map["local"] = asyncio.create_task(
-            _single_llm_query(local_settings[0], keyword, prompt, user_id, "ai_analysis")
-        )
-    wiki_task = asyncio.create_task(_search_wikipedia(keyword))
-
-    local_result = await tasks_map["local"] if "local" in tasks_map else None
-    wiki_result = await wiki_task
-
+    wiki_result = await _search_wikipedia(keyword)
     wiki_val = wiki_result.get("result") if wiki_result else None
 
-    local_log = (local_result.get("result") or "")[:60] if local_result else None
-    logger.info("[AI분석] 완료: local=%r, wiki=%r",
-                local_log,
+    logger.info("[AI분석] 완료: local_active=%r, wiki=%r",
+                local_active,
                 wiki_val[:60] if wiki_val else None)
     return {
         "wikipedia": wiki_val,
-        "local_result": local_result,
-        "local_active": bool(local_settings),
+        "local_result": None,
+        "local_active": local_active,
         "query": prompt.format(keyword=keyword),
     }
 
 
 async def ai_search_provider(keyword: str, provider: str, user_id: str = '') -> dict:
-    """범용LLM 특정 provider 단일 호출."""
+    """특정 provider 단일 호출 (범용LLM + 로컬LLM 공통 — 활성인 경우에만 호출됨)."""
     from services.llm_settings_service import _get_active_settings_list, _single_llm_query
     logger.info("[AI분석][범용] provider=%s keyword=%r", provider, keyword)
     prompt = load_prompt()
