@@ -62,7 +62,8 @@ export function parseAnalysisText(text: string): Token[] {
         segments.forEach(part => {
           if (part.startsWith('<') && part.endsWith('>')) {
             const inner = part.slice(1, -1).trim()
-            inner.split(/\s+/).filter(Boolean).forEach(w => {
+            // 공백+콤마 모두 분리: <STEEL, STILL> → ['STEEL', 'STILL']
+            inner.split(/[\s,]+/).filter(Boolean).forEach(w => {
               tokens.push({ text: w, index: idx })
               idx++
             })
@@ -146,9 +147,9 @@ export function parseFullTestText(text: string): FullToken[] {
       const segments = trimmed.match(/(<[^<>]+>|[^\s<>]+)/g) || []
       segments.forEach(seg => {
         if (seg.startsWith('<') && seg.endsWith('>')) {
-          // <SYN1 SYN2> → 꺽쇠 제거 후 개별 워드로 분리
+          // <SYN1 SYN2> → 꺽쇠 제거 후 개별 워드로 분리 (공백+콤마 모두 분리자)
           const inner = seg.slice(1, -1).trim()
-          inner.split(/\s+/).filter(Boolean).forEach(w => {
+          inner.split(/[\s,]+/).filter(Boolean).forEach(w => {
             tokens.push({ text: w, index: idx })
             idx++
           })
