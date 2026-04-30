@@ -48,7 +48,7 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
   const [loading, setLoading] = useState(false)
   const [baseResult, setBaseResult] = useState<BaseResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('local')
+  const [activeTab, setActiveTab] = useState('wikipedia')
   const [hasWikiResult, setHasWikiResult] = useState(false)
   // 범용LLM: provider → { loading, result }
   const [providerResults, setProviderResults] = useState<Record<string, { loading: boolean; data: ProviderResult | null }>>({})
@@ -112,29 +112,36 @@ export default function AIAnalysis({ initialKeyword, searchTrigger, isAdmin, onS
         onSearch?.()
         const hasWiki = data.wikipedia && !data.wikipedia.includes('정보를 찾을 수 없습니다')
         setHasWikiResult(!!hasWiki)
-        // 탭 초기 선택: 로컬LLM 활성이면 local(자동 호출), 아니면 wikipedia
-        if (data.local_active) {
-          setActiveTab('local')
-          // searchKeyword 상태 업데이트 전이므로 kw 직접 사용
-          pendingProvidersRef.current.add('local')
-          setProviderResults(prev => ({ ...prev, local: { loading: true, data: null } }))
-          workspaceAPI.searchAIByProvider(kw, 'local')
-            .then(({ data: localData }) => {
-              pendingProvidersRef.current.delete('local')
-              setProviderResults(prev => ({ ...prev, local: { loading: false, data: localData } }))
-            })
-            .catch((err) => {
-              pendingProvidersRef.current.delete('local')
-              setProviderResults(prev => ({
-                ...prev,
-                local: { loading: false, data: { error: err?.response?.data?.detail || '호출 실패', provider: 'local', model: undefined } },
-              }))
-            })
-        } else if (hasWiki) {
-          setActiveTab('wikipedia')
+
+        // 활성 LLM provider 전체 자동 호출 (local + generic)
+        const providersToCall: string[] = []
+        if (data.local_active) providersToCall.push('local')
+        activeProviders.forEach(p => providersToCall.push(p.provider))
+
+        // 탭 초기 선택: 첫 활성 LLM → 없으면 wikipedia
+        if (providersToCall.length > 0) {
+          setActiveTab(providersToCall[0])
         } else {
           setActiveTab('wikipedia')
         }
+
+        // 모든 활성 LLM 병렬 자동 호출
+        providersToCall.forEach(provider => {
+          pendingProvidersRef.current.add(provider)
+          setProviderResults(prev => ({ ...prev, [provider]: { loading: true, data: null } }))
+          workspaceAPI.searchAIByProvider(kw, provider)
+            .then(({ data: pData }) => {
+              pendingProvidersRef.current.delete(provider)
+              setProviderResults(prev => ({ ...prev, [provider]: { loading: false, data: pData } }))
+            })
+            .catch((err) => {
+              pendingProvidersRef.current.delete(provider)
+              setProviderResults(prev => ({
+                ...prev,
+                [provider]: { loading: false, data: { error: err?.response?.data?.detail || '호출 실패', provider, model: undefined } },
+              }))
+            })
+        })
       })
       .catch((err) => {
         setBaseResult(null)
