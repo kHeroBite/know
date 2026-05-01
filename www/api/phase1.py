@@ -231,7 +231,7 @@ async def get_snapshots(
     if not workspace:
         raise ValidationError("workspace 파라미터 필요")
     from services.phase1_snapshot_service import list_snapshots
-    return list_snapshots(workspace)
+    return {"snapshots": list_snapshots(workspace)}
 
 
 @라우터.post("/preprocess/snapshot-restore")
