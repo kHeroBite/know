@@ -6,6 +6,7 @@ import FilePanel from '../components/phase1/FilePanel'
 import ControlPanel from '../components/phase1/ControlPanel'
 import LogPanel from '../components/phase1/LogPanel'
 import DataFilePanel from '../components/phase1/DataFilePanel'
+import SnapshotListModal from '../components/phase1/SnapshotListModal'
 import DataControlPanel from '../components/phase1/DataControlPanel'
 import { usePhase1WebSocket } from '../hooks/usePhase1WebSocket'
 import { usePhase1DataWebSocket } from '../hooks/usePhase1DataWebSocket'
@@ -50,6 +51,9 @@ export default function Phase1Pipeline() {
   const [dataActiveViewTab, setDataActiveViewTab] = useState<string | null>(null)
 
   const [siteCode, setSiteCode] = useState<string | null>(null)
+
+  // ── 스냅샷 복원 모달 상태 ──
+  const [snapshotModalOpen, setSnapshotModalOpen] = useState(false)
 
   // ── 탭 선택 상태 ──
   const [activeTab, setActiveTab] = useState<'log' | 'data'>('log')
@@ -469,6 +473,16 @@ export default function Phase1Pipeline() {
         onNext={다음단계핸들러}
       />
 
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          size="small"
+          disabled={!selectedWorkspace}
+          onClick={() => setSnapshotModalOpen(true)}
+        >
+          이전 스냅샷 복원
+        </Button>
+      </div>
+
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}
@@ -627,6 +641,16 @@ export default function Phase1Pipeline() {
             ),
           },
         ]}
+      />
+
+      <SnapshotListModal
+        open={snapshotModalOpen}
+        workspace={selectedWorkspace || ''}
+        onClose={() => setSnapshotModalOpen(false)}
+        onRestored={() => {
+          setSnapshotModalOpen(false)
+          window.location.reload()
+        }}
       />
     </div>
   )
