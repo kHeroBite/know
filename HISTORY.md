@@ -1,5 +1,9 @@
 # HISTORY.md — 작업 이력
 
+## 2026-05-01 — work_session_id 격리: 스냅샷/이력을 작업세션 단위로 분리
+
+> **작업 요약**: work_sessions 테이블 신설(workspace+user_id 단위). /connect→session_id 발급, /release→자동 종료. phase1_snapshots/build_history/work_history에 work_session_id 컬럼 추가. 스냅샷 list/archive/restore에 user_id 추가 → 활성 세션 기준 필터. 5개 초과 자동삭제는 같은 세션 내에서만 발동(다른 세션 스냅샷 보호). cross-session restore 차단(HTTP 403). cross-method dedup도 같은 세션 내에서만 발동. 기존 NULL work_session_id 데이터 삭제 + payload 정리. 테스트 5/5 PASS.
+
 ## 2026-05-01 — 전처리 재시작 시 스냅샷 보존 + 양방향 cross-method dedup
 
 > **작업 요약**: phase1_snapshots 테이블 신설 + archive/list/restore 서비스(최대 5개 자동 순환). /preprocess/snapshot-archive·snapshots·snapshot-restore API 추가. /workspaces/{name}/phase/restart-preserve 신설(뒤로가기와 완전 분리). _sync_refine 후처리에 cross-method dedup 추가(다른 method 활성/스냅샷 키워드 완전 제거). WorkComplete: 재시작 시 스냅샷 자동 보존 + "이전 스냅샷 복원" 버튼 추가. 테스트 9/9 PASS.
