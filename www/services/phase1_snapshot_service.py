@@ -42,20 +42,31 @@ def get_active_method(workspace: str) -> Optional[str]:
     return None
 
 
-def get_other_method_keywords(workspace: str, current_method: str) -> set:
+def get_other_method_keywords(workspace: str, current_method: str, user_id: Optional[str] = None) -> set:
     """다른 method의 활성 refine.txt 키워드 셋 반환.
 
     우선순위:
-    1. 다른 method의 가장 최근 스냅샷 refine.txt
+    1. 다른 method의 가장 최근 스냅샷 refine.txt (같은 세션 내)
     없으면 빈 set 반환 (dedup 스킵 → 안전)
     """
     other_method = "data" if current_method == "log" else "log"
     db = 세션팩토리()
     try:
-        row = db.execute(text(
-            "SELECT payload_path FROM phase1_snapshots "
-            "WHERE workspace=:ws AND method=:method ORDER BY id DESC LIMIT 1"
-        ), {"ws": workspace, "method": other_method}).fetchone()
+        # 세션 격리: user_id가 있으면 동일 세션 내에서만 조회
+        if user_id:
+            from services.workspace_service import get_active_session_id
+            active_session_id = get_active_session_id(workspace, user_id)
+            if not active_session_id:
+                return set()
+            row = db.execute(text(
+                "SELECT payload_path FROM phase1_snapshots "
+                "WHERE workspace=:ws AND method=:method AND work_session_id=:sid ORDER BY id DESC LIMIT 1"
+            ), {"ws": workspace, "method": other_method, "sid": active_session_id}).fetchone()
+        else:
+            row = db.execute(text(
+                "SELECT payload_path FROM phase1_snapshots "
+                "WHERE workspace=:ws AND method=:method ORDER BY id DESC LIMIT 1"
+            ), {"ws": workspace, "method": other_method}).fetchone()
     finally:
         db.close()
 
@@ -75,14 +86,20 @@ def get_other_method_keywords(workspace: str, current_method: str) -> set:
         return set()
 
 
-def archive_snapshot(workspace: str, method: str, domain: str) -> dict:
+def archive_snapshot(workspace: str, method: str, domain: str, user_id: Optional[str] = None) -> dict:
     """현재 work/ 파일 5종 + kw_{ws} JSON dump를 스냅샷으로 보존.
 
     Returns:
-        {"snapshot_id": str, "kw_count": int, "created_at": str}
+        {"snapshot_id": str, "kw_count": int, "created_at": str, "session_id": str|None}
         파일 없으면 {"snapshot_id": None, "message": "결과 없음"}
     """
     work_dir = _work_dir(workspace)
+
+    # 활성 세션 ID 조회 (user_id 있을 때만)
+    active_session_id = None
+    if user_id:
+        from services.workspace_service import get_active_session_id
+        active_session_id = get_active_session_id(workspace, user_id)
 
     # work/ 파일 존재 확인
     existing = [f for f in WORK_FILES if (work_dir / f).exists()]
@@ -152,30 +169,40 @@ def archive_snapshot(workspace: str, method: str, domain: str) -> dict:
     try:
         db.execute(text(
             "INSERT INTO phase1_snapshots "
-            "(snapshot_id, workspace, domain, method, created_at, payload_path, kw_count) "
-            "VALUES (:sid, :ws, :dom, :method, :created_at, :path, :cnt)"
+            "(snapshot_id, workspace, domain, method, created_at, payload_path, kw_count, work_session_id) "
+            "VALUES (:sid, :ws, :dom, :method, :created_at, :path, :cnt, :session_id)"
         ), {
             "sid": snapshot_id, "ws": workspace, "dom": domain, "method": method,
             "created_at": created_at, "path": str(payload_path), "cnt": kw_count,
+            "session_id": active_session_id,
         })
         db.commit()
-        logger.info("[snapshot] archive 완료: %s (kw=%d)", snapshot_id, kw_count)
+        logger.info("[snapshot] archive 완료: %s (kw=%d, session=%s)", snapshot_id, kw_count, active_session_id)
 
-        # 5개 초과 시 oldest 자동 삭제
-        _cleanup_old_snapshots(db, workspace, domain)
+        # 5개 초과 시 oldest 자동 삭제 (같은 session_id 범위 내에서만)
+        _cleanup_old_snapshots(db, workspace, domain, active_session_id)
     finally:
         db.close()
 
-    return {"snapshot_id": snapshot_id, "kw_count": kw_count, "created_at": created_at}
+    return {"snapshot_id": snapshot_id, "kw_count": kw_count, "created_at": created_at, "session_id": active_session_id}
 
 
-def _cleanup_old_snapshots(db, workspace: str, domain: str) -> None:
-    """스냅샷이 MAX_SNAPSHOTS 초과 시 가장 오래된 것부터 삭제."""
+def _cleanup_old_snapshots(db, workspace: str, domain: str, work_session_id: Optional[str] = None) -> None:
+    """스냅샷이 MAX_SNAPSHOTS 초과 시 가장 오래된 것부터 삭제.
+
+    work_session_id가 지정된 경우 해당 세션 내에서만 삭제 (다른 세션 스냅샷 보호).
+    """
     try:
-        rows = db.execute(text(
-            "SELECT id, snapshot_id, payload_path FROM phase1_snapshots "
-            "WHERE workspace=:ws AND domain=:dom ORDER BY id ASC"
-        ), {"ws": workspace, "dom": domain}).fetchall()
+        if work_session_id:
+            rows = db.execute(text(
+                "SELECT id, snapshot_id, payload_path FROM phase1_snapshots "
+                "WHERE workspace=:ws AND domain=:dom AND work_session_id=:sid ORDER BY id ASC"
+            ), {"ws": workspace, "dom": domain, "sid": work_session_id}).fetchall()
+        else:
+            rows = db.execute(text(
+                "SELECT id, snapshot_id, payload_path FROM phase1_snapshots "
+                "WHERE workspace=:ws AND domain=:dom ORDER BY id ASC"
+            ), {"ws": workspace, "dom": domain}).fetchall()
 
         if len(rows) <= MAX_SNAPSHOTS:
             return
@@ -199,23 +226,42 @@ def _cleanup_old_snapshots(db, workspace: str, domain: str) -> None:
         logger.error("[snapshot] cleanup 실패: %s", e)
 
 
-def list_snapshots(workspace: str) -> list:
+def list_snapshots(workspace: str, user_id: Optional[str] = None) -> list:
     """최근 5개 스냅샷 조회 (created_at DESC).
 
+    user_id가 있으면 활성 세션 내 스냅샷만 반환 (세션 격리).
+    활성 세션 없으면 빈 배열 반환.
+
     Returns:
-        list of dict: id, snapshot_id, workspace, domain, method, created_at, kw_count
+        list of dict: id, snapshot_id, workspace, domain, method, created_at, kw_count, work_session_id
     """
+    # 세션 격리
+    active_session_id = None
+    if user_id:
+        from services.workspace_service import get_active_session_id
+        active_session_id = get_active_session_id(workspace, user_id)
+        if not active_session_id:
+            return []
+
     db = 세션팩토리()
     try:
-        rows = db.execute(text(
-            "SELECT id, snapshot_id, workspace, domain, method, created_at, kw_count "
-            "FROM phase1_snapshots WHERE workspace=:ws "
-            "ORDER BY id DESC LIMIT :limit"
-        ), {"ws": workspace, "limit": MAX_SNAPSHOTS}).fetchall()
+        if active_session_id:
+            rows = db.execute(text(
+                "SELECT id, snapshot_id, workspace, domain, method, created_at, kw_count, work_session_id "
+                "FROM phase1_snapshots WHERE workspace=:ws AND work_session_id=:sid "
+                "ORDER BY id DESC LIMIT :limit"
+            ), {"ws": workspace, "sid": active_session_id, "limit": MAX_SNAPSHOTS}).fetchall()
+        else:
+            rows = db.execute(text(
+                "SELECT id, snapshot_id, workspace, domain, method, created_at, kw_count, work_session_id "
+                "FROM phase1_snapshots WHERE workspace=:ws "
+                "ORDER BY id DESC LIMIT :limit"
+            ), {"ws": workspace, "limit": MAX_SNAPSHOTS}).fetchall()
         return [
             {
                 "id": r[0], "snapshot_id": r[1], "workspace": r[2],
                 "domain": r[3], "method": r[4], "created_at": r[5], "kw_count": r[6],
+                "work_session_id": r[7],
             }
             for r in rows
         ]
@@ -223,7 +269,7 @@ def list_snapshots(workspace: str) -> list:
         db.close()
 
 
-def restore_snapshot(workspace: str, snapshot_id: str) -> dict:
+def restore_snapshot(workspace: str, snapshot_id: str, user_id: Optional[str] = None) -> dict:
     """선택 스냅샷을 활성으로 복원.
 
     처리 순서:
@@ -232,13 +278,16 @@ def restore_snapshot(workspace: str, snapshot_id: str) -> dict:
     3. 파일 5종 → work/ 복사 (덮어쓰기)
     4. kw_dump.json → kw_{ws} bulk INSERT (기존 domain 데이터 삭제 후)
 
+    user_id가 있으면 스냅샷의 work_session_id가 현재 활성 세션과 일치하는지 검증.
+
     Returns:
         {"restored": True, "snapshot_id": str, "kw_count": int}
     """
+    from fastapi import HTTPException
     db = 세션팩토리()
     try:
         row = db.execute(text(
-            "SELECT id, snapshot_id, workspace, domain, method, payload_path, kw_count "
+            "SELECT id, snapshot_id, workspace, domain, method, payload_path, kw_count, work_session_id "
             "FROM phase1_snapshots WHERE workspace=:ws AND snapshot_id=:sid"
         ), {"ws": workspace, "sid": snapshot_id}).fetchone()
     finally:
@@ -247,7 +296,15 @@ def restore_snapshot(workspace: str, snapshot_id: str) -> dict:
     if not row:
         raise ValueError(f"스냅샷을 찾을 수 없음: {snapshot_id}")
 
-    _, snap_id, ws, domain, method, payload_path, kw_count = row
+    _, snap_id, ws, domain, method, payload_path, kw_count, snap_session_id = row
+
+    # 세션 격리 검증: user_id가 있으면 현재 활성 세션과 일치 여부 확인
+    if user_id:
+        from services.workspace_service import get_active_session_id
+        active_session_id = get_active_session_id(workspace, user_id)
+        if snap_session_id and active_session_id and snap_session_id != active_session_id:
+            raise HTTPException(status_code=403, detail="다른 작업 세션의 스냅샷은 복원할 수 없습니다")
+
     payload = Path(payload_path)
 
     if not payload.exists():
@@ -256,7 +313,7 @@ def restore_snapshot(workspace: str, snapshot_id: str) -> dict:
     # 현재 상태 임시 archive (실패해도 복원 계속 진행)
     current_method = get_active_method(workspace) or method
     try:
-        archive_snapshot(workspace, current_method, domain)
+        archive_snapshot(workspace, current_method, domain, user_id)
     except Exception as e:
         logger.warning("[snapshot] 복원 전 현재 상태 archive 실패 (무시): %s", e)
 

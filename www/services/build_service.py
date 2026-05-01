@@ -196,6 +196,15 @@ class BuildService:
             except Exception:
                 pass
 
+        # 활성 세션 ID 조회 (workspace + triggered_by 있을 때만)
+        work_session_id = None
+        if workspace and triggered_by:
+            try:
+                from services.workspace_service import get_active_session_id
+                work_session_id = get_active_session_id(workspace, str(triggered_by))
+            except Exception:
+                pass
+
         bh = BuildHistory(
             domain=domain,
             workspace=workspace or None,
@@ -204,6 +213,7 @@ class BuildService:
             status="running",
             started_at=datetime.now(),
             started_by=triggered_by,
+            work_session_id=work_session_id,
         )
         db.add(bh)
         db.commit()

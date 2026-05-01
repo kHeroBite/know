@@ -49,11 +49,19 @@ def add_history(
     tail_word: Optional[str] = None,
 ) -> dict:
     """작업이력 기록 추가."""
+    # 활성 세션 ID 조회 (없으면 NULL 저장)
+    work_session_id = None
+    try:
+        from services.workspace_service import get_active_session_id
+        work_session_id = get_active_session_id(workspace, user_id)
+    except Exception:
+        pass
+
     result = db.execute(
         text(
             "INSERT INTO work_history "
-            "(workspace, domain, user_id, action_type, dic_type, word, memo, head_word, tail_word) "
-            "VALUES (:ws, :dom, :uid, :act, :dic, :word, :memo, :hw, :tw)"
+            "(workspace, domain, user_id, action_type, dic_type, word, memo, head_word, tail_word, work_session_id) "
+            "VALUES (:ws, :dom, :uid, :act, :dic, :word, :memo, :hw, :tw, :session_id)"
         ),
         {
             "ws": workspace,
@@ -65,6 +73,7 @@ def add_history(
             "memo": memo,
             "hw": head_word,
             "tw": tail_word,
+            "session_id": work_session_id,
         },
     )
     db.commit()

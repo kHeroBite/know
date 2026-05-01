@@ -42,6 +42,7 @@ from services.workspace_service import (
     delete_workspace,
     create_workspace,
     release_workspace,
+    release_work_session,
     get_progress,
     read_hotkey_settings,
     save_hotkey_settings_service,
@@ -366,7 +367,7 @@ def link_domain_handler(
                {"ws": name, "dom": domain.upper()})
     db.commit()
 
-    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code, backup_name=요청.backup_name)
+    return link_domain(name, domain, connected_by, jiana_version=요청.jiana_version, site_code=site_code, backup_name=요청.backup_name, user_id=아이디)
 
 
 @라우터.post("/{name}/cancel-connect")
@@ -382,11 +383,12 @@ def unlink_domain(
 def release_workspace_handler(
     name: str,
     db: Session = Depends(db_session),
-    _current: dict = Depends(get_current_user),
+    current: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """워크스페이스 해제 + kw_{ws} 테이블 DROP + 관련 데이터 정리."""
     from services.workspace_service import _read_state
     from services.assignment_service import drop_kw_table
+    아이디 = current.get("user_id", "")
     상태 = _read_state()
     도메인 = 상태.get(name, {}).get("domain")
     if 도메인:
@@ -414,6 +416,12 @@ def release_workspace_handler(
             ws_drop_dict_table(name, 도메인, 엔진)
         except Exception:
             pass  # 테이블 미존재 시 무시
+    # user_id 기반 work_session release (release_workspace 내부 전체 release와 중복이나 명시적 처리)
+    if 아이디:
+        try:
+            release_work_session(name, 아이디)
+        except Exception:
+            pass  # DB 오류 무시 — release_workspace 내부에서도 처리됨
     return release_workspace(name)
 
 

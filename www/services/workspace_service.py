@@ -3,11 +3,13 @@ from __future__ import annotations
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
 import subprocess
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,94 @@ from core.constants import (
 # finished: 터미널 상태. 되돌리기 절대 금지(phase_backward에서 하드 블록).
 PHASES = ["preprocess", "work", "build", "verify", "complete", "finished"]
 PHASE_ORDER = {p: i for i, p in enumerate(PHASES)}
+
+
+_logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# work_session 관련 함수
+# ---------------------------------------------------------------------------
+
+def create_work_session(workspace: str, user_id: str) -> str:
+    """work_sessions 테이블에 새 세션 INSERT 후 session_id 반환.
+    동일 (workspace, user_id) 활성 세션이 있으면 먼저 released 처리.
+    """
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+
+    session_id = f"ws-{uuid.uuid4().hex[:16]}"
+    db = _SL()
+    try:
+        # 기존 active 세션 release
+        db.execute(
+            _text(
+                "UPDATE work_sessions SET status='released', released_at=datetime('now','localtime')"
+                " WHERE workspace=:ws AND user_id=:uid AND status='active'"
+            ),
+            {"ws": workspace, "uid": user_id},
+        )
+        # 새 세션 INSERT
+        db.execute(
+            _text(
+                "INSERT INTO work_sessions (session_id, workspace, user_id, status)"
+                " VALUES (:sid, :ws, :uid, 'active')"
+            ),
+            {"sid": session_id, "ws": workspace, "uid": user_id},
+        )
+        db.commit()
+        _logger.info("[work_session] %s/%s 시작 → %s", workspace, user_id, session_id)
+        return session_id
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def release_work_session(workspace: str, user_id: str) -> dict:
+    """(workspace, user_id) 활성 세션을 released 처리. 반환: {released_count: N}"""
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+
+    db = _SL()
+    try:
+        result = db.execute(
+            _text(
+                "UPDATE work_sessions SET status='released', released_at=datetime('now','localtime')"
+                " WHERE workspace=:ws AND user_id=:uid AND status='active'"
+            ),
+            {"ws": workspace, "uid": user_id},
+        )
+        db.commit()
+        released_count = result.rowcount if hasattr(result, "rowcount") else 0
+        _logger.info("[work_session] %s/%s release — %d건", workspace, user_id, released_count)
+        return {"released_count": released_count}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def get_active_session_id(workspace: str, user_id: str) -> str | None:
+    """현재 활성 세션 ID 반환. 없으면 None."""
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+
+    db = _SL()
+    try:
+        row = db.execute(
+            _text(
+                "SELECT session_id FROM work_sessions"
+                " WHERE workspace=:ws AND user_id=:uid AND status='active'"
+                " ORDER BY id DESC LIMIT 1"
+            ),
+            {"ws": workspace, "uid": user_id},
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        db.close()
 
 
 def list_jiana_versions_service() -> list[str]:
@@ -348,7 +438,7 @@ def _copy_task(ws_name: str, domain: str, 도메인경로: str, ws경로: str, j
         COPY_CANCEL.pop(ws_name, None)
 
 
-def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None, site_code: str | None = None, backup_name: str | None = None) -> dict[str, Any]:
+def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jiana_version: str | None = None, site_code: str | None = None, backup_name: str | None = None, user_id: str | None = None) -> dict[str, Any]:
     """IDLE 체크 → 상태 즉시 CONNECTING → 백그라운드 복사(도메인+jiana 또는 백업) → 성공:USED / 실패:FAILED."""
     # 대소문자 무시 매칭 — 실제 DOMAIN_DIR 폴더명으로 교체
     actual_domains = os.listdir(DOMAIN_DIR) if os.path.isdir(DOMAIN_DIR) else []
@@ -408,6 +498,13 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
         "backup_name": backup_name,
     }
     _write_state(상태)
+    # work_session 발급 (user_id 있을 때만)
+    _session_id: str | None = None
+    if user_id:
+        try:
+            _session_id = create_work_session(ws_name, user_id)
+        except Exception as _e:
+            _logger.warning("[work_session] 세션 발급 실패 (무시): %s", _e)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
     COPY_CANCEL[ws_name] = threading.Event()
     if backup_name:
@@ -422,7 +519,7 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
             args=(ws_name, domain, 도메인경로, ws경로, jiana원본경로),
             daemon=True,
         ).start()
-    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code, "connected_at": _connected_at, "backup_name": backup_name}
+    return {"name": ws_name, "status": "CONNECTING", "domain": domain, "connected_by": connected_by, "color": 기존색상, "jiana_version": jiana_version, "site_code": site_code, "connected_at": _connected_at, "backup_name": backup_name, "session_id": _session_id}
 
 
 def _copy_task_from_backup(ws_name: str, domain: str, backup_name: str, ws경로: str, jiana원본경로: str | None = None) -> None:
@@ -628,6 +725,27 @@ def release_workspace(ws_name: str) -> dict[str, Any]:
     기존색상 = 상태[ws_name].get("color")
     상태[ws_name] = {"status": "IDLE", "domain": None, "connected_by": None, "color": 기존색상}
     _write_state(상태)
+    # 해당 워크스페이스의 모든 활성 work_session release
+    try:
+        from sqlalchemy import text as _text
+        from core.database import SessionLocal as _SL
+        _db = _SL()
+        try:
+            _db.execute(
+                _text(
+                    "UPDATE work_sessions SET status='released', released_at=datetime('now','localtime')"
+                    " WHERE workspace=:ws AND status='active'"
+                ),
+                {"ws": ws_name},
+            )
+            _db.commit()
+        except Exception as _e:
+            _db.rollback()
+            _logger.warning("[work_session] release_workspace 세션 release 실패 (무시): %s", _e)
+        finally:
+            _db.close()
+    except Exception as _e:
+        _logger.warning("[work_session] release_workspace DB 접근 실패 (무시): %s", _e)
     # 워크스페이스 디렉토리 전체 정리 후 기본 구조 재생성
     ws경로 = os.path.join(WORKSPACE_DIR, ws_name)
     if os.path.isdir(ws경로):

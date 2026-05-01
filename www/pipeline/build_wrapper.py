@@ -79,6 +79,7 @@ def run_build(
     timeout: int = BUILD_TIMEOUT,
     jiana_home: Optional[str] = None,
     workspace: Optional[str] = None,
+    work_session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """antdic 4단계를 Python으로 직접 run_phase1_service
 
@@ -108,7 +109,7 @@ def run_build(
         raise BuildError(f"build.xml 경로 없음: {build_home}/build.xml")
 
     # DB에서 현재 빌드 중 여부 확인
-    _bh_id = build_history_id or _create_build_history(domain)
+    _bh_id = build_history_id or _create_build_history(domain, work_session_id=work_session_id)
 
     # 전역 Lock 획득 시도 (non-blocking)
     if not _build_lock.acquire(blocking=False):
@@ -440,14 +441,19 @@ def _count_entries(domain: str) -> Optional[int]:
         return None
 
 
-def _create_build_history(domain: str) -> int:
+def _create_build_history(domain: str, work_session_id: Optional[str] = None) -> int:
     """build_history 신규 레코드 생성, ID 반환"""
     try:
         from core.database import SessionLocal
         from models.pipeline import BuildHistory
         db = SessionLocal()
         try:
-            row = BuildHistory(domain=domain, build_type="full", status="running")
+            row = BuildHistory(
+                domain=domain,
+                build_type="full",
+                status="running",
+                work_session_id=work_session_id,
+            )
             db.add(row)
             db.commit()
             db.refresh(row)

@@ -1,9 +1,12 @@
 # models/pipeline.py — Phase 3 파이프라인 관련 SQLAlchemy 모델 (5개 테이블)
+from __future__ import annotations
 from sqlalchemy import (
     Column, Integer, String, Text,
     DateTime, func
 )
 from core.database import Base
+from pydantic import BaseModel
+from typing import Optional
 
 
 class PipelineHistory(Base):
@@ -68,6 +71,7 @@ class BuildHistory(Base):
     file_size = Column(Integer, nullable=True)
     entry_count = Column(Integer, nullable=True)
     log_text = Column(Text, nullable=True)
+    work_session_id = Column(String(100), nullable=True, index=True)
 
 
 class AuditLog(Base):
@@ -81,3 +85,20 @@ class AuditLog(Base):
     detail = Column(Text, nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now(), index=True)
+
+
+# ── Pydantic 모델: work_sessions API ────────────────────────────────────────
+
+class WorkSessionCreateRequest(BaseModel):
+    """워크 세션 생성 요청 모델."""
+    workspace: str
+    user_id: str
+
+
+class WorkSessionResponse(BaseModel):
+    """워크 세션 응답 모델."""
+    session_id: str
+    workspace: str
+    user_id: str
+    started_at: str
+    status: str

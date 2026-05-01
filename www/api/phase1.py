@@ -209,7 +209,7 @@ async def cleanup_preprocess_results(workspace: str = Query("")):
 async def snapshot_archive(
     workspace: str = Query(""),
     method: str = Query("log"),
-    _current: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """현재 전처리 결과를 스냅샷으로 보존."""
     if not workspace:
@@ -217,35 +217,38 @@ async def snapshot_archive(
     from services.workspace_service import _read_state
     상태 = _read_state()
     domain = 상태.get(workspace, {}).get("domain", "")
+    user_id = current_user.get("user_id") or current_user.get("id")
     from services.phase1_snapshot_service import archive_snapshot
-    result = archive_snapshot(workspace, method, domain)
+    result = archive_snapshot(workspace, method, domain, user_id)
     return result
 
 
 @라우터.get("/preprocess/snapshots")
 async def get_snapshots(
     workspace: str = Query(""),
-    _current: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """워크스페이스의 최근 스냅샷 목록 조회."""
     if not workspace:
         raise ValidationError("workspace 파라미터 필요")
+    user_id = current_user.get("user_id") or current_user.get("id")
     from services.phase1_snapshot_service import list_snapshots
-    return {"snapshots": list_snapshots(workspace)}
+    return {"snapshots": list_snapshots(workspace, user_id)}
 
 
 @라우터.post("/preprocess/snapshot-restore")
 async def snapshot_restore(
     workspace: str = Query(""),
     snapshot_id: str = Query(""),
-    _current: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """선택한 스냅샷을 활성 상태로 복원."""
     if not workspace or not snapshot_id:
         raise ValidationError("workspace, snapshot_id 파라미터 필요")
+    user_id = current_user.get("user_id") or current_user.get("id")
     from services.phase1_snapshot_service import restore_snapshot
     try:
-        result = restore_snapshot(workspace, snapshot_id)
+        result = restore_snapshot(workspace, snapshot_id, user_id)
     except ValueError as e:
         raise NotFoundError(str(e))
     return result

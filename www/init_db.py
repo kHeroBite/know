@@ -12,6 +12,7 @@ CLI:
 from __future__ import annotations
 import sys
 import os
+import shutil
 import argparse
 
 # www 디렉토리를 path에 추가
@@ -241,6 +242,60 @@ def create_tables():
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_snap_ws ON phase1_snapshots(workspace, domain)"))
         conn.commit()
         print("  [OK] phase1_snapshots 테이블 생성")
+
+        # 10-M. work_sessions 테이블 신설 (워크 세션 격리용)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS work_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL UNIQUE,
+                workspace TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                started_at TEXT DEFAULT (datetime('now','localtime')),
+                released_at TEXT,
+                status TEXT NOT NULL DEFAULT 'active'
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_work_sessions_active ON work_sessions(workspace, user_id, status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_work_sessions_session ON work_sessions(session_id)"))
+        conn.commit()
+        print("  [OK] work_sessions 테이블 생성")
+
+        # 10-N. 기존 테이블에 work_session_id 컬럼 추가 (ALTER TABLE — try/except)
+        for 테이블명, 컬럼명 in [
+            ("phase1_snapshots", "work_session_id"),
+            ("build_history", "work_session_id"),
+            ("work_history", "work_session_id"),
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE {테이블명} ADD COLUMN {컬럼명} TEXT"))
+                conn.commit()
+                print(f"  [OK] {테이블명}.{컬럼명} 컬럼 추가")
+            except Exception as e:
+                if "duplicate column" in str(e).lower():
+                    pass  # 이미 추가됨
+                else:
+                    raise
+
+        # 인덱스 추가
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_snap_session ON phase1_snapshots(work_session_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_build_hist_session ON build_history(work_session_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_work_hist_session ON work_history(work_session_id)"))
+        conn.commit()
+        print("  [OK] work_session_id 인덱스 3종 추가")
+
+        # 10-O. NULL work_session_id 데이터 삭제 (기존 레거시 데이터 전량 제거)
+        # phase1_snapshots: payload 디렉토리도 함께 삭제
+        payload_rows = conn.execute(
+            text("SELECT payload_path FROM phase1_snapshots WHERE work_session_id IS NULL")
+        ).fetchall()
+        for (p,) in payload_rows:
+            if p and os.path.isdir(p):
+                shutil.rmtree(p, ignore_errors=True)
+        conn.execute(text("DELETE FROM phase1_snapshots WHERE work_session_id IS NULL"))
+        conn.execute(text("DELETE FROM build_history WHERE work_session_id IS NULL"))
+        conn.execute(text("DELETE FROM work_history WHERE work_session_id IS NULL"))
+        conn.commit()
+        print(f"  [OK] NULL work_session_id 데이터 삭제 완료 (snapshot={len(payload_rows)}건 + payload 디렉토리 정리)")
 
         # 11. workspace_snapshots (완료 대시보드 전/후 카운트)
         conn.execute(text("""
