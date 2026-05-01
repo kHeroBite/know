@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Table, Card, Button, Typography, Popconfirm, Progress, Checkbox, Space, message } from 'antd'
-import { InboxOutlined, DeleteOutlined, ReloadOutlined, ScanOutlined } from '@ant-design/icons'
+import { InboxOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { phase1DataAPI, type ColumnSpec } from '../../api/phase1Data'
 import ColumnSelectModal from './ColumnSelectModal'
 
@@ -21,6 +21,7 @@ interface DataFilePanelProps {
   // 외부 controlled 모달 (DataControlPanel의 설정 버튼에서 열기)
   showColumnModal?: boolean
   onColumnModalClose?: () => void
+  themeColor?: string
 }
 
 export default function DataFilePanel({
@@ -31,6 +32,7 @@ export default function DataFilePanel({
   onColumnsConfigured,
   showColumnModal,
   onColumnModalClose,
+  themeColor,
 }: DataFilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
@@ -221,7 +223,7 @@ export default function DataFilePanel({
         <Progress
           percent={업로드진행률}
           status="active"
-          strokeColor={{ from: '#4f46e5', to: '#818cf8' }}
+          strokeColor={themeColor || { from: '#4f46e5', to: '#818cf8' }}
           style={{ marginBottom: 12 }}
         />
       )}
@@ -243,15 +245,6 @@ export default function DataFilePanel({
           )}
         </Space>
         <Space size={8}>
-          <Button
-            size="small"
-            type="primary"
-            icon={<ScanOutlined />}
-            disabled={파일없음}
-            onClick={() => set모달열림(true)}
-          >
-            컬럼 분석
-          </Button>
           <Button size="small" icon={<ReloadOutlined />} onClick={() => 목록조회()} loading={로딩}>
             새로고침
           </Button>

@@ -61,7 +61,7 @@ export default function Phase1Pipeline() {
 
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
 
   const 프리징핸들러 = async () => {
     if (!selectedWorkspace || !selectedDomain) return
@@ -592,6 +592,7 @@ export default function Phase1Pipeline() {
                     }}
                     showColumnModal={showColumnModal}
                     onColumnModalClose={() => setShowColumnModal(false)}
+                    themeColor={selectedColor ?? undefined}
                   />
                 </Card>
 
