@@ -534,8 +534,8 @@ def workspace_restart_preserve(
             import logging
             logging.getLogger(__name__).warning("[restart-preserve] DB 정리 실패 (무시): %s", e)
 
-    # 4. phase_backward (kw_{ws} 삭제 없이 phase만 복귀)
-    result = phase_backward(name, 요청.to)
+    # 4. phase_backward (kw_{ws} 삭제 없이 phase만 복귀 — 다단계 역방향 허용)
+    result = phase_backward(name, 요청.to, force=True)
     result["snapshot_id"] = snap_result.get("snapshot_id")
     return result
 

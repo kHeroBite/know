@@ -1179,8 +1179,12 @@ def phase_forward(ws_name: str, next_phase: str) -> dict[str, Any]:
     return {"name": ws_name, "phase": next_phase, "prev": 현재}
 
 
-def phase_backward(ws_name: str, prev_phase: str) -> dict[str, Any]:
-    """워크스페이스 phase 역방향 1단계 전이."""
+def phase_backward(ws_name: str, prev_phase: str, force: bool = False) -> dict[str, Any]:
+    """워크스페이스 phase 역방향 전이.
+
+    force=False(기본): 1단계 역방향만 허용.
+    force=True: 다단계 역방향 허용 (restart-preserve 전용).
+    """
     if prev_phase not in PHASE_ORDER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1201,10 +1205,15 @@ def phase_backward(ws_name: str, prev_phase: str) -> dict[str, Any]:
         )
     현재순서 = PHASE_ORDER.get(현재, 0)
     이전순서 = PHASE_ORDER[prev_phase]
-    if 이전순서 != 현재순서 - 1:
+    if not force and 이전순서 != 현재순서 - 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"phase 역전이 불가: {현재} → {prev_phase} (역방향 1단계만 허용)",
+        )
+    if 이전순서 >= 현재순서:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"phase 역전이 불가: {현재} → {prev_phase} (전진 방향은 허용되지 않음)",
         )
     상태[ws_name]["phase"] = prev_phase
     _write_state(상태)
