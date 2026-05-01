@@ -453,28 +453,6 @@ export default function Workspace() {
             return (
               <Col xs={24} sm={12} key={ws.name}>
                 <Card style={{ minHeight: 160, ...getCardStyle(ws) }} styles={{ body: { padding: 16 } }}>
-                  {/* 복사 진행률 오버레이 */}
-                  {isInProgress && (
-                    <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Progress
-                        percent={progressPercent ?? 0}
-                        size="small"
-                        status="active"
-                        format={p => `${p}%`}
-                        style={{ flex: 1 }}
-                        strokeColor={ws.color || undefined}
-                      />
-                      <Button
-                        size="small"
-                        danger
-                        icon={<StopOutlined />}
-                        onClick={() => 취소핸들러(ws.name)}
-                      >
-                        중지
-                      </Button>
-                    </div>
-                  )}
-
                   {/* 카드 헤더 */}
                   <div
                     style={{
@@ -716,6 +694,28 @@ export default function Workspace() {
                       </ColorPicker>
                     )}
                   </div>
+
+                  {/* 연결 진행률 (CONNECTING 상태) */}
+                  {isInProgress && (
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Progress
+                        percent={progressPercent ?? 0}
+                        size="small"
+                        status="active"
+                        format={p => `${p}%`}
+                        style={{ flex: 1 }}
+                        strokeColor={ws.color || undefined}
+                      />
+                      <Button
+                        size="small"
+                        danger
+                        icon={<StopOutlined />}
+                        onClick={() => 취소핸들러(ws.name)}
+                      >
+                        중지
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               </Col>
             )
