@@ -224,7 +224,25 @@ def create_tables():
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_domain ON sites(domain_code)"))
 
-        # 10. workspace_snapshots (완료 대시보드 전/후 카운트)
+        # 10. phase1_snapshots (전처리 스냅샷 — 재시작 보존용)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS phase1_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id TEXT NOT NULL UNIQUE,
+                workspace TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                method TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                payload_path TEXT NOT NULL,
+                kw_count INTEGER DEFAULT 0,
+                source_run_id TEXT
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_phase1_snap_ws ON phase1_snapshots(workspace, domain)"))
+        conn.commit()
+        print("  [OK] phase1_snapshots 테이블 생성")
+
+        # 11. workspace_snapshots (완료 대시보드 전/후 카운트)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS workspace_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

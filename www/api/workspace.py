@@ -466,6 +466,72 @@ def workspace_phase_backward(
     return phase_backward(name, 요청.to)
 
 
+class RestartPreserveRequest(BaseModel):
+    method: str = "log"   # 'log' | 'data'
+    to: str = "preprocess"
+
+
+@라우터.post("/{name}/phase/restart-preserve")
+def workspace_restart_preserve(
+    name: str,
+    요청: RestartPreserveRequest,
+    db: Session = Depends(db_session),
+    _current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """스냅샷 보존 후 preprocess 단계로 복귀 (kw_{{ws}} 데이터 유지).
+
+    기존 /phase/revert 와의 차이:
+    - kw_{{ws}} 삭제 없음 (데이터 유지)
+    - 현재 work/ 상태를 스냅샷으로 보존
+    - work/ 파일 5종 삭제 (새 시작)
+    - phase1_runs/logs DB 정리
+    """
+    import os
+    from core.constants import WORKSPACE_BASE
+    from services.workspace_service import _read_state
+    from services.phase1_snapshot_service import archive_snapshot
+    from sqlalchemy import text as sa_text
+
+    # 1. 현재 상태 스냅샷 archive
+    상태 = _read_state()
+    도메인 = 상태.get(name, {}).get("domain", "")
+    snap_result = {"snapshot_id": None}
+    if 도메인:
+        try:
+            snap_result = archive_snapshot(name, 요청.method, 도메인)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("[restart-preserve] archive 실패 (무시): %s", e)
+
+    # 2. work/ 파일 5종 삭제
+    work_dir = os.path.join(WORKSPACE_BASE, name, "build", "work")
+    for fname in ["keywords.txt", "refine.txt", "analyzed.txt", "transform.txt", "synonym.txt"]:
+        fpath = os.path.join(work_dir, fname)
+        try:
+            if os.path.isfile(fpath):
+                os.remove(fpath)
+        except Exception:
+            pass
+
+    # 3. phase1_runs / phase1_logs DB 정리
+    if 도메인:
+        try:
+            db.execute(sa_text(
+                "DELETE FROM phase1_logs WHERE run_id IN "
+                "(SELECT run_id FROM phase1_runs WHERE domain=:dom)"
+            ), {"dom": 도메인})
+            db.execute(sa_text("DELETE FROM phase1_runs WHERE domain=:dom"), {"dom": 도메인})
+            db.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("[restart-preserve] DB 정리 실패 (무시): %s", e)
+
+    # 4. phase_backward (kw_{ws} 삭제 없이 phase만 복귀)
+    result = phase_backward(name, 요청.to)
+    result["snapshot_id"] = snap_result.get("snapshot_id")
+    return result
+
+
 @라우터.get("/{name}/phase")
 def get_workspace_phase(
     name: str,

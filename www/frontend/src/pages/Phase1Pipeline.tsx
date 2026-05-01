@@ -260,6 +260,7 @@ export default function Phase1Pipeline() {
         ...params,
         workspace: selectedWorkspace ?? '',
         domain: selectedDomain ?? '',
+        method: 'log',
         ...filterParams,
       } as any)
       setRunStartStep(params.start_step)

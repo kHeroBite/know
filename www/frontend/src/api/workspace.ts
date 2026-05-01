@@ -233,6 +233,13 @@ export const workspaceAPI = {
   releaseWorkspace: (ws: string) =>
     클라이언트.post(`/workspaces/${encodeURIComponent(ws)}/release`),
 
+  // 전처리 재시작 (스냅샷 보존)
+  restartPreserve: (name: string, method: 'log' | 'data') =>
+    클라이언트.post<{ ok: boolean; snapshot_id: string | null; phase: string }>(
+      `/workspaces/${encodeURIComponent(name)}/phase/restart-preserve`,
+      { method, to: 'preprocess' }
+    ),
+
   // 시스템 설정
   getSystemSettings: () =>
     클라이언트.get<Record<string, string>>('/system-settings'),

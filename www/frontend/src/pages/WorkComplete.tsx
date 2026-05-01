@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
 import { phase1API } from '../api/phase1'
+import SnapshotListModal from '../components/phase1/SnapshotListModal'
 
 import { backupAPI, getEmailContacts, type Backup } from '../api/backup'
 import { shareAPI } from '../api/share'
@@ -110,6 +111,9 @@ export default function WorkComplete() {
   // 단계별 리포트 (isFinished 후 조회)
   const [stepReport, setStepReport] = useState<StepReportResponse | null>(null)
   const [participantStats, setParticipantStats] = useState<ParticipantStat[] | null>(null)
+
+  // 스냅샷 복원 모달
+  const [snapshotModalOpen, setSnapshotModalOpen] = useState(false)
 
   const loadAll = useCallback(async () => {
     if (!selectedWorkspace) {
@@ -404,16 +408,14 @@ export default function WorkComplete() {
     const nextMethod = prevMethod === 'log' ? 'data' : 'log'
     Modal.confirm({
       title: `${nextMethod === 'data' ? '데이터기반' : '로그기반'} 전처리로 재시작`,
-      content: '이전 전처리 결과물이 모두 삭제되고 전처리 단계부터 다시 시작됩니다. 계속하시겠습니까?',
+      content: '이전 전처리 결과는 스냅샷으로 자동 보존됩니다. 필요 시 "이전 스냅샷 복원" 버튼으로 되돌릴 수 있습니다. 계속하시겠습니까?',
       okText: '재시작',
       cancelText: '취소',
       onOk: async () => {
         try {
-          // 전처리 결과 파일 삭제
-          await phase1API.결과파일삭제(selectedWorkspace)
-          // phase → preprocess 복귀
-          await useWorkspaceStore.getState().revertPhase('preprocess')
-          // 전처리 페이지로 이동 (반대 탭 pre-select)
+          await workspaceAPI.restartPreserve(selectedWorkspace, prevMethod as 'log' | 'data')
+          // 백엔드에서 phase_backward 처리 → 프론트 store 동기화
+          await useWorkspaceStore.getState().loadWorkspaceStatus()
           navigate(`/preprocess?tab=${nextMethod}`)
         } catch (e: any) {
           message.error('재시작 실패: ' + (e?.response?.data?.detail || e?.message || ''))
@@ -656,6 +658,19 @@ export default function WorkComplete() {
         </Card>
       )}
 
+      {isComplete && selectedWorkspace && (
+        <SnapshotListModal
+          open={snapshotModalOpen}
+          workspace={selectedWorkspace}
+          onClose={() => setSnapshotModalOpen(false)}
+          onRestored={() => {
+            setSnapshotModalOpen(false)
+            useWorkspaceStore.getState().loadWorkspaceStatus().catch(() => {})
+            window.location.reload()
+          }}
+        />
+      )}
+
       {isComplete && (() => {
         const prevMethod = selectedWorkspace
           ? (localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log')
@@ -669,14 +684,22 @@ export default function WorkComplete() {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <Text style={{ color: '#614700' }}>
-                  다른 방식으로 다시 전처리하려면 아래 버튼을 클릭하세요. 이전 전처리 결과가 삭제됩니다.
+                  다른 방식으로 다시 전처리하려면 아래 버튼을 클릭하세요. 이전 전처리 결과는 스냅샷으로 자동 보존됩니다.
                 </Text>
-                <Button
-                  onClick={handleRestartWithOtherMethod}
-                  style={{ borderColor: '#faad14', color: '#614700', background: '#fff7e6' }}
-                >
-                  {otherMethodLabel}으로 전처리 재시작
-                </Button>
+                <Space wrap>
+                  <Button
+                    onClick={() => setSnapshotModalOpen(true)}
+                    style={{ borderColor: '#d9d9d9', color: '#595959' }}
+                  >
+                    이전 스냅샷 복원
+                  </Button>
+                  <Button
+                    onClick={handleRestartWithOtherMethod}
+                    style={{ borderColor: '#faad14', color: '#614700', background: '#fff7e6' }}
+                  >
+                    {otherMethodLabel}으로 전처리 재시작
+                  </Button>
+                </Space>
               </div>
             </Card>
 

@@ -191,12 +191,55 @@ def _sync_refine(file_path: str, domain: str, workspace_dir: str) -> str:
     # 정제 결과를 set으로 읽어 원본 순서 기준으로 재정렬
     정제결과 = {line.strip() for line in open(출력, encoding='utf-8', errors='replace') if line.strip()}
     재정렬 = [kw for kw in 원본순서 if kw in 정제결과]
+
+    # cross-method dedup: 다른 method 스냅샷과 중복 키워드 제거
+    try:
+        method_marker = ws / "build" / "work" / ".method"
+        if method_marker.exists():
+            current_method = method_marker.read_text(encoding="utf-8").strip()
+            dedup_removed = _apply_cross_method_dedup(str(출력), Path(workspace_dir).name, current_method, 재정렬)
+            if dedup_removed > 0:
+                # dedup 후 파일 다시 읽어 재정렬 갱신
+                재정렬 = [line.strip() for line in open(출력, encoding="utf-8", errors="replace") if line.strip()]
+    except Exception as e:
+        logger.warning("[refine] cross-method dedup 실패 (무시): %s", e)
+
     with open(출력, "w", encoding="utf-8") as f:
         for kw in 재정렬:
             f.write(f"{kw}\n")
     cnt = len(재정렬)
     제거 = 입력cnt - cnt
     return f"{result} ({cnt}건, 제거:{제거}건)"
+
+
+def _apply_cross_method_dedup(refine_path: str, workspace: str, current_method: str, 재정렬: list) -> int:
+    """다른 method의 스냅샷 refine.txt와 중복 키워드 제거.
+
+    Args:
+        refine_path: 현재 refine.txt 경로 (쓰기 대상)
+        workspace: 워크스페이스명
+        current_method: 현재 실행 중인 method ('log' | 'data')
+        재정렬: 정제 후 키워드 리스트
+
+    Returns:
+        제거된 키워드 수 (0이면 변경 없음)
+    """
+    try:
+        from services.phase1_snapshot_service import get_other_method_keywords
+        other_kws = get_other_method_keywords(workspace, current_method)
+        if not other_kws:
+            return 0  # 다른 method 결과 없음 → dedup 스킵
+
+        filtered = [kw for kw in 재정렬 if kw not in other_kws]
+        removed = len(재정렬) - len(filtered)
+        if removed > 0:
+            with open(refine_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(filtered) + "\n")
+        logger.info("[dedup] %s method 진입 — %d개 중복 키워드 제거", current_method, removed)
+        return removed
+    except Exception as e:
+        logger.warning("[dedup] cross-method dedup 예외 (무시): %s", e)
+        return 0
 
 
 def _sync_analyze(file_path: str, domain: str, workspace_dir: str) -> str:
@@ -418,7 +461,7 @@ async def _run_register(run_id: str, step_num: int, step: dict, domain: str, fil
     _publish_phase1(run_id, step_num, step["name"], 100, f"등록 complete: {count}건", "running", elapsed)
 
 
-async def run_phase1(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5) -> None:
+async def run_phase1(run_id: str, domain: str, file_path: str, start_step: int, end_step: int, workspace: str = "A", filter_mode: str = "rank", filter_value: int = 150000, sort_by: str = "count", rank_value: int = 150000, count_value: int = 5, method: str = "log") -> None:
     """Phase 1 전체 파이프라인 run_phase1_service — 단계별 순차 run_phase1_service"""
     workspace_dir = f"{WORKSPACE_BASE}/{workspace}"
     total_start = time.time()
@@ -429,6 +472,15 @@ async def run_phase1(run_id: str, domain: str, file_path: str, start_step: int, 
         if os.path.isdir(work_dir):
             shutil.rmtree(work_dir)
         os.makedirs(work_dir, exist_ok=True)
+
+    # method 마커 파일 기록 (.method)
+    try:
+        method_marker = Path(workspace_dir) / "build" / "work" / ".method"
+        method_marker.parent.mkdir(parents=True, exist_ok=True)
+        method_marker.write_text(method, encoding="utf-8")
+        logger.info("[run_phase1] method 마커 기록: %s → %s", method, method_marker)
+    except Exception as e:
+        logger.warning("[run_phase1] method 마커 기록 실패 (무시): %s", e)
 
     for step_num in range(start_step, end_step + 1):
         step = PHASE1_STEPS.get(step_num)

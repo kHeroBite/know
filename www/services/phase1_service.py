@@ -137,7 +137,7 @@ class Phase1서비스:
             logger.info(f"Phase1 run_phase1_service: run_id={run_id}, domain={요청.domain}, file_path={file_path}, "
                         f"steps={요청.start_step}-{요청.end_step}, workspace={요청.workspace}")
             from phase1.executor import run_phase1
-            await run_phase1(run_id, 요청.domain or "", file_path, 요청.start_step, 요청.end_step, 요청.workspace or "", 요청.filter_mode, 요청.filter_value, 요청.sort_by, getattr(요청, "rank_value", 150000), getattr(요청, "count_value", 5))
+            await run_phase1(run_id, 요청.domain or "", file_path, 요청.start_step, 요청.end_step, 요청.workspace or "", 요청.filter_mode, 요청.filter_value, 요청.sort_by, getattr(요청, "rank_value", 150000), getattr(요청, "count_value", 5), getattr(요청, "method", "log") or "log")
             await loop.run_in_executor(None, _update_status, "completed", 요청.end_step, None)
         except Exception as e:
             logger.error(f"Phase1 run_phase1_service 실패: run_id={run_id}, error={e}", exc_info=True)

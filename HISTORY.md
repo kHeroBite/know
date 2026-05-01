@@ -1,5 +1,22 @@
 # HISTORY.md — 작업 이력
 
+## 2026-05-01 — 전처리 재시작 시 스냅샷 보존 + 양방향 cross-method dedup
+
+> **작업 요약**: phase1_snapshots 테이블 신설 + archive/list/restore 서비스(최대 5개 자동 순환). /preprocess/snapshot-archive·snapshots·snapshot-restore API 추가. /workspaces/{name}/phase/restart-preserve 신설(뒤로가기와 완전 분리). _sync_refine 후처리에 cross-method dedup 추가(다른 method 활성/스냅샷 키워드 완전 제거). WorkComplete: 재시작 시 스냅샷 자동 보존 + "이전 스냅샷 복원" 버튼 추가. 테스트 9/9 PASS.
+
+### 변경 파일 (11개)
+- `www/init_db.py` — phase1_snapshots 테이블 CREATE + 인덱스
+- `www/services/phase1_snapshot_service.py` (신설) — archive/list/restore/get_active_method/get_other_method_keywords
+- `www/api/phase1.py` — snapshot-archive/snapshots/snapshot-restore API 3개
+- `www/api/workspace.py` — restart-preserve 엔드포인트 (snapshot 보존 + phase 후퇴)
+- `www/phase1/executor.py` — build/work/.method 마커 파일 추적
+- `www/services/phase1_service.py` — _sync_refine에 _apply_cross_method_dedup 추가
+- `www/frontend/src/api/phase1.ts` — snapshotArchive/snapshotList/snapshotRestore API
+- `www/frontend/src/api/workspace.ts` — restartPreserve API
+- `www/frontend/src/pages/WorkComplete.tsx` — handleRestartWithOtherMethod → restartPreserve, 복원 버튼
+- `www/frontend/src/components/phase1/SnapshotListModal.tsx` (신설) — antd Modal/Table 기반
+- `www/frontend/src/pages/Phase1Pipeline.tsx` — SnapshotListModal 연결
+
 ## 2026-04-25 — 데이터기반 전처리 6단계 파이프라인 구조 재구성
 
 > **작업 요약**: 데이터기반 전처리 탭을 6단계 카드 + 좌/우 분할 레이아웃으로 전면 재구성. 1단계 컬럼분석 + 2~6단계 로그기반 백엔드(정제/형태소분석/결과변환/유사어검사/DB업데이트) 재사용. 백엔드 통합 엔드포인트 data-run-all + WS relay + DB dual-write. extract_column_values isfirst 버그 수정(SGML 첫 데이터 라인 손실). 검증: SLITM_NM 70,123개 키워드, DB 55,111건 INSERT, 1230초 1~6단계 완주 (AC-001/002/003 모두 PASS).

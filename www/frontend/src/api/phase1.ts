@@ -43,4 +43,19 @@ export const phase1API = {
 
   결과파일삭제: (workspace: string) =>
     클라이언트.post('/preprocess/cleanup-results', null, { params: { workspace } }),
+
+  snapshotArchive: (workspace: string, method: 'log' | 'data') =>
+    클라이언트.post<{ snapshot_id: string | null; kw_count: number; created_at: string; message?: string }>(
+      '/preprocess/snapshot-archive', null, { params: { workspace, method } }
+    ),
+
+  snapshotList: (workspace: string) =>
+    클라이언트.get<{ snapshots: Array<{ snapshot_id: string; method: string; created_at: string; kw_count: number }> }>(
+      '/preprocess/snapshots', { params: { workspace } }
+    ),
+
+  snapshotRestore: (workspace: string, snapshotId: string) =>
+    클라이언트.post<{ restored: boolean; snapshot_id: string; kw_count: number }>(
+      '/preprocess/snapshot-restore', null, { params: { workspace, snapshot_id: snapshotId } }
+    ),
 }
