@@ -381,6 +381,13 @@ www/
 
 ---
 
+## 최근 변경사항 요약 (2026-05-02, 데이터전처리 컬럼설정 자동 저장/복원)
+
+### 수정 파일
+- `pages/Phase1Pipeline.tsx` — `onColumnsConfigured` 콜백 async 변경 + `phase1DataAPI.컬럼설정저장()` 호출 (siteCode 또는 ws: 기반 configKey)
+
+---
+
 ## 최근 변경사항 요약 (2026-04-09, know 프로젝트 전반 개선)
 
 ### 신규 파일

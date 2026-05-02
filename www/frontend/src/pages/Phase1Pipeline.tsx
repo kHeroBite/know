@@ -587,8 +587,16 @@ export default function Phase1Pipeline() {
                       setDataFilesCount(count)
                       setDataFilenames(filenames)
                     }}
-                    onColumnsConfigured={(cols) => {
+                    onColumnsConfigured={async (cols) => {
                       setSelectedColumns(cols)
+                      const configKey = siteCode || (selectedWorkspace ? `ws:${selectedWorkspace}` : null)
+                      if (configKey) {
+                        try {
+                          await phase1DataAPI.컬럼설정저장(configKey, cols)
+                        } catch {
+                          // 저장 실패는 조용히 무시
+                        }
+                      }
                     }}
                     showColumnModal={showColumnModal}
                     onColumnModalClose={() => setShowColumnModal(false)}

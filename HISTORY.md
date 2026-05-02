@@ -1451,6 +1451,22 @@
 
 ---
 
+## [2026-05-02] 데이터전처리 컬럼설정 자동 저장/복원
+
+> **작업 요약**: `Phase1Pipeline.tsx`의 `onColumnsConfigured` 콜백에 `phase1DataAPI.컬럼설정저장()` 호출 추가. siteCode 또는 워크스페이스 기반 configKey로 컬럼 설정을 저장하여, 동일 siteCode/워크스페이스 재진입 시 이전 컬럼 설정이 자동 복원됨.
+
+### 변경 파일
+- **www/frontend/src/pages/Phase1Pipeline.tsx**:
+  - `onColumnsConfigured` 콜백을 async로 변경
+  - `siteCode || ws:${selectedWorkspace}` configKey 생성 후 `phase1DataAPI.컬럼설정저장()` 호출
+  - 저장 실패는 사용자 UX 영향 없도록 조용히 무시
+
+### 배경
+- 데이터전처리 컬럼 설정(체크된 컬럼 목록)이 페이지 이탈 후 재진입 시 초기화되는 불편함
+- 백엔드 저장 API가 이미 구현되어 있었으나 프론트 콜백에서 호출하지 않는 누락이 원인
+
+---
+
 ## [2026-05-02] 작업완료 페이지 추가작업 버튼 통합 + 회차 리포트
 
 > **작업 요약**: WorkComplete.tsx에서 로그기반/데이터기반 재시작 버튼 2개를 "전처리부터 추가작업" 단일 버튼으로 통합. `get_session_report()` 서비스 함수와 `GET /{name}/session-report` API 엔드포인트를 신규 추가하여 작업 회차/변화량 리포트 기능 구현.
