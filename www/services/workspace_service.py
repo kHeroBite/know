@@ -1996,13 +1996,13 @@ def get_session_report(workspace: str) -> dict:
 
         result = []
         current_round = None
+        prev_entry_last = None  # 이전 회차의 entry_count_last (delta 계산용)
         for idx, s in enumerate(sessions, 1):
             session_id = s[1]  # session_id
             build_row = db.execute(
                 _text(
                     """SELECT COUNT(*) as build_count,
-                              MAX(entry_count) as max_entry_count,
-                              MIN(entry_count) as min_entry_count
+                              MAX(entry_count) as entry_count_last
                        FROM build_history
                        WHERE work_session_id = :sid AND workspace = :ws
                          AND status = 'completed'"""
@@ -2011,16 +2011,15 @@ def get_session_report(workspace: str) -> dict:
             ).fetchone()
 
             build_count = build_row[0] if build_row else 0
-            max_entry = build_row[1] if build_row else None
-            min_entry = build_row[2] if build_row else None
-            # entry_count는 빌드 시점의 사전 항목 수 (WS UDIC 테이블 카운트).
-            # 세션 내 첫 빌드(min)와 마지막 빌드(max)의 항목 수 차이로 변화량 계산.
-            # entry_count가 NULL(미집계)이면 delta도 None 반환.
+            entry_last = build_row[1] if build_row else None
+            # entry_count_delta: 현재 회차의 마지막 빌드 사전 수 - 이전 회차의 마지막 빌드 사전 수.
+            # 1회차(이전 회차 없음) 또는 어느 한쪽이 NULL이면 None 반환.
             delta = (
-                (max_entry - min_entry)
-                if (max_entry is not None and min_entry is not None)
+                (entry_last - prev_entry_last)
+                if (entry_last is not None and prev_entry_last is not None)
                 else None
             )
+            prev_entry_last = entry_last  # 다음 회차를 위해 저장
 
             is_active = s[5] == "active"  # status
             if is_active:
@@ -2034,7 +2033,7 @@ def get_session_report(workspace: str) -> dict:
                 "released_at": s[4],   # released_at
                 "status": s[5],        # status
                 "build_count": build_count,
-                "entry_count_max": max_entry,
+                "entry_count_max": entry_last,
                 "entry_count_delta": delta,
                 "is_active": is_active,
             })
