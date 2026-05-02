@@ -186,7 +186,7 @@ function DicColumn({ dicType, 선택도메인 }: { dicType: DicType; 선택도�
 }
 
 export default function DictionaryManage() {
-  const { selectedWorkspace, selectedDomain: 선택도메인 } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain: 선택도메인, selectedColor } = useWorkspaceStore()
   const [임포트모달, set임포트모달] = useState(false)
   const [파일건수, set파일건수] = useState<{udic: number; cndic: number; thesaurus: number} | null>(null)
   const [임포트중, set임포트중] = useState(false)
@@ -340,7 +340,7 @@ export default function DictionaryManage() {
         {임포트중 && 진행률 && (
           <div>
             <Typography.Text>현재 단계: {단계라벨(진행률.stage)}</Typography.Text>
-            <Progress percent={진행률.percent} status={진행률.status === 'error' ? 'exception' : 'active'} style={{ marginTop: 12 }} />
+            <Progress percent={진행률.percent} status={진행률.status === 'error' ? 'exception' : 'active'} strokeColor={selectedColor || undefined} style={{ marginTop: 12 }} />
             <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
               처리 건수: {진행률.current?.toLocaleString() || 0} 건
             </Typography.Text>

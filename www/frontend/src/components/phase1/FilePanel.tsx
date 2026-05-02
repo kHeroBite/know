@@ -14,6 +14,7 @@ interface FileItem {
 interface FilePanelProps {
   folder: 'popular' | 'fails'
   workspace?: string
+  themeColor?: string
 }
 
 const 폴더명: Record<string, string> = {
@@ -21,7 +22,7 @@ const 폴더명: Record<string, string> = {
   fails: '실패검색어',
 }
 
-export default function FilePanel({ folder, workspace }: FilePanelProps) {
+export default function FilePanel({ folder, workspace, themeColor }: FilePanelProps) {
   const [파일목록, set파일목록] = useState<FileItem[]>([])
   const [로딩, set로딩] = useState(false)
   const [업로딩, set업로딩] = useState(false)
@@ -198,7 +199,7 @@ export default function FilePanel({ folder, workspace }: FilePanelProps) {
         <Progress
           percent={업로드진행률}
           status="active"
-          strokeColor={{ from: '#4f46e5', to: '#818cf8' }}
+          strokeColor={themeColor || { from: '#4f46e5', to: '#818cf8' }}
           style={{ marginBottom: 12 }}
         />
       )}

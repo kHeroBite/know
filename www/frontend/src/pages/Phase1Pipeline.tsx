@@ -498,10 +498,10 @@ export default function Phase1Pipeline() {
                 <Card style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', gap: 16 }}>
                     <div style={{ flex: 1 }}>
-                      <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} />
+                      <FilePanel folder="popular" workspace={selectedWorkspace ?? undefined} themeColor={selectedColor ?? undefined} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} />
+                      <FilePanel folder="fails" workspace={selectedWorkspace ?? undefined} themeColor={selectedColor ?? undefined} />
                     </div>
                   </div>
                 </Card>

@@ -13,6 +13,7 @@ import { workspaceAPI } from '../api/workspace'
 import 클라이언트 from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import { useGlobalTaskStore } from '../stores/globalTaskStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const { Title, Text } = Typography
 
@@ -159,6 +160,7 @@ export default function DomainManage() {
   const { user: currentUser } = useAuthStore()
   const isSuper = currentUser?.auth === 'A'
   const { isBlocked, currentTask, executeDomainAdd, cancelDomainAdd, executeDomainDelete, restoreDomainPolling } = useGlobalTaskStore()
+  const { selectedColor } = useWorkspaceStore()
 
   // 도메인 목록
   const [도메인목록, set도메인목록] = useState<{id: string, name: string | null, last_work_at?: string | null}[]>([])
@@ -442,7 +444,7 @@ export default function DomainManage() {
         {Object.entries(도메인복사진행중).map(([dm, pct]) => (
           <div key={dm} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Text style={{ fontSize: 12 }}>{currentTask?.label || `${dm} 추가 중`}</Text>
-            <Progress percent={pct} size="small" status="active" style={{ maxWidth: 300, display: 'inline-block', flex: 1 }} />
+            <Progress percent={pct} size="small" status="active" strokeColor={selectedColor || undefined} style={{ maxWidth: 300, display: 'inline-block', flex: 1 }} />
             <Button size="small" danger onClick={async () => {
               await cancelDomainAdd(dm)
               message.info(`${dm} 도메인 추가 취소 요청됨`)
@@ -959,7 +961,7 @@ export default function DomainManage() {
         {임포트중 && 진행률 && (
           <div>
             <Text>현재 단계: {단계라벨(진행률.stage)}</Text>
-            <Progress percent={진행률.percent} status={진행률.status === 'error' ? 'exception' : 'active'} style={{ marginTop: 12 }} />
+            <Progress percent={진행률.percent} status={진행률.status === 'error' ? 'exception' : 'active'} strokeColor={selectedColor || undefined} style={{ marginTop: 12 }} />
             <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>처리 건수: {진행률.current?.toLocaleString() || 0} 건</Text>
           </div>
         )}

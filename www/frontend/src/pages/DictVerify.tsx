@@ -17,7 +17,7 @@ const { Text } = Typography
 
 export default function DictVerify() {
   const navigate = useNavigate()
-  const { selectedWorkspace, selectedDomain } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedColor } = useWorkspaceStore()
   const currentDomain = selectedDomain || ''
 
   const handleComplete = async () => {
@@ -302,7 +302,7 @@ export default function DictVerify() {
         }
       >
         <Text type="secondary">형태소분석(Java) 기반으로 복합어 누락·미등록어·통과 키워드를 분류합니다.</Text>
-        {검증중 && <div style={{ marginTop: 12 }}><Progress percent={진행률} status="active" /></div>}
+        {검증중 && <div style={{ marginTop: 12 }}><Progress percent={진행률} status="active" strokeColor={selectedColor || undefined} /></div>}
       </Card>
 
       {/* 검증 결과 */}

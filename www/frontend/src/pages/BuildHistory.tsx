@@ -63,7 +63,7 @@ function 파일다운로드(buildId: number, filename: string) {
 }
 
 export default function BuildHistory() {
-  const { selectedWorkspace, selectedDomain, phase: wsPhase } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, phase: wsPhase, selectedColor } = useWorkspaceStore()
   const navigate = useNavigate()
   const currentDomain = selectedDomain || ''
 
@@ -488,6 +488,7 @@ export default function BuildHistory() {
                 size="small"
                 style={{ width: 160, marginBottom: 0 }}
                 status="active"
+                strokeColor={selectedColor || undefined}
               />
             )}
             {!빌드중 && 빌드퍼센트 === 100 && (

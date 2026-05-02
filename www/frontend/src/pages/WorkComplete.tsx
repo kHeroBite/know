@@ -79,7 +79,7 @@ function formatDuration(startIso: string | null | undefined, endIso: string | nu
 
 export default function WorkComplete() {
   const navigate = useNavigate()
-  const { selectedWorkspace, selectedDomain, selectedDomainLabel, phase } = useWorkspaceStore()
+  const { selectedWorkspace, selectedDomain, selectedDomainLabel, phase, selectedColor } = useWorkspaceStore()
 
   const [loading, setLoading] = useState(true)
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
@@ -512,7 +512,7 @@ export default function WorkComplete() {
           <Progress
             percent={finalProgress}
             status={finalProgress === 100 ? 'success' : 'active'}
-            strokeColor={finalProgress === 100 ? '#52c41a' : { '0%': '#108ee9', '100%': '#87d068' }}
+            strokeColor={finalProgress === 100 ? '#52c41a' : (selectedColor || { '0%': '#108ee9', '100%': '#87d068' })}
           />
           <div style={{ marginTop: 12, textAlign: 'center', color: '#666' }}>
             {finalStep}
