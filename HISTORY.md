@@ -1451,6 +1451,28 @@
 
 ---
 
+## [2026-05-02] 작업완료 페이지 추가작업 버튼 통합 + 회차 리포트
+
+> **작업 요약**: WorkComplete.tsx에서 로그기반/데이터기반 재시작 버튼 2개를 "전처리부터 추가작업" 단일 버튼으로 통합. `get_session_report()` 서비스 함수와 `GET /{name}/session-report` API 엔드포인트를 신규 추가하여 작업 회차/변화량 리포트 기능 구현.
+
+### 변경 파일
+- **www/frontend/src/pages/WorkComplete.tsx**:
+  - 로그기반 재시작 버튼 + 데이터기반 재시작 버튼 제거
+  - "전처리부터 추가작업" 단일 버튼으로 통합
+- **www/services/workspace_service.py**:
+  - `get_session_report(workspace_name)` 함수 추가: 작업 회차/변화량 리포트 생성
+- **www/api/workspace.py**:
+  - `GET /{name}/session-report` 엔드포인트 추가: 세션 리포트 조회 API
+- **www/frontend/src/api/workspace.ts**:
+  - `SessionRound`, `SessionReport` 타입 추가
+  - `getSessionReport(workspaceName)` API 클라이언트 함수 추가
+
+### 배경
+- 작업완료 화면에서 재시작 버튼이 로그기반/데이터기반 2개로 분리되어 사용자 혼선
+- 회차별 작업 변화량 추적을 위한 세션 리포트 API 미존재
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.

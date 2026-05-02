@@ -40,6 +40,25 @@ export interface SystemSetting {
   updated_at: string | null
 }
 
+export interface SessionRound {
+  round: number
+  session_id: string
+  user_id: string
+  started_at: string
+  released_at: string | null
+  status: string
+  build_count: number
+  entry_count_max: number | null
+  entry_count_delta: number | null
+  is_active: boolean
+}
+
+export interface SessionReport {
+  sessions: SessionRound[]
+  current_round: number | null
+  total_rounds: number
+}
+
 export const workspaceAPI = {
   워크스페이스목록: () =>
     클라이언트.get('/workspaces'),
@@ -246,4 +265,10 @@ export const workspaceAPI = {
 
   updateSystemSettings: (key: string, value: string) =>
     클라이언트.put('/system-settings', { settings: { [key]: value } }),
+
+  // 작업 회차 리포트
+  getSessionReport: async (workspace: string): Promise<SessionReport> => {
+    const { data } = await 클라이언트.get<SessionReport>(`/workspaces/${encodeURIComponent(workspace)}/session-report`)
+    return data
+  },
 }

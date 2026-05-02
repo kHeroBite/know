@@ -56,6 +56,7 @@ from services.workspace_service import (
     global_session_event_service,
     participant_stats_service,
     get_last_work_time_by_domain,
+    get_session_report,
 )
 
 라우터 = APIRouter(prefix="/workspaces", tags=["워크스페이스"])
@@ -538,6 +539,15 @@ def workspace_restart_preserve(
     result = phase_backward(name, 요청.to, force=True)
     result["snapshot_id"] = snap_result.get("snapshot_id")
     return result
+
+
+@라우터.get("/{name}/session-report")
+def get_session_report_api(
+    name: str,
+    _current: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """워크스페이스 작업 회차 리포트."""
+    return get_session_report(name)
 
 
 @라우터.get("/{name}/phase")

@@ -1977,6 +1977,73 @@ def get_last_work_time_by_site() -> dict[str, str]:
     return 결과
 
 
+def get_session_report(workspace: str) -> dict:
+    """워크스페이스 작업 세션 리포트 반환."""
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+
+    db = _SL()
+    try:
+        sessions = db.execute(
+            _text(
+                """SELECT id, session_id, user_id, started_at, released_at, status
+                   FROM work_sessions
+                   WHERE workspace = :ws
+                   ORDER BY started_at ASC"""
+            ),
+            {"ws": workspace},
+        ).fetchall()
+
+        result = []
+        current_round = None
+        for idx, s in enumerate(sessions, 1):
+            session_id = s[1]  # session_id
+            build_row = db.execute(
+                _text(
+                    """SELECT COUNT(*) as build_count,
+                              MAX(entry_count) as max_entry_count,
+                              MIN(entry_count) as min_entry_count
+                       FROM build_history
+                       WHERE work_session_id = :sid AND workspace = :ws"""
+                ),
+                {"sid": session_id, "ws": workspace},
+            ).fetchone()
+
+            build_count = build_row[0] if build_row else 0
+            max_entry = build_row[1] if build_row else None
+            min_entry = build_row[2] if build_row else None
+            delta = (
+                (max_entry - min_entry)
+                if (max_entry is not None and min_entry is not None and max_entry != min_entry)
+                else None
+            )
+
+            is_active = s[5] == "active"  # status
+            if is_active:
+                current_round = idx
+
+            result.append({
+                "round": idx,
+                "session_id": session_id,
+                "user_id": s[2],       # user_id
+                "started_at": s[3],    # started_at
+                "released_at": s[4],   # released_at
+                "status": s[5],        # status
+                "build_count": build_count,
+                "entry_count_max": max_entry,
+                "entry_count_delta": delta,
+                "is_active": is_active,
+            })
+
+        return {
+            "sessions": result,
+            "current_round": current_round,
+            "total_rounds": len(result),
+        }
+    finally:
+        db.close()
+
+
 def get_last_work_time_by_domain() -> dict[str, str]:
     """domain별 가장 최근 작업 시각 반환.
     finished_at 우선, 없으면 connected_at 사용. domain이 없는 항목은 제외.

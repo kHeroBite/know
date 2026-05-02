@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
-import { workspaceAPI, type StepReportResponse, type ParticipantStat } from '../api/workspace'
+import { workspaceAPI, type StepReportResponse, type ParticipantStat, type SessionReport } from '../api/workspace'
 import { phase1API } from '../api/phase1'
 import SnapshotListModal from '../components/phase1/SnapshotListModal'
 
@@ -115,6 +115,9 @@ export default function WorkComplete() {
   // 스냅샷 복원 모달
   const [snapshotModalOpen, setSnapshotModalOpen] = useState(false)
 
+  // 작업 회차 리포트
+  const [sessionReport, setSessionReport] = useState<SessionReport | null>(null)
+
   const loadAll = useCallback(async () => {
     if (!selectedWorkspace) {
       setLoading(false)
@@ -206,6 +209,14 @@ export default function WorkComplete() {
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, selectedWorkspace, selectedDomain])
+
+  // 작업 회차 리포트 로드
+  useEffect(() => {
+    if (!selectedWorkspace) return
+    workspaceAPI.getSessionReport(selectedWorkspace)
+      .then(setSessionReport)
+      .catch(() => {})
+  }, [selectedWorkspace])
 
   // 백업 suffix 초기값: YYYYMMDD_HHMMSS
   useEffect(() => {
@@ -402,21 +413,20 @@ export default function WorkComplete() {
     }
   }
 
-  const handleRestartWithOtherMethod = async () => {
+  const handleRestartPreprocess = async () => {
     if (!selectedWorkspace) return
-    const prevMethod = localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log'
-    const nextMethod = prevMethod === 'log' ? 'data' : 'log'
     Modal.confirm({
-      title: `${nextMethod === 'data' ? '데이터기반' : '로그기반'} 전처리로 재시작`,
-      content: '이전 전처리 결과는 스냅샷으로 자동 보존됩니다. 필요 시 "이전 스냅샷 복원" 버튼으로 되돌릴 수 있습니다. 계속하시겠습니까?',
+      title: '전처리부터 추가작업',
+      content: '현재 전처리 결과는 스냅샷으로 자동 보존됩니다. 필요 시 "이전 스냅샷 복원" 버튼으로 되돌릴 수 있습니다. 계속하시겠습니까?',
       okText: '재시작',
       cancelText: '취소',
       onOk: async () => {
         try {
-          await workspaceAPI.restartPreserve(selectedWorkspace, prevMethod as 'log' | 'data')
+          const method = (localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log') as 'log' | 'data'
+          await workspaceAPI.restartPreserve(selectedWorkspace, method)
           // 백엔드에서 phase_backward 처리 → 프론트 store 동기화
           await useWorkspaceStore.getState().loadWorkspaceStatus()
-          navigate(`/preprocess?tab=${nextMethod}`)
+          navigate('/preprocess')
         } catch (e: any) {
           message.error('재시작 실패: ' + (e?.response?.data?.detail || e?.message || ''))
         }
@@ -672,10 +682,6 @@ export default function WorkComplete() {
       )}
 
       {isComplete && (() => {
-        const prevMethod = selectedWorkspace
-          ? (localStorage.getItem(`preprocess_method_${selectedWorkspace}`) ?? 'log')
-          : 'log'
-        const otherMethodLabel = prevMethod === 'log' ? '데이터기반' : '로그기반'
         return (
           <>
             <Card
@@ -684,7 +690,7 @@ export default function WorkComplete() {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <Text style={{ color: '#614700' }}>
-                  다른 방식으로 다시 전처리하려면 아래 버튼을 클릭하세요. 이전 전처리 결과는 스냅샷으로 자동 보존됩니다.
+                  전처리부터 추가 작업을 진행하려면 아래 버튼을 클릭하세요. 이전 전처리 결과는 스냅샷으로 자동 보존됩니다.
                 </Text>
                 <Space wrap>
                   <Button
@@ -694,10 +700,10 @@ export default function WorkComplete() {
                     이전 스냅샷 복원
                   </Button>
                   <Button
-                    onClick={handleRestartWithOtherMethod}
+                    onClick={handleRestartPreprocess}
                     style={{ borderColor: '#faad14', color: '#614700', background: '#fff7e6' }}
                   >
-                    {otherMethodLabel}으로 전처리 재시작
+                    전처리부터 추가작업
                   </Button>
                 </Space>
               </div>
@@ -727,6 +733,31 @@ export default function WorkComplete() {
           </>
         )
       })()}
+
+      {sessionReport && sessionReport.total_rounds > 0 && (
+        <Card
+          title={`작업 회차 현황 (${sessionReport.current_round ? `${sessionReport.current_round}회차 진행 중` : `총 ${sessionReport.total_rounds}회차 완료`})`}
+          style={{ marginTop: 16 }}
+        >
+          <Table
+            size="small"
+            dataSource={sessionReport.sessions}
+            rowKey="session_id"
+            pagination={false}
+            columns={[
+              { title: '회차', dataIndex: 'round', width: 60,
+                render: (v: number, r: any) => r.is_active ? <Tag color="blue">{v}회차</Tag> : `${v}회차` },
+              { title: '시작', dataIndex: 'started_at', width: 160,
+                render: (v: string) => v?.slice(0, 19).replace('T', ' ') },
+              { title: '종료', dataIndex: 'released_at', width: 160,
+                render: (v: string | null) => v ? v.slice(0, 19).replace('T', ' ') : <Tag color="green">진행중</Tag> },
+              { title: '빌드 수', dataIndex: 'build_count', width: 80, align: 'center' as const },
+              { title: '사전 변화량', dataIndex: 'entry_count_delta', width: 100, align: 'center' as const,
+                render: (v: number | null) => v == null ? '-' : v > 0 ? <span style={{color:'#52c41a'}}>+{v}</span> : <span style={{color:'#ff4d4f'}}>{v}</span> },
+            ]}
+          />
+        </Card>
+      )}
 
       {isFinished && (
         <>

@@ -474,6 +474,12 @@ www/
 - `pages/LLMSettings.tsx`: 시스템 설정 섹션 추가 (자동 로그아웃 분 설정, admin only)
 - `api/workspace.ts`: ParticipantStat 타입 확장(kw_count/dict_count/dict_per_hour) + getSystemSettings/updateSystemSettings
 
+### Phase 10: 작업완료 페이지 추가작업 버튼 통합 + 회차 리포트 API (2026-05-02)
+- `pages/WorkComplete.tsx`: 로그기반/데이터기반 재시작 버튼 → "전처리부터 추가작업" 단일 버튼 통합
+- `services/workspace_service.py`: `get_session_report(workspace_name)` 신규 — 작업 회차/변화량 리포트 생성
+- `api/workspace.py`: `GET /{name}/session-report` 신규 — 세션 리포트 조회 엔드포인트
+- `api/workspace.ts`: `SessionRound` + `SessionReport` 타입 추가 + `getSessionReport()` API 클라이언트 추가
+
 ### Phase 9: 백업관리 독립 메뉴 분리 + 메일관리 + WorkComplete 버튼 재구성 (2026-04-16)
 - `models/email_contact.py` (신규): EmailContact ORM 모델
 - `api/email_contacts.py` (신규): GET/POST/DELETE /api/email-contacts 메일 수신자 관리 API
