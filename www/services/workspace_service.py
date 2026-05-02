@@ -2004,7 +2004,8 @@ def get_session_report(workspace: str) -> dict:
                               MAX(entry_count) as max_entry_count,
                               MIN(entry_count) as min_entry_count
                        FROM build_history
-                       WHERE work_session_id = :sid AND workspace = :ws"""
+                       WHERE work_session_id = :sid AND workspace = :ws
+                         AND status = 'completed'"""
                 ),
                 {"sid": session_id, "ws": workspace},
             ).fetchone()
@@ -2012,9 +2013,12 @@ def get_session_report(workspace: str) -> dict:
             build_count = build_row[0] if build_row else 0
             max_entry = build_row[1] if build_row else None
             min_entry = build_row[2] if build_row else None
+            # entry_count는 빌드 시점의 사전 항목 수 (WS UDIC 테이블 카운트).
+            # 세션 내 첫 빌드(min)와 마지막 빌드(max)의 항목 수 차이로 변화량 계산.
+            # entry_count가 NULL(미집계)이면 delta도 None 반환.
             delta = (
                 (max_entry - min_entry)
-                if (max_entry is not None and min_entry is not None and max_entry != min_entry)
+                if (max_entry is not None and min_entry is not None)
                 else None
             )
 

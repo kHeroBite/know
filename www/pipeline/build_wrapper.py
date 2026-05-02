@@ -138,7 +138,7 @@ def run_build(
         # 빌드 결과물 확인
         data_tar = os.path.join(build_home, "data.tar")
         file_size = os.path.getsize(data_tar) if os.path.exists(data_tar) else None
-        entry_count = _count_entries(domain)
+        entry_count = _count_entries(domain, workspace=workspace)
 
         _update_build_history(
             _bh_id,
@@ -422,13 +422,26 @@ def _ftp_download_from_ftpinfo(ftpinfo_path: str) -> str:
     return "\n".join(logs)
 
 
-def _count_entries(domain: str) -> Optional[int]:
-    """빌드 결과 항목 수 조회 (dictionary 테이블)"""
+def _count_entries(domain: str, workspace: Optional[str] = None) -> Optional[int]:
+    """빌드 결과 항목 수 조회.
+
+    workspace가 있으면 WS_{workspace}_{domain}_UDIC 테이블 카운트.
+    workspace 없으면 dictionary 테이블 fallback.
+    """
     try:
         from core.database import SessionLocal
         db = SessionLocal()
         try:
-            from sqlalchemy import text
+            from sqlalchemy import text, inspect
+            if workspace:
+                table_name = f"WS_{workspace}_{domain.upper()}_UDIC"
+                insp = inspect(db.get_bind())
+                if table_name in insp.get_table_names():
+                    result = db.execute(
+                        text(f'SELECT COUNT(*) FROM "{table_name}"'),
+                    ).scalar()
+                    return result
+            # fallback: dictionary 테이블
             result = db.execute(
                 text("SELECT COUNT(*) FROM dictionary WHERE domain = :domain"),
                 {"domain": domain},
