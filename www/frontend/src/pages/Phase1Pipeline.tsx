@@ -593,8 +593,9 @@ export default function Phase1Pipeline() {
                       if (configKey) {
                         try {
                           await phase1DataAPI.컬럼설정저장(configKey, cols)
+                          message.success('컬럼 설정 저장 완료')
                         } catch {
-                          // 저장 실패는 조용히 무시
+                          message.error('컬럼 설정 저장 실패')
                         }
                       }
                     }}

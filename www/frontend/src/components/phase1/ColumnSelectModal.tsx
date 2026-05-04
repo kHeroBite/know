@@ -31,7 +31,7 @@ export default function ColumnSelectModal({
   const [로딩, set로딩] = useState(false)
   const [분석결과, set분석결과] = useState<ColumnInfo[]>([])
   const [행상태, set행상태] = useState<Record<string, 컬럼행상태>>({})
-  const [저장중, set저장중] = useState(false)
+  const [저장중] = useState(false)
 
   // 컬럼 목록 + 저장된 선택 → 행상태 변환 (기존 선택 유지 우선)
   const 컬럼행상태로변환 = (
@@ -39,16 +39,23 @@ export default function ColumnSelectModal({
     저장된: ColumnSpec[],
     기존상태: Record<string, 컬럼행상태>
   ): Record<string, 컬럼행상태> => {
-    const 저장맵 = new Map(저장된.map(c => [c.name, c.split_delimiter ?? '']))
+    // split_delimiter가 null인 경우도 저장된 값으로 인식하기 위해 name→원본값 맵 사용
+    const 저장맵 = new Map(저장된.map(c => [c.name, c.split_delimiter]))
     const 결과: Record<string, 컬럼행상태> = {}
     for (const col of 컬럼) {
-      const 저장된구분자 = 저장맵.get(col.name)
       const 추천구분자 = col.suggested_delimiter ?? ''
-      결과[col.name] = {
-        selected: 저장맵.has(col.name),
-        split_delimiter: (저장된구분자 !== undefined && 저장된구분자 !== '')
-          ? 저장된구분자
-          : (기존상태[col.name]?.split_delimiter || 추천구분자),
+      if (저장맵.has(col.name)) {
+        // 저장된 값 우선 복원 — null은 "구분자 없음"(빈 문자열)으로 변환
+        결과[col.name] = {
+          selected: true,
+          split_delimiter: 저장맵.get(col.name) ?? '',
+        }
+      } else {
+        // 저장된 값 없음 — 기존 행상태 유지 또는 추천 구분자로 초기화
+        결과[col.name] = {
+          selected: 기존상태[col.name]?.selected ?? false,
+          split_delimiter: 기존상태[col.name]?.split_delimiter ?? 추천구분자,
+        }
       }
     }
     return 결과
@@ -61,13 +68,28 @@ export default function ColumnSelectModal({
       message.warning('분석할 업로드 파일이 없습니다')
       return
     }
+    // 모달 open 즉시 initialColumns를 행상태에 반영 (분석 완료 전에도 복원)
+    // 분석결과가 없으면 name만 키로 삼아 임시 적용
+    if (initialColumns.length > 0) {
+      const 저장맵 = new Map(initialColumns.map(c => [c.name, c.split_delimiter]))
+      set행상태(prev => {
+        const next: Record<string, 컬럼행상태> = { ...prev }
+        for (const c of initialColumns) {
+          next[c.name] = {
+            selected: true,
+            split_delimiter: 저장맵.get(c.name) ?? '',
+          }
+        }
+        return next
+      })
+    }
     const 분석실행 = async () => {
       set로딩(true)
       try {
         const { data } = await phase1DataAPI.컬럼분석(filenames, workspace)
         const 컬럼: ColumnInfo[] = data.columns || []
         set분석결과(컬럼)
-        // 분석 완료 후 최신 initialColumns로 prefill (클로저 시점의 값 사용)
+        // 분석 완료 후 최신 initialColumns로 merge (선택상태 우선 보존)
         set행상태(prev => 컬럼행상태로변환(컬럼, initialColumns, prev))
       } catch (err: any) {
         message.error(err.response?.data?.detail || '컬럼 분석 실패')
@@ -121,22 +143,10 @@ export default function ColumnSelectModal({
       message.warning('최소 1개 이상의 컬럼을 선택하세요')
       return
     }
-    set저장중(true)
-    try {
-      const configKey = (siteCode && siteCode.length > 0)
-        ? siteCode
-        : (workspace ? `ws:${workspace}` : null)
-      if (configKey) {
-        await phase1DataAPI.컬럼설정저장(configKey, 선택컬럼)
-      }
-      message.success('컬럼 설정 저장 완료')
-      onSave(선택컬럼)
-      onClose()
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '컬럼 설정 저장 실패')
-    } finally {
-      set저장중(false)
-    }
+    // 저장 책임은 부모(Phase1Pipeline)의 onColumnsConfigured에서 담당
+    // 여기서는 선택 결과만 전달하고 모달 닫기
+    onSave(선택컬럼)
+    onClose()
   }
 
   const 컬럼정의 = [
