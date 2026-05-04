@@ -1227,6 +1227,29 @@ def phase_backward(ws_name: str, prev_phase: str, force: bool = False) -> dict[s
     return {"name": ws_name, "phase": prev_phase, "prev": 현재}
 
 
+def set_phase_direct(ws_name: str, target_phase: str) -> bool:
+    """phase 직접 설정 (단계 건너뛰기 허용). finished는 보호.
+
+    스냅샷 복원처럼 여러 단계를 한 번에 점프해야 할 때 사용.
+    Returns:
+        True: 전이 성공
+        False: ws 없음, finished 상태, 같거나 더 낮은 phase 요청 등 미전이
+    """
+    if target_phase not in PHASE_ORDER:
+        return False
+    상태 = _read_state()
+    if ws_name not in 상태:
+        return False
+    현재 = 상태[ws_name].get("phase", "preprocess")
+    if 현재 == "finished":
+        return False  # finished는 불변
+    if PHASE_ORDER[target_phase] <= PHASE_ORDER[현재]:
+        return False  # 이미 같거나 더 높은 phase
+    상태[ws_name]["phase"] = target_phase
+    _write_state(상태)
+    return True
+
+
 def get_user_phase(db, ws: str, dom: str, uid: str) -> str:
     """user_work_phase 테이블에서 사용자 phase 조회. 없으면 'idle'."""
     from sqlalchemy import text

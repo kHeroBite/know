@@ -383,4 +383,16 @@ def restore_snapshot(workspace: str, snapshot_id: str, user_id: Optional[str] = 
             logger.error("[snapshot] kw 복원 실패: %s", e)
 
     logger.info("[snapshot] restore 완료: %s (kw=%d)", snapshot_id, restored_count)
+
+    # 스냅샷 복원 성공 시 phase=complete 자동 전이
+    try:
+        from services.workspace_service import set_phase_direct
+        전이됨 = set_phase_direct(workspace, "complete")
+        if 전이됨:
+            logger.info("[snapshot] phase → complete 자동 전이: %s", workspace)
+        else:
+            logger.info("[snapshot] phase 전이 스킵 (already complete/finished or ws 없음): %s", workspace)
+    except Exception as e:
+        logger.warning("[snapshot] phase 전이 실패 (무시): %s", e)
+
     return {"restored": True, "snapshot_id": snapshot_id, "kw_count": restored_count}
