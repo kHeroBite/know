@@ -507,7 +507,8 @@ def workspace_restart_preserve(
     snap_result = {"snapshot_id": None}
     if 도메인:
         try:
-            snap_result = archive_snapshot(name, 요청.method, 도메인)
+            user_id = _current.get("user_id") or _current.get("id")
+            snap_result = archive_snapshot(name, 요청.method, 도메인, user_id=user_id)
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("[restart-preserve] archive 실패 (무시): %s", e)
