@@ -1489,6 +1489,23 @@
 
 ---
 
+## [2026-05-04] 작업 회차 카운터 분리 — workspace_rounds 신규 테이블
+
+> **작업 요약**: work_sessions(연결 세션)와 회차(작업 라운드)의 책임을 분리. workspace_rounds 신규 테이블을 도입하여 round_no를 "전처리부터추가작업" 클릭 시에만 증가하도록 구현. get_session_report()를 workspace_rounds 기반으로 재작성하여 회차별 빌드 횟수/사전 변화량을 기간 기반으로 정확히 집계.
+
+### 변경 파일
+- **www/migrations/006_workspace_rounds.sql** (신규): workspace_rounds 테이블 정의 + 자동 적용
+- **www/main.py**: 마이그레이션 006 자동 적용 코드 추가
+- **www/services/workspace_service.py**: `ensure_workspace_round_1()`, `increment_workspace_round()` 신규, `get_session_report()` workspace_rounds 기반 재작성
+- **www/api/workspace.py**: `/api/workspace/{ws_name}/increment-round` 엔드포인트 추가
+- **www/frontend/src/pages/WorkComplete.tsx**: "전처리부터추가작업" 버튼 클릭 시 increment-round API 호출
+
+### 배경
+- 기존 work_sessions 기반 회차 집계는 연결/해제 횟수와 작업 라운드가 혼재되어 카운터가 부정확
+- workspace_rounds 신규 테이블로 회차 의미를 명확히 분리
+
+---
+
 ## [2026-04-11] 작업실 키워드 자동복원 — keyword_id 기반 페이지 계산 API + pre-fetch
 
 > **작업 요약**: 다른 메뉴 이동 후 작업실 복귀 시 이전 선택 키워드를 정확한 페이지로 복원 + 화면 중앙 정렬. `get_keyword_page()` 함수로 keyword_id → 페이지 번호 계산, `/api/assignments/keyword-page` 엔드포인트 추가, 프론트엔드 `목록초기화` 함수가 신규 API로 startPage 계산.

@@ -538,6 +538,14 @@ def workspace_restart_preserve(
     # 4. phase_backward (kw_{ws} 삭제 없이 phase만 복귀 — 다단계 역방향 허용)
     result = phase_backward(name, 요청.to, force=True)
     result["snapshot_id"] = snap_result.get("snapshot_id")
+    # 5. 회차 카운터 증가 (추가작업 버튼 클릭 = 새 회차 시작)
+    try:
+        from services.workspace_service import increment_workspace_round
+        new_round = increment_workspace_round(name)
+        result["new_round"] = new_round
+    except Exception as _e:
+        import logging
+        logging.getLogger(__name__).warning("[restart-preserve] round increment 실패 (무시): %s", _e)
     return result
 
 

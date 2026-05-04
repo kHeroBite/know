@@ -742,7 +742,7 @@ export default function WorkComplete() {
           <Table
             size="small"
             dataSource={sessionReport.sessions}
-            rowKey="session_id"
+            rowKey="round"
             pagination={false}
             columns={[
               { title: '회차', dataIndex: 'round', width: 60,

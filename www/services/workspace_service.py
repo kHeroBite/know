@@ -505,6 +505,10 @@ def link_domain(ws_name: str, domain: str, connected_by: str | None = None, jian
             _session_id = create_work_session(ws_name, user_id)
         except Exception as _e:
             _logger.warning("[work_session] 세션 발급 실패 (무시): %s", _e)
+    try:
+        ensure_workspace_round_1(ws_name)
+    except Exception as _e:
+        _logger.warning("[workspace_round] round 초기화 실패 (무시): %s", _e)
     COPY_PROGRESS[ws_name] = {"percent": 0, "status": "copying", "message": ""}
     COPY_CANCEL[ws_name] = threading.Event()
     if backup_name:
@@ -1977,67 +1981,101 @@ def get_last_work_time_by_site() -> dict[str, str]:
     return 결과
 
 
-def get_session_report(workspace: str) -> dict:
-    """워크스페이스 작업 세션 리포트 반환."""
+def ensure_workspace_round_1(workspace: str) -> None:
+    """워크스페이스 최초 연결 시 round_no=1 초기화 (없을 때만)."""
     from sqlalchemy import text as _text
     from core.database import SessionLocal as _SL
-
     db = _SL()
     try:
-        sessions = db.execute(
-            _text(
-                """SELECT id, session_id, user_id, started_at, released_at, status
-                   FROM work_sessions
-                   WHERE workspace = :ws
-                   ORDER BY started_at ASC"""
-            ),
-            {"ws": workspace},
-        ).fetchall()
+        db.execute(_text(
+            "INSERT OR IGNORE INTO workspace_rounds (workspace, round_no) VALUES (:ws, 1)"
+        ), {"ws": workspace})
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def increment_workspace_round(workspace: str) -> int:
+    """workspace_rounds에 새 회차 추가. 새 round_no 반환."""
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+    db = _SL()
+    try:
+        row = db.execute(_text(
+            "SELECT COALESCE(MAX(round_no), 0) FROM workspace_rounds WHERE workspace=:ws"
+        ), {"ws": workspace}).fetchone()
+        new_round = (row[0] or 0) + 1
+        db.execute(_text(
+            "INSERT INTO workspace_rounds (workspace, round_no) VALUES (:ws, :rn)"
+        ), {"ws": workspace, "rn": new_round})
+        db.commit()
+        return new_round
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def get_session_report(workspace: str) -> dict:
+    """워크스페이스 작업 회차 리포트 (workspace_rounds 기반)."""
+    from sqlalchemy import text as _text
+    from core.database import SessionLocal as _SL
+    db = _SL()
+    try:
+        rounds = db.execute(_text(
+            "SELECT id, round_no, started_at FROM workspace_rounds "
+            "WHERE workspace=:ws ORDER BY round_no ASC"
+        ), {"ws": workspace}).fetchall()
+
+        if not rounds:
+            return {"sessions": [], "current_round": None, "total_rounds": 0}
 
         result = []
-        current_round = None
-        prev_entry_last = None  # 이전 회차의 entry_count_last (delta 계산용)
-        for idx, s in enumerate(sessions, 1):
-            session_id = s[1]  # session_id
-            build_row = db.execute(
-                _text(
-                    """SELECT COUNT(*) as build_count,
-                              MAX(entry_count) as entry_count_last
-                       FROM build_history
-                       WHERE work_session_id = :sid AND workspace = :ws
-                         AND status = 'completed'"""
-                ),
-                {"sid": session_id, "ws": workspace},
-            ).fetchone()
+        prev_entry_last = None
+        for i, r in enumerate(rounds):
+            round_no = r[1]
+            round_start = r[2]
+            next_start = rounds[i + 1][2] if i + 1 < len(rounds) else None
+
+            # build_history.started_at 기간 필터링
+            if next_start:
+                build_row = db.execute(_text(
+                    "SELECT COUNT(*), MAX(entry_count) FROM build_history "
+                    "WHERE workspace=:ws AND status='completed' "
+                    "AND started_at >= :s AND started_at < :e"
+                ), {"ws": workspace, "s": round_start, "e": next_start}).fetchone()
+            else:
+                build_row = db.execute(_text(
+                    "SELECT COUNT(*), MAX(entry_count) FROM build_history "
+                    "WHERE workspace=:ws AND status='completed' "
+                    "AND started_at >= :s"
+                ), {"ws": workspace, "s": round_start}).fetchone()
 
             build_count = build_row[0] if build_row else 0
             entry_last = build_row[1] if build_row else None
-            # entry_count_delta: 현재 회차의 마지막 빌드 사전 수 - 이전 회차의 마지막 빌드 사전 수.
-            # 1회차(이전 회차 없음) 또는 어느 한쪽이 NULL이면 None 반환.
             delta = (
                 (entry_last - prev_entry_last)
-                if (entry_last is not None and prev_entry_last is not None)
+                if entry_last is not None and prev_entry_last is not None
                 else None
             )
-            prev_entry_last = entry_last  # 다음 회차를 위해 저장
-
-            is_active = s[5] == "active"  # status
-            if is_active:
-                current_round = idx
+            prev_entry_last = entry_last
+            is_active = (i == len(rounds) - 1)
 
             result.append({
-                "round": idx,
-                "session_id": session_id,
-                "user_id": s[2],       # user_id
-                "started_at": s[3],    # started_at
-                "released_at": s[4],   # released_at
-                "status": s[5],        # status
+                "round": round_no,
+                "started_at": round_start,
+                "released_at": rounds[i + 1][2] if i + 1 < len(rounds) else None,
+                "status": "active" if is_active else "released",
                 "build_count": build_count,
                 "entry_count_max": entry_last,
                 "entry_count_delta": delta,
                 "is_active": is_active,
             })
 
+        current_round = result[-1]["round"] if result and result[-1]["is_active"] else None
         return {
             "sessions": result,
             "current_round": current_round,
