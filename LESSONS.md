@@ -936,3 +936,13 @@ elif os.path.isdir(path):
 
 **Level**: 1 (1회성 외부 요인, hook 불필요)
 
+### L-070: SMTP_FROM은 호스트명 도메인 형식 필수 — IP 주소 형식 거부됨 (2026-05-13)
+
+**현상**: `SMTP_FROM=noreply@133.186.132.245` (IP 형식) → postfix `501 5.1.7 Bad sender address syntax` 오류로 메일 발송 실패.
+
+**원인**: postfix는 MAIL FROM 도메인 파트에 IP 주소 형식을 허용하지 않음. RFC 5321 기준 `[IP]` 대괄호 표기도 일반적으로 차단.
+
+**재발방지**: SMTP_FROM 설정 시 반드시 호스트명 도메인 형식 사용. 서버의 `postconf myhostname` 또는 `hostname -f` 출력값을 도메인으로 사용. (예: `noreply@search-know.novalocal`). IP 주소를 그대로 쓰는 것은 즉시 501 오류 유발.
+
+**Level**: 1 (초기 설정 실수, 수정으로 해결)
+

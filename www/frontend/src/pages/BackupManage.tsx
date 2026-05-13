@@ -647,8 +647,9 @@ export default function BackupManage() {
           <Button
             size="small"
             icon={<FilePptOutlined />}
-            disabled={!r.workspace_name}
+            disabled={!r.workspace_name || !hasReport}
             onClick={(e) => { e.stopPropagation(); handleDownloadPpt(r) }}
+            title={!r.workspace_name ? '워크스페이스 없음' : !hasReport ? '리포트가 아직 생성되지 않았습니다' : 'PPT 다운로드'}
           >
             PPT
           </Button>

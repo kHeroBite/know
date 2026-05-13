@@ -1,5 +1,16 @@
 # HISTORY.md — 작업 이력
 
+## 2026-05-13 — 백업관리 메일 외부 발신 활성화 + PPT 버튼 UX 개선
+
+> **작업 요약**: 백업관리 4개 버튼(완료리포트/공유/PPT/메일) 검증 수행. postfix 외부 MX 발신 활성화(myhostname/mydomain/smtp_tls 설정) + SMTP_FROM 호스트명 형식 수정(IP 형식 → search-know.novalocal). BackupManage.tsx PPT 버튼 has_report 기반 disabled 처리 추가. 4개 버튼 모두 PASS_ALL 통과.
+
+### 변경 파일
+- **www/.env**: `SMTP_FROM=noreply@search-know.novalocal` (IP 형식에서 호스트명 형식으로 수정)
+- **www/frontend/src/pages/BackupManage.tsx**: PPT 버튼 `disabled={!r.workspace_name || !hasReport}` + title 메시지 추가
+
+### 서버 설정 변경 (직접 편집)
+- `/etc/postfix/main.cf`: myhostname, mydomain, myorigin, smtp_tls_security_level 설정 (외부 MX 직접 발신 활성화)
+
 ## 2026-05-01 — work_session_id 격리: 스냅샷/이력을 작업세션 단위로 분리
 
 > **작업 요약**: work_sessions 테이블 신설(workspace+user_id 단위). /connect→session_id 발급, /release→자동 종료. phase1_snapshots/build_history/work_history에 work_session_id 컬럼 추가. 스냅샷 list/archive/restore에 user_id 추가 → 활성 세션 기준 필터. 5개 초과 자동삭제는 같은 세션 내에서만 발동(다른 세션 스냅샷 보호). cross-session restore 차단(HTTP 403). cross-method dedup도 같은 세션 내에서만 발동. 기존 NULL work_session_id 데이터 삭제 + payload 정리. 테스트 5/5 PASS.
