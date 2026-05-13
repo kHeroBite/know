@@ -488,7 +488,7 @@ def _read_grammar_file(filepath: str | Path) -> list[tuple]:
 
 
 def _build_overview_sheet(ws, data: dict) -> None:
-    # [0] 작업개요 시트 — C2:J6 사전별 카운트 표 + SUM 수식
+    # [0] 작업개요 시트 — C2:J7 사전별 추가/삭제/수정 카운트 표
     bold = Font(bold=True)
 
     # row2: 제목 + 우측 주석
@@ -509,31 +509,39 @@ def _build_overview_sheet(ws, data: dict) -> None:
     for c, h in enumerate(headers_row3, 3):
         ws.cell(row=3, column=c, value=h).font = bold
 
-    # row4: 인터넷 검색 (current_backup) 카운트
-    ws.cell(row=4, column=3, value="인터넷 검색").font = bold
+    # row4: 추가 카운트
+    ws.cell(row=4, column=3, value="추가").font = bold
     for c, key in enumerate(
-        ["udic_current", "cndic_current", "thes_new_current", "thes_part_current",
-         "cotton_current", "nq_per_current", "grammar_current"],
+        ["udic_added", "cndic_added", "thes_new_added", "thes_part_added",
+         "cotton_added", "nq_per_added", "grammar_added"],
         4,
     ):
         ws.cell(row=4, column=c, value=data.get(key, 0))
 
-    # row5: 특화 검색 (prev_backup, None이면 빈칸)
-    ws.cell(row=5, column=3, value="특화 검색").font = bold
+    # row5: 삭제 카운트
+    ws.cell(row=5, column=3, value="삭제").font = bold
     for c, key in enumerate(
-        ["udic_prev", "cndic_prev", "thes_new_prev", "thes_part_prev",
-         "cotton_prev", "nq_per_prev", "grammar_prev"],
+        ["udic_removed", "cndic_removed", "thes_new_removed", "thes_part_removed",
+         "cotton_removed", "nq_per_removed", "grammar_removed"],
         4,
     ):
-        val = data.get(key)
-        ws.cell(row=5, column=c, value=val if val is not None else "")
+        ws.cell(row=5, column=c, value=data.get(key, 0))
 
-    # row6: 합계 (SUM 수식)
-    ws.cell(row=6, column=3, value="합계").font = bold
+    # row6: 수정 카운트
+    ws.cell(row=6, column=3, value="수정").font = bold
+    for c, key in enumerate(
+        ["udic_modified", "cndic_modified", "thes_new_modified", "thes_part_modified",
+         "cotton_modified", "nq_per_modified", "grammar_modified"],
+        4,
+    ):
+        ws.cell(row=6, column=c, value=data.get(key, 0))
+
+    # row7: 합계 (SUM 수식)
+    ws.cell(row=7, column=3, value="합계").font = bold
     col_letters = ["D", "E", "F", "G", "H", "I", "J"]
     for col_letter in col_letters:
-        ws.cell(row=6, column=ord(col_letter) - ord("A") + 1,
-                value=f"=SUM({col_letter}4:{col_letter}5)")
+        ws.cell(row=7, column=ord(col_letter) - ord("A") + 1,
+                value=f"=SUM({col_letter}4:{col_letter}6)")
 
 
 def _build_3col_sheet(ws, rows_current: list[str], rows_prev: list[str] | None) -> None:
@@ -636,6 +644,82 @@ def _build_grammar_sheet(ws, rows_current: list[tuple], rows_prev: list[tuple] |
             ws.cell(row=row_num, column=5, value=rows_prev[i][1])
 
 
+def _diff_file_list(current: list[str], prev: list[str]) -> dict[str, list[str]]:
+    # 파일 기반 단어 목록 두 개를 set diff → {added, removed} 산출
+    curr_set = set(current)
+    prev_set = set(prev)
+    added = sorted(curr_set - prev_set)
+    removed = sorted(prev_set - curr_set)
+    return {"added": added, "removed": removed}
+
+
+def _diff_grammar_list(
+    current: list[tuple], prev: list[tuple]
+) -> dict[str, list[tuple]]:
+    # 기분석 사전 튜플 목록 set diff → {added, removed} 산출
+    curr_set = set(current)
+    prev_set = set(prev)
+    added = sorted(curr_set - prev_set)
+    removed = sorted(prev_set - curr_set)
+    return {"added": added, "removed": removed}
+
+
+def _build_diff_sheet(
+    ws,
+    added: list[str],
+    removed: list[str],
+    modified: list[str] | None = None,
+) -> None:
+    # diff 표시 시트 공통 빌더 — no/키워드/상태 3컬럼
+    bold = Font(bold=True)
+    headers = ["no", "키워드", "상태"]
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=1, column=c, value=h).font = bold
+
+    row_num = 2
+    for kw in added:
+        ws.cell(row=row_num, column=1, value=row_num - 1)
+        ws.cell(row=row_num, column=2, value=kw)
+        ws.cell(row=row_num, column=3, value="추가")
+        row_num += 1
+    for kw in removed:
+        ws.cell(row=row_num, column=1, value=row_num - 1)
+        ws.cell(row=row_num, column=2, value=kw)
+        ws.cell(row=row_num, column=3, value="삭제")
+        row_num += 1
+    for kw in (modified or []):
+        ws.cell(row=row_num, column=1, value=row_num - 1)
+        ws.cell(row=row_num, column=2, value=kw)
+        ws.cell(row=row_num, column=3, value="수정")
+        row_num += 1
+
+
+def _build_grammar_diff_sheet(
+    ws,
+    added: list[tuple],
+    removed: list[tuple],
+) -> None:
+    # 기분석 사전 diff 시트 빌더 — no/표제어/태그들/상태 4컬럼
+    bold = Font(bold=True)
+    headers = ["no", "표제어", "태그들", "상태"]
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=1, column=c, value=h).font = bold
+
+    row_num = 2
+    for kw, tags in added:
+        ws.cell(row=row_num, column=1, value=row_num - 1)
+        ws.cell(row=row_num, column=2, value=kw)
+        ws.cell(row=row_num, column=3, value=tags)
+        ws.cell(row=row_num, column=4, value="추가")
+        row_num += 1
+    for kw, tags in removed:
+        ws.cell(row=row_num, column=1, value=row_num - 1)
+        ws.cell(row=row_num, column=2, value=kw)
+        ws.cell(row=row_num, column=3, value=tags)
+        ws.cell(row=row_num, column=4, value="삭제")
+        row_num += 1
+
+
 def _thesaurus_to_pairs(thesaurus_rows: list[dict]) -> tuple[list[str], list[str]]:
     # THESAURUS 행 목록 → (신규생성 유사어쌍 문자열 목록, 부분추가 (기존쌍, 새엔트리) 튜플 목록)
     # _HEAD_WORD + _TAIL_WORD를 합쳐 하나의 유사어쌍 문자열로 반환 (신규)
@@ -708,64 +792,86 @@ def generate_excel(
     prev_backup: str | None = None,
     db=None,
 ) -> io.BytesIO:
-    """8시트 완료 리포트 Excel 생성 → io.BytesIO 반환 (샘플 know.xlsx 구조)."""
+    """8시트 완료 리포트 Excel 생성 → io.BytesIO 반환 (prev↔current diff 표시)."""
     # ── 데이터 로드 ──────────────────────────────
     current_data = _load_backup_dict(backup_folder)
-    prev_data = _load_backup_dict(prev_backup) if prev_backup else {}
+    # prev=None이면 빈 집합으로 → current 전체가 "추가"로 분류
+    prev_data = _load_backup_dict(prev_backup) if prev_backup else {k: [] for k in _SUFFIX_BY_TYPE}
 
     backup_base = Path(DICT_BACKUP_DIR) / backup_folder
     prev_base = Path(DICT_BACKUP_DIR) / prev_backup if prev_backup else None
 
-    # DB 기반 사전 (B=current, C=prev)
-    udic_cur = [r["_WORD"] for r in current_data.get("udic", []) if r.get("_WORD")]
-    udic_prev = [r["_WORD"] for r in prev_data.get("udic", [])] if prev_backup else None
-    cndic_cur = [r["_WORD"] for r in current_data.get("cndic", []) if r.get("_WORD")]
-    cndic_prev = [r["_WORD"] for r in prev_data.get("cndic", [])] if prev_backup else None
+    # ── DB 기반 사전 diff (_compute_full_diff 재활용) ────────────
+    full_diff = _compute_full_diff(current_data, prev_data)
+    udic_diff = full_diff["udic"]    # {added, removed, modified}
+    cndic_diff = full_diff["cndic"]
 
-    # THESAURUS 신규/부분추가 분리
+    # UDIC diff: added/removed는 row dict → _WORD 추출, modified → key 사용
+    udic_added = [r.get("_WORD", _row_key(r)) for r in udic_diff["added"]]
+    udic_removed = [r.get("_WORD", _row_key(r)) for r in udic_diff["removed"]]
+    udic_modified = [m["key"] for m in udic_diff["modified"]]
+
+    # CNDIC diff
+    cndic_added = [r.get("_WORD", _row_key(r)) for r in cndic_diff["added"]]
+    cndic_removed = [r.get("_WORD", _row_key(r)) for r in cndic_diff["removed"]]
+    cndic_modified = [m["key"] for m in cndic_diff["modified"]]
+
+    # ── THESAURUS 신규/부분추가 분리 (기존 로직 유지) ──────────────
     thes_cur_rows = current_data.get("thesaurus", [])
-    thes_prev_rows = prev_data.get("thesaurus", []) if prev_backup else []
+    thes_prev_rows = prev_data.get("thesaurus", [])
     thes_new_cur, thes_part_cur, thes_new_prev, thes_part_prev = _thesaurus_split_new_partial(
         thes_cur_rows, thes_prev_rows
     )
     thes_new_prev_out = thes_new_prev if prev_backup else None
     thes_part_prev_out = thes_part_prev if prev_backup else None
 
-    # 파일 기반 사전 (txt_resrc)
+    # ── 파일 기반 사전 diff (set diff) ──────────────────────────
     cotton_cur = _read_dict_file_first_col(backup_base / "txt_resrc" / "sdic" / "cotton.dic")
-    cotton_prev = (
+    cotton_prev_list = (
         _read_dict_file_first_col(prev_base / "txt_resrc" / "sdic" / "cotton.dic")
-        if prev_base else None
+        if prev_base else []
     )
+    cotton_diff = _diff_file_list(cotton_cur, cotton_prev_list)
+
     nq_per_cur = _read_dict_file_first_col(backup_base / "txt_resrc" / "sdic" / "nq_per.dic")
-    nq_per_prev = (
+    nq_per_prev_list = (
         _read_dict_file_first_col(prev_base / "txt_resrc" / "sdic" / "nq_per.dic")
-        if prev_base else None
+        if prev_base else []
     )
+    nq_per_diff = _diff_file_list(nq_per_cur, nq_per_prev_list)
+
     grammar_cur = _read_grammar_file(
         backup_base / "txt_resrc" / "grammar" / "cotton_part_prefer.list"
     )
-    grammar_prev = (
+    grammar_prev_list = (
         _read_grammar_file(prev_base / "txt_resrc" / "grammar" / "cotton_part_prefer.list")
-        if prev_base else None
+        if prev_base else []
     )
+    grammar_diff = _diff_grammar_list(grammar_cur, grammar_prev_list)
 
-    # ── 작업개요 카운트 데이터 준비 ──────────────────────
+    # ── 작업개요 카운트 데이터 준비 (추가/삭제/수정 카운트) ────────
     overview_data = {
-        "udic_current": len(udic_cur),
-        "cndic_current": len(cndic_cur),
-        "thes_new_current": len(thes_new_cur),
-        "thes_part_current": len(thes_part_cur),
-        "cotton_current": len(cotton_cur),
-        "nq_per_current": len(nq_per_cur),
-        "grammar_current": len(grammar_cur),
-        "udic_prev": len(udic_prev) if udic_prev is not None else None,
-        "cndic_prev": len(cndic_prev) if cndic_prev is not None else None,
-        "thes_new_prev": len(thes_new_prev) if thes_new_prev_out is not None else None,
-        "thes_part_prev": len(thes_part_prev) if thes_part_prev_out is not None else None,
-        "cotton_prev": len(cotton_prev) if cotton_prev is not None else None,
-        "nq_per_prev": len(nq_per_prev) if nq_per_prev is not None else None,
-        "grammar_prev": len(grammar_prev) if grammar_prev is not None else None,
+        "udic_added": len(udic_added),
+        "cndic_added": len(cndic_added),
+        "thes_new_added": len(thes_new_cur),
+        "thes_part_added": len(thes_part_cur),
+        "cotton_added": len(cotton_diff["added"]),
+        "nq_per_added": len(nq_per_diff["added"]),
+        "grammar_added": len(grammar_diff["added"]),
+        "udic_removed": len(udic_removed),
+        "cndic_removed": len(cndic_removed),
+        "thes_new_removed": len(thes_new_prev),
+        "thes_part_removed": len(thes_part_prev),
+        "cotton_removed": len(cotton_diff["removed"]),
+        "nq_per_removed": len(nq_per_diff["removed"]),
+        "grammar_removed": len(grammar_diff["removed"]),
+        "udic_modified": len(udic_modified),
+        "cndic_modified": len(cndic_modified),
+        "thes_new_modified": 0,
+        "thes_part_modified": 0,
+        "cotton_modified": 0,
+        "nq_per_modified": 0,
+        "grammar_modified": 0,
     }
 
     # ── 워크북 생성 ──────────────────────────────
@@ -776,33 +882,33 @@ def generate_excel(
     ws0.title = "작업개요"
     _build_overview_sheet(ws0, overview_data)
 
-    # [1] 사용자 단일어 사전
+    # [1] 사용자 단일어 사전 (diff)
     ws1 = wb.create_sheet("사용자 단일어 사전")
-    _build_3col_sheet(ws1, udic_cur, udic_prev)
+    _build_diff_sheet(ws1, udic_added, udic_removed, udic_modified)
 
-    # [2] 복합어 사전
+    # [2] 복합어 사전 (diff)
     ws2 = wb.create_sheet("복합어 사전")
-    _build_3col_sheet(ws2, cndic_cur, cndic_prev)
+    _build_diff_sheet(ws2, cndic_added, cndic_removed, cndic_modified)
 
-    # [3] 유사어 사전(신규생성)
+    # [3] 유사어 사전(신규생성) — 기존 diff 로직 유지
     ws3 = wb.create_sheet("유사어 사전(신규생성)")
     _build_thesaurus_new_sheet(ws3, thes_new_cur, thes_new_prev_out)
 
-    # [4] 유사어 사전(부분추가)
+    # [4] 유사어 사전(부분추가) — 기존 diff 로직 유지
     ws4 = wb.create_sheet("유사어 사전(부분추가)")
     _build_thesaurus_partial_sheet(ws4, thes_part_cur, thes_part_prev_out)
 
-    # [5] 용언 명사화 사전(cotton.dic)
+    # [5] 용언 명사화 사전(cotton.dic) (diff)
     ws5 = wb.create_sheet("용언 명사화 사전(cotton.dic)")
-    _build_3col_sheet(ws5, cotton_cur, cotton_prev)
+    _build_diff_sheet(ws5, cotton_diff["added"], cotton_diff["removed"])
 
-    # [6] 인명 사전(nq_per.dic)
+    # [6] 인명 사전(nq_per.dic) (diff)
     ws6 = wb.create_sheet("인명 사전(nq_per.dic)")
-    _build_3col_sheet(ws6, nq_per_cur, nq_per_prev)
+    _build_diff_sheet(ws6, nq_per_diff["added"], nq_per_diff["removed"])
 
     # [7] 기분석 사전(cotton_part_prefer.list  ← 괄호 누락 의도적 (샘플 그대로)
     ws7 = wb.create_sheet("기분석 사전(cotton_part_prefer.list")
-    _build_grammar_sheet(ws7, grammar_cur, grammar_prev)
+    _build_grammar_diff_sheet(ws7, grammar_diff["added"], grammar_diff["removed"])
 
     buffer = io.BytesIO()
     wb.save(buffer)
