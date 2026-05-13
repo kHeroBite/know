@@ -327,7 +327,7 @@ www/
     ├── src/api/workspace.ts   # 워크스페이스 API 클라이언트 (DomainItem {id,name} 타입 포함 + phase 전이 API + ParticipantStat kw_count/dict_count/dict_per_hour + getSystemSettings/updateSystemSettings)
     ├── src/api/dict_verify.ts # 사전검증 API 클라이언트
     ├── src/api/llm.ts         # LLM 설정 API 클라이언트 (목록 조회, 저장)
-    ├── src/api/reports.ts     # 리포트 API 클라이언트 (downloadPptFile blob fetch)
+    ├── src/api/reports.ts     # 리포트 API 클라이언트 (downloadPptFile + downloadExcelFile blob fetch)
     ├── src/api/backup.ts      # 백업 API 클라이언트 (getEmailContacts/addEmailContact/deleteEmailContact)
     ├── src/stores/authStore.ts # JWT 상태 관리
     ├── src/stores/pipelineStore.ts # 파이프라인 상태 관리
@@ -497,4 +497,4 @@ www/
 - `App.tsx`: /backup-manage 라우트 추가
 - `components/Layout.tsx`: 백업관리 메뉴 항목 추가 (사이트관리 아래)
 - `pages/WorkComplete.tsx`: 버튼 순서 재구성(완료리포트→공유→PPT→메일) + PPT blob 다운로드 + 메일 수신자 Select 전환
-- `api/reports.ts`: downloadPptFile blob fetch 추가
+- `api/reports.ts`: downloadPptFile + downloadExcelFile blob fetch 추가

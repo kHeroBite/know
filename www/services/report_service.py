@@ -6,12 +6,15 @@
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import openpyxl
+from openpyxl.styles import Font
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
@@ -435,3 +438,154 @@ def _add_table(slide, headers: list[str], rows: list[list[str]], left_in: float,
             for p in cell.text_frame.paragraphs:
                 for run in p.runs:
                     run.font.size = Pt(12)
+
+
+# ──────────────────────────────────────────────
+# Excel 리포트 생성
+# ──────────────────────────────────────────────
+
+def generate_excel(
+    workspace: str,
+    backup_folder: str,
+    prev_backup: str | None = None,
+    db=None,
+) -> io.BytesIO:
+    """3시트 완료 리포트 Excel 생성 → io.BytesIO 반환."""
+    current_data = _load_backup_dict(backup_folder)
+    prev_data = _load_backup_dict(prev_backup) if prev_backup else {k: [] for k in _SUFFIX_BY_TYPE}
+    meta = _read_backup_metadata(backup_folder)
+    full_diff = _compute_full_diff(current_data, prev_data)
+    participants = get_participants_stats(workspace, db) if db else []
+
+    wb = openpyxl.Workbook()
+    bold = Font(bold=True)
+
+    # ── Sheet1: 작업결과 ──────────────────────────────
+    ws1 = wb.active
+    ws1.title = "작업결과"
+
+    # 헤더 1행 (메타)
+    meta_headers = ["워크스페이스", "백업폴더", "완료시각", "도메인"]
+    for c, h in enumerate(meta_headers, 1):
+        cell = ws1.cell(row=1, column=c, value=h)
+        cell.font = bold
+
+    # 2행: 값
+    domain = str(meta.get("domain") or "").upper()
+    timestamp = meta.get("timestamp") or ""
+    ws1.cell(row=2, column=1, value=workspace)
+    ws1.cell(row=2, column=2, value=backup_folder)
+    ws1.cell(row=2, column=3, value=timestamp)
+    ws1.cell(row=2, column=4, value=domain)
+
+    # 빈 행 후 참여자 표
+    p_row = 4
+    participant_headers = ["사용자명", "아이디", "읽기(R)", "쓰기(W)", "합계"]
+    for c, h in enumerate(participant_headers, 1):
+        cell = ws1.cell(row=p_row, column=c, value=h)
+        cell.font = bold
+
+    if participants:
+        for i, p in enumerate(participants):
+            r_count = int(p.get("r_count", 0))
+            w_count = int(p.get("w_count", 0))
+            row_num = p_row + 1 + i
+            ws1.cell(row=row_num, column=1, value=p.get("name", ""))
+            ws1.cell(row=row_num, column=2, value=p.get("user_id", ""))
+            ws1.cell(row=row_num, column=3, value=r_count)
+            ws1.cell(row=row_num, column=4, value=w_count)
+            ws1.cell(row=row_num, column=5, value=r_count + w_count)
+    else:
+        ws1.cell(row=p_row + 1, column=1, value="참여자 정보 없음")
+
+    # 컬럼 너비 자동 조정
+    for col in ws1.columns:
+        max_len = max((len(str(c.value or "")) for c in col), default=8)
+        ws1.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    # ── Sheet2: 변화량 ──────────────────────────────
+    ws2 = wb.create_sheet("변화량")
+    change_headers = ["테이블", "추가", "삭제", "수정", "Before총계", "After총계"]
+    for c, h in enumerate(change_headers, 1):
+        cell = ws2.cell(row=1, column=c, value=h)
+        cell.font = bold
+
+    name_map = {"udic": "UDIC", "cndic": "CNDIC", "thesaurus": "THESAURUS", "category": "CATEGORY"}
+    for i, (type_key, label) in enumerate(name_map.items()):
+        d = full_diff[type_key]
+        row_num = i + 2
+        ws2.cell(row=row_num, column=1, value=label)
+        ws2.cell(row=row_num, column=2, value=len(d["added"]))
+        ws2.cell(row=row_num, column=3, value=len(d["removed"]))
+        ws2.cell(row=row_num, column=4, value=len(d["modified"]))
+        ws2.cell(row=row_num, column=5, value=len(prev_data.get(type_key, [])))
+        ws2.cell(row=row_num, column=6, value=len(current_data.get(type_key, [])))
+
+    for col in ws2.columns:
+        max_len = max((len(str(c.value or "")) for c in col), default=8)
+        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 4, 30)
+
+    # ── Sheet3: 변화데이터 ──────────────────────────
+    ws3 = wb.create_sheet("변화데이터")
+    cur_row = 1
+    for type_key, label in name_map.items():
+        d = full_diff[type_key]
+
+        # 섹션 제목
+        sec_cell = ws3.cell(row=cur_row, column=1, value=f"[{label}]")
+        sec_cell.font = Font(bold=True, size=12)
+        cur_row += 1
+
+        # 추가
+        add_header = ws3.cell(row=cur_row, column=1, value="추가")
+        add_header.font = bold
+        ws3.cell(row=cur_row, column=2, value="키워드")
+        cur_row += 1
+        if d["added"]:
+            for row_data in d["added"]:
+                ws3.cell(row=cur_row, column=2, value=_row_key(row_data))
+                cur_row += 1
+        else:
+            ws3.cell(row=cur_row, column=2, value="(없음)")
+            cur_row += 1
+
+        # 삭제
+        del_header = ws3.cell(row=cur_row, column=1, value="삭제")
+        del_header.font = bold
+        ws3.cell(row=cur_row, column=2, value="키워드")
+        cur_row += 1
+        if d["removed"]:
+            for row_data in d["removed"]:
+                ws3.cell(row=cur_row, column=2, value=_row_key(row_data))
+                cur_row += 1
+        else:
+            ws3.cell(row=cur_row, column=2, value="(없음)")
+            cur_row += 1
+
+        # 수정
+        mod_header = ws3.cell(row=cur_row, column=1, value="수정")
+        mod_header.font = bold
+        ws3.cell(row=cur_row, column=2, value="키워드")
+        ws3.cell(row=cur_row, column=3, value="Before")
+        ws3.cell(row=cur_row, column=4, value="After")
+        cur_row += 1
+        if d["modified"]:
+            for mod in d["modified"]:
+                ws3.cell(row=cur_row, column=2, value=mod.get("key", ""))
+                ws3.cell(row=cur_row, column=3, value=_row_value(mod.get("before", {})))
+                ws3.cell(row=cur_row, column=4, value=_row_value(mod.get("after", {})))
+                cur_row += 1
+        else:
+            ws3.cell(row=cur_row, column=2, value="(없음)")
+            cur_row += 1
+
+        cur_row += 1  # 섹션 간 빈 행
+
+    for col in ws3.columns:
+        max_len = max((len(str(c.value or "")) for c in col), default=10)
+        ws3.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer

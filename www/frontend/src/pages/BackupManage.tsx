@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, ShareAltOutlined,
-  FilePptOutlined, MailOutlined, CheckCircleOutlined, DeleteFilled,
+  FilePptOutlined, FileExcelOutlined, MailOutlined, CheckCircleOutlined, DeleteFilled,
   ExperimentOutlined, SearchOutlined,
 } from '@ant-design/icons'
 import PageHeader from '../components/PageHeader'
@@ -421,6 +421,29 @@ export default function BackupManage() {
     }
   }
 
+  // ─── Excel 다운로드 ────────────────────────────────────────────
+  const handleDownloadExcel = async (record: Backup) => {
+    if (!record.workspace_name) {
+      message.error('워크스페이스 정보가 없습니다')
+      return
+    }
+    try {
+      const response = await reportAPI.downloadExcelFile(record.workspace_name, record.name)
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${record.name}.xlsx`
+      link.click()
+      window.URL.revokeObjectURL(url)
+      message.success('Excel 다운로드 완료')
+    } catch (e: any) {
+      message.error('Excel 다운로드 실패: ' + (e?.message || e))
+    }
+  }
+
   // ─── 공유 모달 ─────────────────────────────────────────────────
   const openShareModal = (record: Backup) => {
     setShareTarget(record)
@@ -652,6 +675,15 @@ export default function BackupManage() {
             title={!r.workspace_name ? '워크스페이스 없음' : !hasReport ? '리포트가 아직 생성되지 않았습니다' : 'PPT 다운로드'}
           >
             PPT
+          </Button>
+          <Button
+            size="small"
+            icon={<FileExcelOutlined />}
+            disabled={!r.workspace_name}
+            onClick={(e) => { e.stopPropagation(); handleDownloadExcel(r) }}
+            title={!r.workspace_name ? '워크스페이스 없음' : 'Excel 다운로드'}
+          >
+            Excel
           </Button>
           <Button
             size="small"

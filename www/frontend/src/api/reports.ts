@@ -46,6 +46,16 @@ export const reportAPI = {
       { responseType: 'blob' }
     ),
 
+  // Excel 리포트 다운로드 — PPT 패턴 미러
+  downloadExcelFile: (workspace: string, backup_folder: string, prev_backup?: string) =>
+    클라이언트.get(
+      `/reports/download_excel/${encodeURIComponent(workspace)}/${encodeURIComponent(backup_folder)}`,
+      {
+        responseType: 'blob',
+        params: prev_backup ? { prev_backup } : undefined,
+      }
+    ),
+
   getDiff: (
     workspace: string,
     current_backup: string,

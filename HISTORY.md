@@ -1,5 +1,15 @@
 # HISTORY.md — 작업 이력
 
+## 2026-05-13 — 백업관리 Excel 다운로드 버튼 추가 (3시트: 작업결과/변화량/변화데이터)
+
+> **작업 요약**: 백업관리 페이지에 Excel 다운로드 버튼 추가. `generate_excel()` 함수로 3시트(작업결과/변화량/변화데이터) 구성. GET `/download_excel/{ws}/{backup}` API + 프론트 `downloadExcelFile()` + FileExcelOutlined 버튼. PPT 패턴 미러링으로 회귀 없이 PASS_ALL 통과.
+
+### 변경 파일
+- **www/services/report_service.py**: `generate_excel()` 함수 추가 (+150줄, L-441~) — 3시트(작업결과/변화량/변화데이터) 구성, openpyxl StreamingResponse
+- **www/api/reports.py**: `GET /download_excel/{ws}/{backup}` 엔드포인트 추가 (+30줄)
+- **www/frontend/src/api/reports.ts**: `downloadExcelFile()` API 클라이언트 추가 (+10줄)
+- **www/frontend/src/pages/BackupManage.tsx**: FileExcelOutlined import + handleDownloadExcel + Excel 버튼 추가 (+25줄, L-681)
+
 ## 2026-05-13 — 백업관리 메일 외부 발신 활성화 + PPT 버튼 UX 개선
 
 > **작업 요약**: 백업관리 4개 버튼(완료리포트/공유/PPT/메일) 검증 수행. postfix 외부 MX 발신 활성화(myhostname/mydomain/smtp_tls 설정) + SMTP_FROM 호스트명 형식 수정(IP 형식 → search-know.novalocal). BackupManage.tsx PPT 버튼 has_report 기반 disabled 처리 추가. 4개 버튼 모두 PASS_ALL 통과.
