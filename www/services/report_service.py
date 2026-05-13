@@ -441,8 +441,266 @@ def _add_table(slide, headers: list[str], rows: list[list[str]], left_in: float,
 
 
 # ──────────────────────────────────────────────
-# Excel 리포트 생성
+# Excel 리포트 생성 — 8시트 구조 (샘플 know.xlsx 기준)
 # ──────────────────────────────────────────────
+
+
+def _read_dict_file_first_col(filepath: str | Path) -> list[str]:
+    # 텍스트 사전 파일에서 스페이스 split 첫 번째 컬럼만 추출 (cotton.dic, nq_per.dic)
+    result: list[str] = []
+    fpath = Path(filepath)
+    if not fpath.exists():
+        logger.warning("사전 파일 없음: %s", fpath)
+        return result
+    try:
+        for line in fpath.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if parts:
+                result.append(parts[0])
+    except Exception as e:
+        logger.warning("사전 파일 읽기 실패 %s: %s", fpath, e)
+    return result
+
+
+def _read_grammar_file(filepath: str | Path) -> list[tuple]:
+    # 기분석 사전(cotton_part_prefer.list) 탭 split → (표제어, 분석_태그) 튜플 목록
+    result: list[tuple] = []
+    fpath = Path(filepath)
+    if not fpath.exists():
+        logger.warning("기분석 파일 없음: %s", fpath)
+        return result
+    try:
+        for line in fpath.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.rstrip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            keyword = parts[0].strip() if parts else ""
+            tags = "\t".join(p.strip() for p in parts[1:]) if len(parts) > 1 else ""
+            if keyword:
+                result.append((keyword, tags))
+    except Exception as e:
+        logger.warning("기분석 파일 읽기 실패 %s: %s", fpath, e)
+    return result
+
+
+def _build_overview_sheet(ws, data: dict) -> None:
+    # [0] 작업개요 시트 — C2:J6 사전별 카운트 표 + SUM 수식
+    bold = Font(bold=True)
+
+    # row2: 제목 + 우측 주석
+    ws.cell(row=2, column=3, value="사전작업 산출물 개요").font = bold
+    ws.cell(row=2, column=10, value="*형태소 엔트리 기준")
+
+    # row3: 헤더 (C~J)
+    headers_row3 = [
+        "지식사전 분류",
+        "사용자 사전(단일어)",
+        "복합어 사전",
+        "유사어 사전(신규)",
+        "유사어 사전(추가)",
+        "용언 명사화사전(cotton.dic)",
+        "인명 사전(nq_per.dic)",
+        "기분석 사전(cotton_part_prefer.list)",
+    ]
+    for c, h in enumerate(headers_row3, 3):
+        ws.cell(row=3, column=c, value=h).font = bold
+
+    # row4: 인터넷 검색 (current_backup) 카운트
+    ws.cell(row=4, column=3, value="인터넷 검색").font = bold
+    for c, key in enumerate(
+        ["udic_current", "cndic_current", "thes_new_current", "thes_part_current",
+         "cotton_current", "nq_per_current", "grammar_current"],
+        4,
+    ):
+        ws.cell(row=4, column=c, value=data.get(key, 0))
+
+    # row5: 특화 검색 (prev_backup, None이면 빈칸)
+    ws.cell(row=5, column=3, value="특화 검색").font = bold
+    for c, key in enumerate(
+        ["udic_prev", "cndic_prev", "thes_new_prev", "thes_part_prev",
+         "cotton_prev", "nq_per_prev", "grammar_prev"],
+        4,
+    ):
+        val = data.get(key)
+        ws.cell(row=5, column=c, value=val if val is not None else "")
+
+    # row6: 합계 (SUM 수식)
+    ws.cell(row=6, column=3, value="합계").font = bold
+    col_letters = ["D", "E", "F", "G", "H", "I", "J"]
+    for col_letter in col_letters:
+        ws.cell(row=6, column=ord(col_letter) - ord("A") + 1,
+                value=f"=SUM({col_letter}4:{col_letter}5)")
+
+
+def _build_3col_sheet(ws, rows_current: list[str], rows_prev: list[str] | None) -> None:
+    # 3컬럼(no/인터넷 검색/특화 검색) 시트 공통 빌더
+    bold = Font(bold=True)
+    headers = ["no", "인터넷 검색", "특화 검색"]
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=1, column=c, value=h).font = bold
+
+    max_len = max(len(rows_current), len(rows_prev) if rows_prev else 0)
+    for i in range(max_len):
+        row_num = i + 2
+        ws.cell(row=row_num, column=1, value=i + 1)
+        if i < len(rows_current):
+            ws.cell(row=row_num, column=2, value=rows_current[i])
+        if rows_prev and i < len(rows_prev):
+            ws.cell(row=row_num, column=3, value=rows_prev[i])
+
+
+def _build_thesaurus_new_sheet(ws, rows_current: list[str], rows_prev: list[str] | None) -> None:
+    # [3] 유사어 사전(신규생성) — A:C 3컬럼 (유사어쌍 문자열로)
+    _build_3col_sheet(ws, rows_current, rows_prev)
+
+
+def _build_thesaurus_partial_sheet(
+    ws,
+    rows_current: list[tuple],
+    rows_prev: list[tuple] | None,
+) -> None:
+    # [4] 유사어 사전(부분추가) — A:E 5컬럼 (B:C 병합 + D:E 병합)
+    from openpyxl.styles import Alignment
+
+    bold = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+
+    # row1: no / 인터넷 검색(B:C) / 특화 검색(D:E) — 병합
+    ws.cell(row=1, column=1, value="no").font = bold
+    ws.cell(row=1, column=2, value="인터넷 검색 ").font = bold
+    ws.cell(row=1, column=4, value="특화 검색 ").font = bold
+    ws.merge_cells("A1:A2")
+    ws.merge_cells("B1:C1")
+    ws.merge_cells("D1:E1")
+    ws["A1"].alignment = center
+    ws["B1"].alignment = center
+    ws["D1"].alignment = center
+
+    # row2: 기존 유사어쌍 / 새로 추가된 엔트리 (각 컬럼)
+    ws.cell(row=2, column=2, value="기존 유사어쌍").font = bold
+    ws.cell(row=2, column=3, value="새로 추가된 엔트리").font = bold
+    ws.cell(row=2, column=4, value="기존 유사어쌍").font = bold
+    ws.cell(row=2, column=5, value="새로 추가된 엔트리").font = bold
+
+    # 데이터 행 (rows_current/rows_prev: (기존유사어쌍, 새추가엔트리) 튜플)
+    max_len = max(len(rows_current), len(rows_prev) if rows_prev else 0)
+    for i in range(max_len):
+        row_num = i + 3
+        ws.cell(row=row_num, column=1, value=i + 1)
+        if i < len(rows_current):
+            ws.cell(row=row_num, column=2, value=rows_current[i][0])
+            ws.cell(row=row_num, column=3, value=rows_current[i][1])
+        if rows_prev and i < len(rows_prev):
+            ws.cell(row=row_num, column=4, value=rows_prev[i][0])
+            ws.cell(row=row_num, column=5, value=rows_prev[i][1])
+
+
+def _build_grammar_sheet(ws, rows_current: list[tuple], rows_prev: list[tuple] | None) -> None:
+    # [7] 기분석 사전(cotton_part_prefer.list — 5컬럼 (B:C 병합 + D:E 병합)
+    from openpyxl.styles import Alignment
+
+    bold = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+
+    # row1: no / 인터넷 검색(B:C) / 특화 검색(D:E) — 병합
+    ws.cell(row=1, column=1, value="no").font = bold
+    ws.cell(row=1, column=2, value="인터넷 검색").font = bold
+    ws.cell(row=1, column=4, value="특화 검색").font = bold
+    ws.merge_cells("A1:A2")
+    ws.merge_cells("B1:C1")
+    ws.merge_cells("D1:E1")
+    ws["A1"].alignment = center
+    ws["B1"].alignment = center
+    ws["D1"].alignment = center
+
+    # row2: 기분석_표제어 / 기분석_분석 태그
+    ws.cell(row=2, column=2, value="기분석_표제어").font = bold
+    ws.cell(row=2, column=3, value="기분석_분석 태그 ").font = bold
+    ws.cell(row=2, column=4, value="기분석_표제어").font = bold
+    ws.cell(row=2, column=5, value="기분석_분석 태그 ").font = bold
+
+    # 데이터 행 (rows_current/rows_prev: (표제어, 태그) 튜플)
+    max_len = max(len(rows_current), len(rows_prev) if rows_prev else 0)
+    for i in range(max_len):
+        row_num = i + 3
+        ws.cell(row=row_num, column=1, value=i + 1)
+        if i < len(rows_current):
+            ws.cell(row=row_num, column=2, value=rows_current[i][0])
+            ws.cell(row=row_num, column=3, value=rows_current[i][1])
+        if rows_prev and i < len(rows_prev):
+            ws.cell(row=row_num, column=4, value=rows_prev[i][0])
+            ws.cell(row=row_num, column=5, value=rows_prev[i][1])
+
+
+def _thesaurus_to_pairs(thesaurus_rows: list[dict]) -> tuple[list[str], list[str]]:
+    # THESAURUS 행 목록 → (신규생성 유사어쌍 문자열 목록, 부분추가 (기존쌍, 새엔트리) 튜플 목록)
+    # _HEAD_WORD + _TAIL_WORD를 합쳐 하나의 유사어쌍 문자열로 반환 (신규)
+    # 부분추가는 head가 이미 prev에 있고 tail에 새 항목이 추가된 케이스 — 단독 백업 시 전부 신규 처리
+    new_pairs: list[str] = []
+    for row in thesaurus_rows:
+        head = row.get("_HEAD_WORD", "") or ""
+        tail = row.get("_TAIL_WORD", "") or ""
+        pair_str = f"{head} {tail}".strip() if tail else head
+        new_pairs.append(pair_str)
+    return new_pairs
+
+
+def _thesaurus_split_new_partial(
+    current_rows: list[dict],
+    prev_rows: list[dict],
+) -> tuple[list[str], list[tuple], list[str], list[tuple]]:
+    # THESAURUS를 신규/부분추가로 분리
+    # current_new_pairs: prev에 head 없는 케이스 → 유사어쌍 문자열
+    # current_partial: prev에 head 있고 tail 추가된 케이스 → (기존쌍, 새엔트리) 튜플
+    # prev_new_pairs / prev_partial: prev 기준 동일 분류 (None이면 빈 리스트)
+
+    prev_head_map: dict[str, str] = {}
+    for row in prev_rows:
+        head = (row.get("_HEAD_WORD", "") or "").strip()
+        tail = (row.get("_TAIL_WORD", "") or "").strip()
+        if head:
+            prev_head_map[head] = tail
+
+    curr_new: list[str] = []
+    curr_partial: list[tuple] = []
+    curr_head_map: dict[str, str] = {}
+    for row in current_rows:
+        head = (row.get("_HEAD_WORD", "") or "").strip()
+        tail = (row.get("_TAIL_WORD", "") or "").strip()
+        pair_str = f"{head} {tail}".strip() if tail else head
+        curr_head_map[head] = tail
+        if head in prev_head_map:
+            # 부분추가: 기존 쌍 + 새 추가 엔트리
+            prev_tail = prev_head_map[head]
+            old_pair = f"{head} {prev_tail}".strip() if prev_tail else head
+            # 새 엔트리 = tail에서 prev_tail에 없는 단어
+            prev_words = set(prev_tail.split()) if prev_tail else set()
+            curr_words = tail.split() if tail else []
+            new_entries = " ".join(w for w in curr_words if w not in prev_words)
+            curr_partial.append((old_pair, new_entries))
+        else:
+            curr_new.append(pair_str)
+
+    # prev 기준: prev에만 있었던 head는 prev_new로
+    prev_new: list[str] = []
+    prev_partial: list[tuple] = []
+    for row in prev_rows:
+        head = (row.get("_HEAD_WORD", "") or "").strip()
+        tail = (row.get("_TAIL_WORD", "") or "").strip()
+        pair_str = f"{head} {tail}".strip() if tail else head
+        if head not in curr_head_map:
+            # current에 없는 prev 항목 → prev_new로 취급
+            prev_new.append(pair_str)
+        else:
+            # current에도 있으면 부분추가 prev쌍 (이미 curr_partial에서 기존쌍으로 처리)
+            prev_partial.append((pair_str, ""))
+
+    return curr_new, curr_partial, prev_new, prev_partial
+
 
 def generate_excel(
     workspace: str,
@@ -450,140 +708,101 @@ def generate_excel(
     prev_backup: str | None = None,
     db=None,
 ) -> io.BytesIO:
-    """3시트 완료 리포트 Excel 생성 → io.BytesIO 반환."""
+    """8시트 완료 리포트 Excel 생성 → io.BytesIO 반환 (샘플 know.xlsx 구조)."""
+    # ── 데이터 로드 ──────────────────────────────
     current_data = _load_backup_dict(backup_folder)
-    prev_data = _load_backup_dict(prev_backup) if prev_backup else {k: [] for k in _SUFFIX_BY_TYPE}
-    meta = _read_backup_metadata(backup_folder)
-    full_diff = _compute_full_diff(current_data, prev_data)
-    participants = get_participants_stats(workspace, db) if db else []
+    prev_data = _load_backup_dict(prev_backup) if prev_backup else {}
 
+    backup_base = Path(DICT_BACKUP_DIR) / backup_folder
+    prev_base = Path(DICT_BACKUP_DIR) / prev_backup if prev_backup else None
+
+    # DB 기반 사전 (B=current, C=prev)
+    udic_cur = [r["_WORD"] for r in current_data.get("udic", []) if r.get("_WORD")]
+    udic_prev = [r["_WORD"] for r in prev_data.get("udic", [])] if prev_backup else None
+    cndic_cur = [r["_WORD"] for r in current_data.get("cndic", []) if r.get("_WORD")]
+    cndic_prev = [r["_WORD"] for r in prev_data.get("cndic", [])] if prev_backup else None
+
+    # THESAURUS 신규/부분추가 분리
+    thes_cur_rows = current_data.get("thesaurus", [])
+    thes_prev_rows = prev_data.get("thesaurus", []) if prev_backup else []
+    thes_new_cur, thes_part_cur, thes_new_prev, thes_part_prev = _thesaurus_split_new_partial(
+        thes_cur_rows, thes_prev_rows
+    )
+    thes_new_prev_out = thes_new_prev if prev_backup else None
+    thes_part_prev_out = thes_part_prev if prev_backup else None
+
+    # 파일 기반 사전 (txt_resrc)
+    cotton_cur = _read_dict_file_first_col(backup_base / "txt_resrc" / "sdic" / "cotton.dic")
+    cotton_prev = (
+        _read_dict_file_first_col(prev_base / "txt_resrc" / "sdic" / "cotton.dic")
+        if prev_base else None
+    )
+    nq_per_cur = _read_dict_file_first_col(backup_base / "txt_resrc" / "sdic" / "nq_per.dic")
+    nq_per_prev = (
+        _read_dict_file_first_col(prev_base / "txt_resrc" / "sdic" / "nq_per.dic")
+        if prev_base else None
+    )
+    grammar_cur = _read_grammar_file(
+        backup_base / "txt_resrc" / "grammar" / "cotton_part_prefer.list"
+    )
+    grammar_prev = (
+        _read_grammar_file(prev_base / "txt_resrc" / "grammar" / "cotton_part_prefer.list")
+        if prev_base else None
+    )
+
+    # ── 작업개요 카운트 데이터 준비 ──────────────────────
+    overview_data = {
+        "udic_current": len(udic_cur),
+        "cndic_current": len(cndic_cur),
+        "thes_new_current": len(thes_new_cur),
+        "thes_part_current": len(thes_part_cur),
+        "cotton_current": len(cotton_cur),
+        "nq_per_current": len(nq_per_cur),
+        "grammar_current": len(grammar_cur),
+        "udic_prev": len(udic_prev) if udic_prev is not None else None,
+        "cndic_prev": len(cndic_prev) if cndic_prev is not None else None,
+        "thes_new_prev": len(thes_new_prev) if thes_new_prev_out is not None else None,
+        "thes_part_prev": len(thes_part_prev) if thes_part_prev_out is not None else None,
+        "cotton_prev": len(cotton_prev) if cotton_prev is not None else None,
+        "nq_per_prev": len(nq_per_prev) if nq_per_prev is not None else None,
+        "grammar_prev": len(grammar_prev) if grammar_prev is not None else None,
+    }
+
+    # ── 워크북 생성 ──────────────────────────────
     wb = openpyxl.Workbook()
-    bold = Font(bold=True)
 
-    # ── Sheet1: 작업결과 ──────────────────────────────
-    ws1 = wb.active
-    ws1.title = "작업결과"
+    # [0] 작업개요
+    ws0 = wb.active
+    ws0.title = "작업개요"
+    _build_overview_sheet(ws0, overview_data)
 
-    # 헤더 1행 (메타)
-    meta_headers = ["워크스페이스", "백업폴더", "완료시각", "도메인"]
-    for c, h in enumerate(meta_headers, 1):
-        cell = ws1.cell(row=1, column=c, value=h)
-        cell.font = bold
+    # [1] 사용자 단일어 사전
+    ws1 = wb.create_sheet("사용자 단일어 사전")
+    _build_3col_sheet(ws1, udic_cur, udic_prev)
 
-    # 2행: 값
-    domain = str(meta.get("domain") or "").upper()
-    timestamp = meta.get("timestamp") or ""
-    ws1.cell(row=2, column=1, value=workspace)
-    ws1.cell(row=2, column=2, value=backup_folder)
-    ws1.cell(row=2, column=3, value=timestamp)
-    ws1.cell(row=2, column=4, value=domain)
+    # [2] 복합어 사전
+    ws2 = wb.create_sheet("복합어 사전")
+    _build_3col_sheet(ws2, cndic_cur, cndic_prev)
 
-    # 빈 행 후 참여자 표
-    p_row = 4
-    participant_headers = ["사용자명", "아이디", "읽기(R)", "쓰기(W)", "합계"]
-    for c, h in enumerate(participant_headers, 1):
-        cell = ws1.cell(row=p_row, column=c, value=h)
-        cell.font = bold
+    # [3] 유사어 사전(신규생성)
+    ws3 = wb.create_sheet("유사어 사전(신규생성)")
+    _build_thesaurus_new_sheet(ws3, thes_new_cur, thes_new_prev_out)
 
-    if participants:
-        for i, p in enumerate(participants):
-            r_count = int(p.get("r_count", 0))
-            w_count = int(p.get("w_count", 0))
-            row_num = p_row + 1 + i
-            ws1.cell(row=row_num, column=1, value=p.get("name", ""))
-            ws1.cell(row=row_num, column=2, value=p.get("user_id", ""))
-            ws1.cell(row=row_num, column=3, value=r_count)
-            ws1.cell(row=row_num, column=4, value=w_count)
-            ws1.cell(row=row_num, column=5, value=r_count + w_count)
-    else:
-        ws1.cell(row=p_row + 1, column=1, value="참여자 정보 없음")
+    # [4] 유사어 사전(부분추가)
+    ws4 = wb.create_sheet("유사어 사전(부분추가)")
+    _build_thesaurus_partial_sheet(ws4, thes_part_cur, thes_part_prev_out)
 
-    # 컬럼 너비 자동 조정
-    for col in ws1.columns:
-        max_len = max((len(str(c.value or "")) for c in col), default=8)
-        ws1.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+    # [5] 용언 명사화 사전(cotton.dic)
+    ws5 = wb.create_sheet("용언 명사화 사전(cotton.dic)")
+    _build_3col_sheet(ws5, cotton_cur, cotton_prev)
 
-    # ── Sheet2: 변화량 ──────────────────────────────
-    ws2 = wb.create_sheet("변화량")
-    change_headers = ["테이블", "추가", "삭제", "수정", "Before총계", "After총계"]
-    for c, h in enumerate(change_headers, 1):
-        cell = ws2.cell(row=1, column=c, value=h)
-        cell.font = bold
+    # [6] 인명 사전(nq_per.dic)
+    ws6 = wb.create_sheet("인명 사전(nq_per.dic)")
+    _build_3col_sheet(ws6, nq_per_cur, nq_per_prev)
 
-    name_map = {"udic": "UDIC", "cndic": "CNDIC", "thesaurus": "THESAURUS", "category": "CATEGORY"}
-    for i, (type_key, label) in enumerate(name_map.items()):
-        d = full_diff[type_key]
-        row_num = i + 2
-        ws2.cell(row=row_num, column=1, value=label)
-        ws2.cell(row=row_num, column=2, value=len(d["added"]))
-        ws2.cell(row=row_num, column=3, value=len(d["removed"]))
-        ws2.cell(row=row_num, column=4, value=len(d["modified"]))
-        ws2.cell(row=row_num, column=5, value=len(prev_data.get(type_key, [])))
-        ws2.cell(row=row_num, column=6, value=len(current_data.get(type_key, [])))
-
-    for col in ws2.columns:
-        max_len = max((len(str(c.value or "")) for c in col), default=8)
-        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 4, 30)
-
-    # ── Sheet3: 변화데이터 ──────────────────────────
-    ws3 = wb.create_sheet("변화데이터")
-    cur_row = 1
-    for type_key, label in name_map.items():
-        d = full_diff[type_key]
-
-        # 섹션 제목
-        sec_cell = ws3.cell(row=cur_row, column=1, value=f"[{label}]")
-        sec_cell.font = Font(bold=True, size=12)
-        cur_row += 1
-
-        # 추가
-        add_header = ws3.cell(row=cur_row, column=1, value="추가")
-        add_header.font = bold
-        ws3.cell(row=cur_row, column=2, value="키워드")
-        cur_row += 1
-        if d["added"]:
-            for row_data in d["added"]:
-                ws3.cell(row=cur_row, column=2, value=_row_key(row_data))
-                cur_row += 1
-        else:
-            ws3.cell(row=cur_row, column=2, value="(없음)")
-            cur_row += 1
-
-        # 삭제
-        del_header = ws3.cell(row=cur_row, column=1, value="삭제")
-        del_header.font = bold
-        ws3.cell(row=cur_row, column=2, value="키워드")
-        cur_row += 1
-        if d["removed"]:
-            for row_data in d["removed"]:
-                ws3.cell(row=cur_row, column=2, value=_row_key(row_data))
-                cur_row += 1
-        else:
-            ws3.cell(row=cur_row, column=2, value="(없음)")
-            cur_row += 1
-
-        # 수정
-        mod_header = ws3.cell(row=cur_row, column=1, value="수정")
-        mod_header.font = bold
-        ws3.cell(row=cur_row, column=2, value="키워드")
-        ws3.cell(row=cur_row, column=3, value="Before")
-        ws3.cell(row=cur_row, column=4, value="After")
-        cur_row += 1
-        if d["modified"]:
-            for mod in d["modified"]:
-                ws3.cell(row=cur_row, column=2, value=mod.get("key", ""))
-                ws3.cell(row=cur_row, column=3, value=_row_value(mod.get("before", {})))
-                ws3.cell(row=cur_row, column=4, value=_row_value(mod.get("after", {})))
-                cur_row += 1
-        else:
-            ws3.cell(row=cur_row, column=2, value="(없음)")
-            cur_row += 1
-
-        cur_row += 1  # 섹션 간 빈 행
-
-    for col in ws3.columns:
-        max_len = max((len(str(c.value or "")) for c in col), default=10)
-        ws3.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+    # [7] 기분석 사전(cotton_part_prefer.list  ← 괄호 누락 의도적 (샘플 그대로)
+    ws7 = wb.create_sheet("기분석 사전(cotton_part_prefer.list")
+    _build_grammar_sheet(ws7, grammar_cur, grammar_prev)
 
     buffer = io.BytesIO()
     wb.save(buffer)

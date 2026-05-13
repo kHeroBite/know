@@ -1,5 +1,14 @@
 # HISTORY.md — 작업 이력
 
+## 2026-05-13 — 백업관리 Excel 다운로드 — know.xlsx 샘플 구조 8시트로 재작성
+
+> **작업 요약**: 기존 3시트(작업결과/변화량/변화데이터) → 8시트(작업개요 + 7사전: 사용자단일어/복합어/유사어신규/유사어부분추가/용언명사화/인명/기분석)로 전면 재작성. oplan에서 openpyxl로 샘플 파일을 직접 분석하여 fact 기반 구현. 작업개요에 사전별 카운트 + SUM 수식. AC 13/13 PASS_ALL.
+
+### 변경 파일
+- **www/services/report_service.py**: `generate_excel()` 3시트→8시트 재작성 (~370줄), 신규 함수 9개 추가
+
+---
+
 ## 2026-05-13 — 백업관리 Excel 다운로드 버튼 추가 (3시트: 작업결과/변화량/변화데이터)
 
 > **작업 요약**: 백업관리 페이지에 Excel 다운로드 버튼 추가. `generate_excel()` 함수로 3시트(작업결과/변화량/변화데이터) 구성. GET `/download_excel/{ws}/{backup}` API + 프론트 `downloadExcelFile()` + FileExcelOutlined 버튼. PPT 패턴 미러링으로 회귀 없이 PASS_ALL 통과.
