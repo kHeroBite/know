@@ -1016,6 +1016,56 @@ export default function BackupManage() {
             </Row>
           )}
         </Modal>
+
+        {/* 공유 링크 모달 */}
+        <Modal
+          open={shareModalOpen}
+          title={`공유 링크 — ${shareTarget?.name ?? ''}`}
+          onCancel={() => setShareModalOpen(false)}
+          footer={null}
+          destroyOnClose
+          width={600}
+        >
+          <p>워크스페이스: {shareTarget?.workspace_name}</p>
+          {shareUrl ? (
+            <>
+              <Input.Group compact>
+                <Input value={shareUrl} readOnly style={{ width: 'calc(100% - 80px)' }} />
+                <Button onClick={() => copyToClipboard(shareUrl)}>복사</Button>
+              </Input.Group>
+              <p style={{ marginTop: 8, color: '#888' }}>공유 링크는 30일간 유효합니다.</p>
+            </>
+          ) : (
+            <>
+              <p>아직 공유 링크가 발급되지 않았습니다.</p>
+              <Button type="primary" loading={shareGenerating} onClick={handleGenerateShare}>공유 링크 발급 (30일)</Button>
+            </>
+          )}
+        </Modal>
+
+        {/* 메일 발송 모달 */}
+        <Modal
+          open={emailModalOpen}
+          title={`메일 발송 — ${emailTarget?.name ?? ''}`}
+          onCancel={() => setEmailModalOpen(false)}
+          onOk={handleSendEmail}
+          okText="발송"
+          cancelText="취소"
+          okButtonProps={{ loading: emailSending, disabled: !emailSelectId }}
+          destroyOnClose
+          width={500}
+        >
+          <p>워크스페이스: {emailTarget?.workspace_name}</p>
+          <p>수신자를 선택하세요. (연락처는 페이지 상단 &apos;메일 연락처&apos; 영역에서 등록/삭제할 수 있습니다.)</p>
+          <Select
+            style={{ width: '100%' }}
+            placeholder="수신자 선택"
+            value={emailSelectId}
+            onChange={setEmailSelectId}
+            options={contacts.map(c => ({ value: c.id, label: `${c.name} <${c.email}>` }))}
+          />
+        </Modal>
+
       </div>
     </div>
 
