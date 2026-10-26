@@ -1,3 +1,5 @@
+> 보관: 2026-10-26, Playwright 접근성 스냅샷 덤프(2026-03 UI 시험 산출물) — 현행 문서 아님
+
 - generic [ref=e50]:
   - complementary [ref=e51]:
     - generic [ref=e52]:
